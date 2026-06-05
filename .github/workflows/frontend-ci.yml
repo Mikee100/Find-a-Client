@@ -1,0 +1,57 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  push:
+    branches: [staging, main]
+    paths:
+      - "frontend/**"
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check package manifest
+        id: manifest
+        run: |
+          if [ -f package.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies
+        if: steps.manifest.outputs.exists == 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.manifest.outputs.exists == 'true'
+        run: npm run lint --if-present
+
+      - name: Test
+        if: steps.manifest.outputs.exists == 'true'
+        run: npm test --if-present
+
+      - name: Build
+        if: steps.manifest.outputs.exists == 'true'
+        run: npm run build --if-present
+
+      - name: Skip notice
+        if: steps.manifest.outputs.exists != 'true'
+        run: echo "No frontend/package.json yet; frontend checks skipped."
