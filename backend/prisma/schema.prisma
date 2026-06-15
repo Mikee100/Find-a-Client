@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  DEVELOPER
+  CLIENT
+  ADMIN
+}
+
+enum ProjectCategory {
+  WEB_APP
+  MOBILE_APP
+  API
+  DESKTOP
+  AI_ML
+  ECOMMERCE
+  MANAGEMENT_SYSTEM
+  OTHER
+}
+
+enum ProjectStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PricingType {
+  FIXED
+  NEGOTIABLE
+  FREE
+  CONTACT
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  SCREENSHOT
+}
+
+enum NotificationType {
+  NEW_MESSAGE
+  NEW_QUESTION
+  NEW_REVIEW
+  PROJECT_FEATURED
+  DEAL_INTEREST
+}
+
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  email         String     @unique
+  username      String     @unique
+  fullName      String
+  avatarUrl     String?
+  bio           String?
+  role          UserRole   @default(DEVELOPER)
+  skills        String[]
+  location      String?
+  websiteUrl    String?
+  githubUrl     String?
+  linkedinUrl   String?
+  isVerified    Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  projects      Project[]
+  reviews       Review[]
+  questions     Question[]
+  sentMessages  Message[]  @relation("MessageSender")
+  notifications Notification[]
+  savedProjects Saved[]
+
+  threadParticipantsA Thread[] @relation("ThreadParticipantA")
+  threadParticipantsB Thread[] @relation("ThreadParticipantB")
+}
+
+model Project {
+  id                String            @id @default(uuid()) @db.Uuid
+  slug              String            @unique
+  title             String
+  shortDescription  String            @db.VarChar(160)
+  longDescription   String
+  category          ProjectCategory
+  status            ProjectStatus     @default(DRAFT)
+  techStack         String[]
+  industries        String[]
+  pricingType       PricingType
+  price             Decimal?          @db.Decimal(10, 2)
+  currency          String            @default("USD") @db.VarChar(3)
+  isFeatured        Boolean           @default(false)
+  viewCount         Int               @default(0)
+  likeCount         Int               @default(0)
+  authorId          String            @db.Uuid
+  author            User              @relation(fields: [authorId], references: [id])
+  thumbnailUrl      String?
+  demoUrl           String?
+  videoUrl          String?
+  averageRating     Float             @default(0)
+  deletedAt         DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  media             ProjectMedia[]
+  projectTags       ProjectTag[]
+  questions         Question[]
+  reviews           Review[]
+  savedBy           Saved[]
+  threads           Thread[]
+  searchDocument    Unsupported("tsvector")?
+
+  @@index([status, isFeatured])
+  @@index([authorId])
+  @@index([category])
+}
+
+model ProjectMedia {
+  id        String    @id @default(uuid()) @db.Uuid
+  projectId String    @db.Uuid
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      MediaType
+  url       String
+  caption   String?
+  order     Int       @default(0)
+  createdAt DateTime  @default(now())
+}
+
+model Tag {
+  id         String       @id @default(uuid()) @db.Uuid
+  name       String       @unique
+  slug       String       @unique
+  projectTags ProjectTag[]
+}
+
+model ProjectTag {
+  projectId String @db.Uuid
+  tagId     String @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, tagId])
+}
+
+model Thread {
+  id             String    @id @default(uuid()) @db.Uuid
+  participantAId String    @db.Uuid
+  participantBId String    @db.Uuid
+  projectId      String?   @db.Uuid
+  participantA   User      @relation("ThreadParticipantA", fields: [participantAId], references: [id])
+  participantB   User      @relation("ThreadParticipantB", fields: [participantBId], references: [id])
+  project        Project?  @relation(fields: [projectId], references: [id])
+  messages       Message[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([participantAId])
+  @@index([participantBId])
+}
+
+model Message {
+  id        String   @id @default(uuid()) @db.Uuid
+  threadId  String   @db.Uuid
+  senderId  String   @db.Uuid
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([threadId, createdAt])
+}
+
+model Question {
+  id         String    @id @default(uuid()) @db.Uuid
+  projectId  String    @db.Uuid
+  askerId    String    @db.Uuid
+  content    String
+  answer     String?
+  answeredAt DateTime?
+  createdAt  DateTime  @default(now())
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  asker      User      @relation(fields: [askerId], references: [id])
+}
+
+model Review {
+  id         String   @id @default(uuid()) @db.Uuid
+  projectId  String   @db.Uuid
+  reviewerId String   @db.Uuid
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
+
+  @@unique([projectId, reviewerId])
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  type      NotificationType
+  payload   Json
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model Saved {
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+}
