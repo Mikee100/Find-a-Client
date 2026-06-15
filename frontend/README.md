@@ -13,8 +13,10 @@ npm install
 2. Create `.env.local` in this folder:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=http://localhost:4000
 ```
+
+You can copy from `env.sample` as a starting point.
 
 3. Start dev server:
 
@@ -39,3 +41,9 @@ npm run dev
 - Tokens are stored in localStorage for MVP bootstrap.
 - Role selection UI is included, but backend currently stores new users as `DEVELOPER`.
 - `GET /users/me` is listed in requirements docs but is not present in backend controller yet.
+
+## Deploy To Vercel
+
+- Set project Root Directory to `frontend`.
+- Add `NEXT_PUBLIC_API_URL` in Vercel Environment Variables and point it to your Render backend URL.
+- Full guide: `../docs/VERCEL_FRONTEND_DEPLOY.md`.
