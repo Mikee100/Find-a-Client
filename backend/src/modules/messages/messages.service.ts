@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { WebSocket } from "ws";
 import { PrismaService } from "src/prisma/prisma.service";
 import { buildPagination } from "src/common/utils/pagination.util";
 import { sanitizeInput } from "src/common/utils/sanitize.util";
@@ -17,7 +18,8 @@ export class MessagesService {
   ) {
     this.supabase = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
-      this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY")
+      this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY"),
+      { realtime: { transport: WebSocket } }
     );
   }
 

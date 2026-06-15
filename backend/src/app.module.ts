@@ -2,17 +2,15 @@ import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { resolve } from "path";
 import cloudinaryConfig from "src/config/cloudinary.config";
 import databaseConfig from "src/config/database.config";
 import jwtConfig from "src/config/jwt.config";
-import redisConfig from "src/config/redis.config";
 import { GlobalExceptionFilter } from "src/common/filters/global-exception.filter";
 import { JwtAuthGuard } from "src/common/guards/jwt-auth.guard";
 import { RolesGuard } from "src/common/guards/roles.guard";
 import { LoggingInterceptor } from "src/common/interceptors/logging.interceptor";
 import { ResponseTransformInterceptor } from "src/common/interceptors/response-transform.interceptor";
-import { QueueModule } from "src/queue/queue.module";
-import { MediaProcessor, NotificationProcessor, ReviewProcessor } from "src/queue/queue.processors";
 import { AdminModule } from "src/modules/admin/admin.module";
 import { AuthModule } from "src/modules/auth/auth.module";
 import { HealthController } from "src/modules/health.controller";
@@ -23,13 +21,15 @@ import { ProjectsModule } from "src/modules/projects/projects.module";
 import { ReviewsModule } from "src/modules/reviews/reviews.module";
 import { SearchModule } from "src/modules/search/search.module";
 import { UsersModule } from "src/modules/users/users.module";
+import { PrismaModule } from "src/prisma/prisma.module";
 
 @Module({
   controllers: [HealthController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, redisConfig, cloudinaryConfig, jwtConfig]
+      envFilePath: resolve(__dirname, "../.env"),
+      load: [databaseConfig, cloudinaryConfig, jwtConfig]
     }),
     ThrottlerModule.forRoot([
       {
@@ -37,7 +37,7 @@ import { UsersModule } from "src/modules/users/users.module";
         limit: 100
       }
     ]),
-    QueueModule,
+    PrismaModule,
     AuthModule,
     UsersModule,
     ProjectsModule,
@@ -49,9 +49,6 @@ import { UsersModule } from "src/modules/users/users.module";
     AdminModule
   ],
   providers: [
-    MediaProcessor,
-    NotificationProcessor,
-    ReviewProcessor,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard

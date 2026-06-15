@@ -10,7 +10,6 @@ Production-grade NestJS backend for DevShowcase, a marketplace where developers 
 - Auth: Supabase Auth + JWT
 - Realtime: Supabase Realtime channels
 - Media: Cloudinary
-- Queue: BullMQ + Redis
 - Email: Resend
 - Validation: class-validator + class-transformer
 - Tests: Jest
@@ -33,7 +32,6 @@ src/
 		search/
 		admin/
 	prisma/
-	queue/
 prisma/
 	schema.prisma
 	migrations/
@@ -47,7 +45,6 @@ Critical variables:
 - `DATABASE_URL`, `DIRECT_URL`
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `JWT_SECRET`, `JWT_REFRESH_SECRET`
-- `REDIS_URL`
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
 - `RESEND_API_KEY`
 - `FRONTEND_URL`
@@ -135,11 +132,11 @@ Implemented modules and endpoints:
 - Auth: register, login, refresh, logout, Google/GitHub redirect helpers
 - Users: profile read/update, avatar upload, saved projects
 - Projects: create/list/detail/update/archive, like/save, question endpoints
-- Media: upload/delete via Cloudinary, video processing queue hook
+- Media: upload/delete via Cloudinary
 - Messages: thread creation, list, paginated messages, send, read
-- Reviews: create/list + queue hook for recalculation
+- Reviews: create/list
 - Notifications: list/read-all/dispatch + email dispatch for high-priority types
 - Search: query endpoint with category/tech filtering
-- Admin: moderation queue and featured toggle
+- Admin: moderation and featured toggle
 
 The codebase is designed for iterative hardening on top of this baseline.

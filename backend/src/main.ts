@@ -1,20 +1,19 @@
 import "reflect-metadata";
+import { WebSocket } from "ws";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
-import { WinstonModule } from "nest-winston";
-import winston from "winston";
 import { AppModule } from "src/app.module";
 
+if (!(globalThis as { WebSocket?: unknown }).WebSocket) {
+  (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
+}
+
 async function bootstrap(): Promise<void> {
+  const quietStartupLogs = process.env.QUIET_STARTUP_LOGS !== "false";
+
   const app = await NestFactory.create(AppModule, {
-    logger: WinstonModule.createLogger({
-      transports: [
-        new winston.transports.Console({
-          format: winston.format.combine(winston.format.timestamp(), winston.format.json())
-        })
-      ]
-    })
+    logger: quietStartupLogs ? ["error", "warn"] : ["log", "error", "warn", "debug", "verbose"]
   });
 
   app.use(helmet());
@@ -32,7 +31,11 @@ async function bootstrap(): Promise<void> {
     })
   );
 
-  await app.listen(Number(process.env.PORT ?? 4000));
+  const port = Number(process.env.PORT ?? 4000);
+  await app.listen(port);
+
+  console.log("[startup] Nest started successfully");
+  console.log(`[startup] Listening on http://localhost:${port}`);
 }
 
 void bootstrap();

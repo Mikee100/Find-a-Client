@@ -1,13 +1,10 @@
-import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { NotificationType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
-import { Queue } from "bullmq";
 import { Resend } from "resend";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "src/prisma/prisma.service";
 import { buildPagination } from "src/common/utils/pagination.util";
-import { QUEUE_NAMES } from "src/queue/queue.constants";
 
 @Injectable()
 export class NotificationsService {
@@ -15,8 +12,7 @@ export class NotificationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService,
-    @InjectQueue(QUEUE_NAMES.notifications) private readonly notificationsQueue: Queue
+    private readonly configService: ConfigService
   ) {
     this.resend = new Resend(this.configService.getOrThrow<string>("RESEND_API_KEY"));
   }
@@ -46,10 +42,9 @@ export class NotificationsService {
   }
 
   /**
-   * Queues and dispatches notification workflows.
+   * Dispatches notification workflows.
    */
   async dispatch(userId: string, type: NotificationType, payload: Record<string, unknown>): Promise<void> {
-    await this.notificationsQueue.add("dispatch", { userId, type, payload });
     await this.prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue } });
 
     if (type === NotificationType.NEW_MESSAGE || type === NotificationType.DEAL_INTEREST) {

@@ -39,7 +39,10 @@ Detailed strategy is in `docs/BRANCHING_STRATEGY.md`.
 3. Validate on staging environment.
 4. Merge `staging` into `main` for release.
 
-## Next implementation step
-Pick your stack and scaffold apps:
-- Frontend: React/Next.js/Vue/Svelte
-- Backend: Node.js/NestJS/Express/FastAPI/.NET
+## Product blueprint
+- Dashboard and data-entity blueprint: `docs/PRODUCT_MODELS_AND_DASHBOARD_FEATURES.md`
+
+## Next implementation steps
+1. Build developer analytics cards and inquiry pipeline on top of existing developer dashboard forms.
+2. Build client discovery flow (search/filter/saved developers/project brief/proposal tracker).
+3. Add AI matching endpoint and UI for ranked developer recommendations from project briefs.

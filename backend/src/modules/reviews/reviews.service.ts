@@ -1,18 +1,12 @@
-import { InjectQueue } from "@nestjs/bullmq";
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
-import { Queue } from "bullmq";
 import { PrismaService } from "src/prisma/prisma.service";
-import { QUEUE_NAMES } from "src/queue/queue.constants";
 import { sanitizeInput } from "src/common/utils/sanitize.util";
 import { CreateReviewDto } from "src/modules/reviews/dto/create-review.dto";
 
 @Injectable()
 export class ReviewsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @InjectQueue(QUEUE_NAMES.reviews) private readonly reviewQueue: Queue
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Creates one review per client per project.
@@ -36,7 +30,6 @@ export class ReviewsService {
       }
     });
 
-    await this.reviewQueue.add("recalculate-rating", { projectId: project.id });
     return review;
   }
 

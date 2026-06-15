@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { UserRole } from "@prisma/client";
-import Redis from "ioredis";
+import { WebSocket } from "ws";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { PrismaService } from "src/prisma/prisma.service";
 import { toSlug } from "src/common/utils/slug.util";
@@ -17,7 +17,7 @@ export interface TokenPair {
 
 @Injectable()
 export class AuthService {
-  private readonly redis: Redis;
+  private readonly refreshStore = new Map<string, string>();
   private readonly supabaseAnon: SupabaseClient;
   private readonly supabaseAdmin: SupabaseClient;
 
@@ -26,14 +26,15 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService
   ) {
-    this.redis = new Redis(this.configService.getOrThrow<string>("REDIS_URL"), { lazyConnect: true });
     this.supabaseAnon = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
-      this.configService.getOrThrow<string>("SUPABASE_ANON_KEY")
+      this.configService.getOrThrow<string>("SUPABASE_ANON_KEY"),
+      { realtime: { transport: WebSocket } }
     );
     this.supabaseAdmin = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
-      this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY")
+      this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY"),
+      { realtime: { transport: WebSocket } }
     );
   }
 
@@ -41,24 +42,34 @@ export class AuthService {
    * Registers a new user in Supabase Auth and local profile store.
    */
   async register(dto: RegisterDto): Promise<{ userId: string } & TokenPair> {
+    this.assertSupabaseConfigured();
+
     const username = toSlug(dto.username);
     const existing = await this.prisma.user.findFirst({ where: { OR: [{ email: dto.email }, { username }] } });
     if (existing) {
       throw new HttpException("Email or username already exists", HttpStatus.CONFLICT);
     }
 
-    const { data, error } = await this.supabaseAdmin.auth.admin.createUser({
-      email: dto.email,
-      password: dto.password,
-      email_confirm: true,
-      user_metadata: {
-        fullName: dto.fullName,
-        username
-      }
-    });
+    let data: Awaited<ReturnType<typeof this.supabaseAdmin.auth.admin.createUser>>["data"];
+    let error: Awaited<ReturnType<typeof this.supabaseAdmin.auth.admin.createUser>>["error"];
+    try {
+      const response = await this.supabaseAdmin.auth.admin.createUser({
+        email: dto.email,
+        password: dto.password,
+        email_confirm: true,
+        user_metadata: {
+          fullName: dto.fullName,
+          username
+        }
+      });
+      data = response.data;
+      error = response.error;
+    } catch (caughtError) {
+      this.throwMappedSupabaseError(caughtError);
+    }
 
     if (error || !data.user) {
-      throw new HttpException(error?.message ?? "Registration failed", HttpStatus.BAD_REQUEST);
+      throw new HttpException(this.mapSupabaseMessage(error?.message) ?? "Registration failed", HttpStatus.BAD_REQUEST);
     }
 
     const user = await this.prisma.user.create({
@@ -80,13 +91,23 @@ export class AuthService {
    * Logs in with Supabase Auth and returns app JWT tokens.
    */
   async login(dto: LoginDto): Promise<TokenPair> {
-    const { data, error } = await this.supabaseAnon.auth.signInWithPassword({
-      email: dto.email,
-      password: dto.password
-    });
+    this.assertSupabaseConfigured();
+
+    let data: Awaited<ReturnType<typeof this.supabaseAnon.auth.signInWithPassword>>["data"];
+    let error: Awaited<ReturnType<typeof this.supabaseAnon.auth.signInWithPassword>>["error"];
+    try {
+      const response = await this.supabaseAnon.auth.signInWithPassword({
+        email: dto.email,
+        password: dto.password
+      });
+      data = response.data;
+      error = response.error;
+    } catch (caughtError) {
+      this.throwMappedSupabaseError(caughtError);
+    }
 
     if (error || !data.user) {
-      throw new HttpException(error?.message ?? "Invalid credentials", HttpStatus.UNAUTHORIZED);
+      throw new HttpException(this.mapSupabaseMessage(error?.message) ?? "Invalid credentials", HttpStatus.UNAUTHORIZED);
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: data.user.id } });
@@ -105,7 +126,7 @@ export class AuthService {
       secret: this.configService.getOrThrow<string>("JWT_REFRESH_SECRET")
     });
 
-    const stored = await this.redis.get(`refresh:${payload.sub}`);
+    const stored = this.refreshStore.get(payload.sub);
     if (stored !== dto.refreshToken) {
       throw new HttpException("Invalid refresh token", HttpStatus.UNAUTHORIZED);
     }
@@ -125,9 +146,7 @@ export class AuthService {
     const payload = await this.jwtService.verifyAsync<{ sub: string; exp: number }>(refreshToken, {
       secret: this.configService.getOrThrow<string>("JWT_REFRESH_SECRET")
     });
-    await this.redis.del(`refresh:${payload.sub}`);
-    const ttlSeconds = Math.max(payload.exp - Math.floor(Date.now() / 1000), 1);
-    await this.redis.set(`blacklist:${refreshToken}`, "1", "EX", ttlSeconds);
+    this.refreshStore.delete(payload.sub);
     return { loggedOut: true };
   }
 
@@ -135,10 +154,54 @@ export class AuthService {
    * Builds provider auth URL for frontend redirect flow.
    */
   getOAuthRedirect(provider: "google" | "github"): { url: string } {
+    this.assertSupabaseConfigured();
+
     const url = `${this.configService.getOrThrow<string>("SUPABASE_URL")}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(
       `${this.configService.getOrThrow<string>("FRONTEND_URL")}/auth/callback`
     )}`;
     return { url };
+  }
+
+  private assertSupabaseConfigured(): void {
+    const supabaseUrl = this.configService.getOrThrow<string>("SUPABASE_URL");
+    const anonKey = this.configService.getOrThrow<string>("SUPABASE_ANON_KEY");
+    const serviceRoleKey = this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY");
+
+    const looksLikePlaceholder =
+      supabaseUrl.includes("your-project.supabase.co") ||
+      anonKey.includes("placeholder") ||
+      serviceRoleKey.includes("placeholder") ||
+      anonKey.trim() === "" ||
+      serviceRoleKey.trim() === "";
+
+    if (looksLikePlaceholder) {
+      throw new HttpException(
+        "Supabase auth is not configured. Set SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in backend/.env.",
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
+  }
+
+  private mapSupabaseMessage(message?: string): string | undefined {
+    if (!message) {
+      return undefined;
+    }
+
+    if (message.includes("ENOTFOUND") || message.includes("fetch failed")) {
+      return "Cannot reach Supabase. Check SUPABASE_URL and your network connection.";
+    }
+
+    return message;
+  }
+
+  private throwMappedSupabaseError(caughtError: unknown): never {
+    if (caughtError instanceof HttpException) {
+      throw caughtError;
+    }
+
+    const message = caughtError instanceof Error ? caughtError.message : "Supabase request failed";
+    const mapped = this.mapSupabaseMessage(message) ?? "Supabase request failed";
+    throw new HttpException(mapped, HttpStatus.BAD_GATEWAY);
   }
 
   private async issueTokens(userId: string, email: string, role: UserRole): Promise<TokenPair> {
@@ -161,7 +224,7 @@ export class AuthService {
       }
     );
 
-    await this.redis.set(`refresh:${userId}`, refreshToken, "EX", 60 * 60 * 24 * 7);
+    this.refreshStore.set(userId, refreshToken);
     return { accessToken, refreshToken };
   }
 

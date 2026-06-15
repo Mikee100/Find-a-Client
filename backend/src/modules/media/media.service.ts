@@ -1,8 +1,5 @@
-import { InjectQueue } from "@nestjs/bullmq";
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { Queue } from "bullmq";
 import { PrismaService } from "src/prisma/prisma.service";
-import { QUEUE_NAMES } from "src/queue/queue.constants";
 import { CloudinaryService } from "src/modules/media/cloudinary.service";
 
 interface UploadFile {
@@ -16,8 +13,7 @@ interface UploadFile {
 export class MediaService {
   constructor(
     private readonly cloudinaryService: CloudinaryService,
-    private readonly prisma: PrismaService,
-    @InjectQueue(QUEUE_NAMES.media) private readonly mediaQueue: Queue
+    private readonly prisma: PrismaService
   ) {}
 
   /**
@@ -52,13 +48,6 @@ export class MediaService {
           caption: file.originalname,
           order: 0
         }
-      });
-    }
-
-    if (isVideo) {
-      await this.mediaQueue.add("video-thumbnail", {
-        publicId: upload.public_id,
-        projectId
       });
     }
 
