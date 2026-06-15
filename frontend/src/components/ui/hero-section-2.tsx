@@ -26,7 +26,7 @@ const transitionVariants = {
       },
     },
   },
-};
+} as const;
 
 const logoItems = [
   { label: 'Nvidia', Icon: Cpu },
