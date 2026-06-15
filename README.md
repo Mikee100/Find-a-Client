@@ -46,3 +46,6 @@ Detailed strategy is in `docs/BRANCHING_STRATEGY.md`.
 1. Build developer analytics cards and inquiry pipeline on top of existing developer dashboard forms.
 2. Build client discovery flow (search/filter/saved developers/project brief/proposal tracker).
 3. Add AI matching endpoint and UI for ranked developer recommendations from project briefs.
+
+## Deployment
+- Backend Render deployment guide: `docs/RENDER_BACKEND_DEPLOY.md`
