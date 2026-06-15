@@ -10,6 +10,8 @@ import { LoginDto } from "src/modules/auth/dto/login.dto";
 import { RefreshTokenDto } from "src/modules/auth/dto/refresh-token.dto";
 import { RegisterDto } from "src/modules/auth/dto/register.dto";
 
+const wsTransport = WebSocket as unknown as never;
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -29,12 +31,12 @@ export class AuthService {
     this.supabaseAnon = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
       this.configService.getOrThrow<string>("SUPABASE_ANON_KEY"),
-      { realtime: { transport: WebSocket } }
+      { realtime: { transport: wsTransport } }
     );
     this.supabaseAdmin = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
       this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY"),
-      { realtime: { transport: WebSocket } }
+      { realtime: { transport: wsTransport } }
     );
   }
 

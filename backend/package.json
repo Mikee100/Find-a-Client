@@ -5,6 +5,7 @@
   "description": "DevShowcase backend API",
   "license": "MIT",
   "scripts": {
+    "postinstall": "prisma generate",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "start:dev": "ts-node-dev --quiet --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
@@ -53,6 +54,7 @@
     "@types/node": "^22.15.32",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.3",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.34.0",
     "@typescript-eslint/parser": "^8.34.0",
     "eslint": "^9.29.0",

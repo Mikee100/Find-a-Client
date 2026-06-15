@@ -8,6 +8,8 @@ import { sanitizeInput } from "src/common/utils/sanitize.util";
 import { CreateThreadDto } from "src/modules/messages/dto/create-thread.dto";
 import { SendMessageDto } from "src/modules/messages/dto/send-message.dto";
 
+const wsTransport = WebSocket as unknown as never;
+
 @Injectable()
 export class MessagesService {
   private readonly supabase: SupabaseClient;
@@ -19,7 +21,7 @@ export class MessagesService {
     this.supabase = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
       this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY"),
-      { realtime: { transport: WebSocket } }
+      { realtime: { transport: wsTransport } }
     );
   }
 

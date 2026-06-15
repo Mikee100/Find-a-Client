@@ -4,8 +4,7 @@ describe("NotificationsService", () => {
   it("should be defined", () => {
     const service = new NotificationsService(
       {} as never,
-      { getOrThrow: jest.fn(() => "test") } as never,
-      {} as never
+      { getOrThrow: jest.fn(() => "test") } as never
     );
     expect(service).toBeDefined();
   });
