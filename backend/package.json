@@ -4,6 +4,10 @@
   "private": true,
   "description": "DevShowcase backend API",
   "license": "MIT",
+  "engines": {
+    "node": "20.x",
+    "npm": ">=10"
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "build": "tsc -p tsconfig.build.json",

@@ -90,6 +90,18 @@ npm run build
 npm test
 ```
 
+## Deploy To Render
+
+The backend is ready for Render deployment.
+
+Quick setup:
+- Root directory: `backend`
+- Build command: `npm ci && npm run prisma:generate && npm run build && npm run prisma:deploy`
+- Start command: `npm run start`
+- Health check path: `/health`
+
+For full steps and environment variables, see `../docs/RENDER_BACKEND_DEPLOY.md`.
+
 ## API Envelope
 
 Success responses:
