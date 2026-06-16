@@ -36,12 +36,15 @@ function originMatchesPattern(origin: string, pattern: string): boolean {
 
 async function bootstrap(): Promise<void> {
   const quietStartupLogs = process.env.QUIET_STARTUP_LOGS !== "false";
+  const fallbackOriginPatterns = ["http://localhost:3000", "https://find-a-client.vercel.app"];
   const allowedOriginPatterns = [
     ...(process.env.FRONTEND_URLS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
-    process.env.FRONTEND_URL?.trim() ?? ""
+    process.env.FRONTEND_URL?.trim() ?? "",
+    ...fallbackOriginPatterns
   ]
     .map((value) => normalizeOrigin(value))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((value, index, all) => all.indexOf(value) === index);
 
   const app = await NestFactory.create(AppModule, {
     logger: quietStartupLogs ? ["error", "warn"] : ["log", "error", "warn", "debug", "verbose"]
