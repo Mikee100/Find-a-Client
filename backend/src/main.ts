@@ -9,12 +9,39 @@ if (!(globalThis as { WebSocket?: unknown }).WebSocket) {
   (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
 }
 
+function normalizeOrigin(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.origin;
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
+}
+
+function originMatchesPattern(origin: string, pattern: string): boolean {
+  if (!pattern.includes("*")) {
+    return origin === pattern;
+  }
+
+  const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*");
+  const regex = new RegExp(`^${escapedPattern}$`);
+  return regex.test(origin);
+}
+
 async function bootstrap(): Promise<void> {
   const quietStartupLogs = process.env.QUIET_STARTUP_LOGS !== "false";
-  const allowedOrigins = [
+  const allowedOriginPatterns = [
     ...(process.env.FRONTEND_URLS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
     process.env.FRONTEND_URL?.trim() ?? ""
-  ].filter(Boolean);
+  ]
+    .map((value) => normalizeOrigin(value))
+    .filter(Boolean);
 
   const app = await NestFactory.create(AppModule, {
     logger: quietStartupLogs ? ["error", "warn"] : ["log", "error", "warn", "debug", "verbose"]
@@ -29,7 +56,10 @@ async function bootstrap(): Promise<void> {
         return;
       }
 
-      if (allowedOrigins.includes(origin)) {
+      const normalizedOrigin = normalizeOrigin(origin);
+      const isAllowed = allowedOriginPatterns.some((pattern) => originMatchesPattern(normalizedOrigin, pattern));
+
+      if (isAllowed) {
         callback(null, true);
         return;
       }
