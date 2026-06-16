@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
 import {
   CurrentUserProfile,
@@ -52,21 +52,17 @@ export default function AccountSettingsPage() {
     })();
   }, []);
 
-  const initials = useMemo(() => {
-    if (fullName.trim()) {
-      const parts = fullName.trim().split(" ").filter(Boolean);
-      if (parts.length >= 2) {
-        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-      }
-      return parts[0].slice(0, 2).toUpperCase();
+  let initials = "AC";
+  if (fullName.trim()) {
+    const parts = fullName.trim().split(" ").filter(Boolean);
+    if (parts.length >= 2) {
+      initials = `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    } else {
+      initials = parts[0].slice(0, 2).toUpperCase();
     }
-
-    if (profile?.email) {
-      return profile.email.slice(0, 2).toUpperCase();
-    }
-
-    return "AC";
-  }, [fullName, profile?.email]);
+  } else if (profile?.email) {
+    initials = profile.email.slice(0, 2).toUpperCase();
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -22,7 +22,6 @@ export default function DeveloperDashboardPage() {
   const [analyticsState, setAnalyticsState] = useState<string>("");
   const [threadCount, setThreadCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [dealInterestCount, setDealInterestCount] = useState(0);
   const [inquiryThreads, setInquiryThreads] = useState<Array<{ id: string; unreadCount: number; updatedAt: string; preview: string }>>([]);
   const [proposalThreads, setProposalThreads] = useState<Array<{ id: string; unreadCount: number; updatedAt: string; preview: string }>>([]);
@@ -84,7 +83,6 @@ export default function DeveloperDashboardPage() {
 
         setThreadCount(threads.length);
         setUnreadMessageCount(threads.reduce((sum, thread) => sum + thread.unreadCount, 0));
-        setUnreadNotificationCount(notifications.filter((item) => !item.isRead).length);
         setDealInterestCount(contracts.length);
         setInquiryThreads(inquiry);
         setProposalThreads(proposal);

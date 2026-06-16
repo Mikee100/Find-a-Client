@@ -81,34 +81,42 @@ function parseIntakeDetails(longDescription: string): {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ slug: string }>();
-  const [slug, setSlug] = useState<string>("");
+  const slug = params.slug ?? "";
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSlug(params.slug ?? "");
-  }, [params]);
 
   useEffect(() => {
     if (!slug) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    let isActive = true;
 
     void (async () => {
       try {
         const item = await getProjectBySlug(slug);
+        if (!isActive) {
+          return;
+        }
         setProject(item);
+        setError(null);
       } catch (loadError) {
+        if (!isActive) {
+          return;
+        }
         const message = loadError instanceof Error ? loadError.message : "Failed to load project.";
         setError(message);
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+        }
       }
     })();
+
+    return () => {
+      isActive = false;
+    };
   }, [slug]);
 
   const parsed = useMemo(() => parseIntakeDetails(project?.longDescription ?? ""), [project?.longDescription]);

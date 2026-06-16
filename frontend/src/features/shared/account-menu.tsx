@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AuthSession, getAuthSession } from "@/lib/api";
 
 interface AccountMenuProps {
@@ -55,14 +55,11 @@ export default function AccountMenu({
     };
   }, []);
 
-  const initials = useMemo(() => {
-    if (!session?.email) {
-      return roleLabel.slice(0, 1).toUpperCase();
-    }
-
+  let initials = roleLabel.slice(0, 1).toUpperCase();
+  if (session?.email) {
     const [left] = session.email.split("@");
-    return left.slice(0, 2).toUpperCase();
-  }, [roleLabel, session?.email]);
+    initials = left.slice(0, 2).toUpperCase();
+  }
 
   return (
     <div className="relative" ref={containerRef}>
