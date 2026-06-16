@@ -1,6 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, ProjectStatus, UserRole } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { buildPagination } from "src/common/utils/pagination.util";
+import { PROJECT_STATUS } from "src/common/constants/domain-enums.constant";
+import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 import { sanitizeInput, sanitizeRichText } from "src/common/utils/sanitize.util";
 import { toSlug } from "src/common/utils/slug.util";
 import { PrismaService } from "src/prisma/prisma.service";
@@ -20,12 +22,13 @@ export class ProjectsService {
    * Creates a new project for the authenticated developer.
    */
   async create(authorId: string, role: UserRole, dto: CreateProjectDto) {
-    if (role !== UserRole.DEVELOPER) {
+    if (role !== USER_ROLE.DEVELOPER) {
       throw new ForbiddenException("Only developers can create projects");
     }
 
     const techStack = this.normalizeStringList(dto.techStack);
     const industries = this.normalizeStringList(dto.industries);
+    const screenshots = this.normalizeStringList(dto.screenshots ?? []);
 
     const slug = toSlug(`${dto.title}-${Date.now()}`);
     return this.prisma.project.create({
@@ -35,7 +38,7 @@ export class ProjectsService {
         shortDescription: sanitizeInput(dto.shortDescription),
         longDescription: sanitizeRichText(dto.longDescription),
         category: dto.category,
-        status: ProjectStatus.DRAFT,
+        status: PROJECT_STATUS.DRAFT,
         techStack,
         industries,
         pricingType: dto.pricingType,
@@ -43,8 +46,18 @@ export class ProjectsService {
         currency: dto.currency ?? "USD",
         authorId,
         demoUrl: dto.demoUrl,
+        backgroundUrl: dto.backgroundUrl,
         thumbnailUrl: dto.thumbnailUrl,
-        videoUrl: dto.videoUrl
+        videoUrl: dto.videoUrl,
+        media: screenshots.length
+          ? {
+              create: screenshots.map((url, index) => ({
+                type: "SCREENSHOT",
+                url,
+                order: index
+              }))
+            }
+          : undefined
       }
     });
   }
@@ -56,7 +69,7 @@ export class ProjectsService {
     const limit = Number(query.limit ?? 20);
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
-      status: ProjectStatus.PUBLISHED,
+      status: PROJECT_STATUS.PUBLISHED,
       category: query.category,
       pricingType: query.pricingType,
       techStack: query.techStack?.length ? { hasSome: query.techStack } : undefined,
@@ -116,7 +129,45 @@ export class ProjectsService {
     if (existing.authorId !== userId) {
       throw new ForbiddenException("Not project owner");
     }
-    return this.prisma.project.update({ where: { id: existing.id }, data: dto });
+
+    const { screenshots, ...rest } = dto;
+
+    const data: Prisma.ProjectUpdateInput = {
+      ...rest,
+      title: rest.title !== undefined ? sanitizeInput(rest.title) : undefined,
+      shortDescription: rest.shortDescription !== undefined ? sanitizeInput(rest.shortDescription) : undefined,
+      longDescription: rest.longDescription !== undefined ? sanitizeRichText(rest.longDescription) : undefined,
+      techStack: rest.techStack ? this.normalizeStringList(rest.techStack) : undefined,
+      industries: rest.industries ? this.normalizeStringList(rest.industries) : undefined
+    };
+
+    const normalizedScreenshots = screenshots ? this.normalizeStringList(screenshots) : undefined;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.project.update({ where: { id: existing.id }, data });
+
+      if (normalizedScreenshots !== undefined) {
+        await tx.projectMedia.deleteMany({
+          where: {
+            projectId: existing.id,
+            type: "SCREENSHOT"
+          }
+        });
+
+        if (normalizedScreenshots.length > 0) {
+          await tx.projectMedia.createMany({
+            data: normalizedScreenshots.map((url, index) => ({
+              projectId: existing.id,
+              type: "SCREENSHOT",
+              url,
+              order: index
+            }))
+          });
+        }
+      }
+
+      return updated;
+    });
   }
 
   /**

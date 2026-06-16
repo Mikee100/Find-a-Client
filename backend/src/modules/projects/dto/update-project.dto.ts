@@ -1,6 +1,5 @@
 import {
 	IsArray,
-	IsEnum,
 	IsIn,
 	IsNumber,
 	IsOptional,
@@ -10,7 +9,7 @@ import {
 	Min,
 	MaxLength
 } from "class-validator";
-import { PricingType, ProjectCategory, ProjectStatus } from "@prisma/client";
+import { PRICING_TYPE, PROJECT_CATEGORY, PROJECT_STATUS, PricingType, ProjectCategory, ProjectStatus } from "src/common/constants/domain-enums.constant";
 
 export class UpdateProjectDto {
 	@IsOptional()
@@ -29,11 +28,11 @@ export class UpdateProjectDto {
 	longDescription?: string;
 
 	@IsOptional()
-	@IsEnum(ProjectCategory, { message: "Category is invalid." })
+	@IsIn(Object.values(PROJECT_CATEGORY), { message: "Category is invalid." })
 	category?: ProjectCategory;
 
 	@IsOptional()
-	@IsEnum(ProjectStatus, { message: "Status is invalid." })
+	@IsIn(Object.values(PROJECT_STATUS), { message: "Status is invalid." })
 	status?: ProjectStatus;
 
 	@IsOptional()
@@ -47,7 +46,7 @@ export class UpdateProjectDto {
 	industries?: string[];
 
 	@IsOptional()
-	@IsEnum(PricingType, { message: "Pricing type is invalid." })
+	@IsIn(Object.values(PRICING_TYPE), { message: "Pricing type is invalid." })
 	pricingType?: PricingType;
 
 	@IsOptional()
@@ -72,6 +71,15 @@ export class UpdateProjectDto {
 	thumbnailUrl?: string;
 
 	@IsOptional()
+	@IsUrl({}, { message: "Background image URL is invalid." })
+	backgroundUrl?: string;
+
+	@IsOptional()
 	@IsUrl({}, { message: "Video URL is invalid." })
 	videoUrl?: string;
+
+	@IsOptional()
+	@IsArray({ message: "Screenshots must be an array." })
+	@IsUrl({}, { each: true, message: "Each screenshot URL must be valid." })
+	screenshots?: string[];
 }

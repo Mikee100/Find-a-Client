@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 import { PrismaService } from "src/prisma/prisma.service";
 import { sanitizeInput } from "src/common/utils/sanitize.util";
 import { CreateReviewDto } from "src/modules/reviews/dto/create-review.dto";
@@ -12,7 +12,7 @@ export class ReviewsService {
    * Creates one review per client per project.
    */
   async create(projectSlug: string, reviewerId: string, role: UserRole, dto: CreateReviewDto) {
-    if (role !== UserRole.CLIENT) {
+    if (role !== USER_ROLE.CLIENT) {
       throw new ForbiddenException("Only clients can review");
     }
 

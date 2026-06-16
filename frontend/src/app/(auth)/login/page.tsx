@@ -12,10 +12,10 @@ function getRedirectPath(role: AppRole): string {
 	}
 
 	if (role === "CLIENT") {
-		return "/client/dashboard";
+		return "/client/projects/new?onboarding=1";
 	}
 
-	return "/developer/dashboard";
+	return "/developer/settings?onboarding=1";
 }
 
 export default function LoginPage() {
@@ -58,7 +58,7 @@ export default function LoginPage() {
 			const role = result.role;
 			const redirectPath = getRedirectPath(role);
 
-			setSuccess("Signed in successfully. Redirecting...");
+			setSuccess("Signed in successfully. Redirecting to onboarding...");
 			router.push(redirectPath);
 		} catch (submitError) {
 			const message = submitError instanceof Error ? submitError.message : "Login failed";

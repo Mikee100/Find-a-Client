@@ -1,4 +1,5 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from "class-validator";
+import { IsEmail, IsIn, IsNotEmpty, IsString, MinLength } from "class-validator";
+import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 
 export class RegisterDto {
   @IsEmail({}, { message: "A valid email is required." })
@@ -15,4 +16,7 @@ export class RegisterDto {
   @IsString({ message: "Username must be a string." })
   @IsNotEmpty({ message: "Username is required." })
   username!: string;
+
+  @IsIn([USER_ROLE.DEVELOPER, USER_ROLE.CLIENT], { message: "Role must be DEVELOPER or CLIENT." })
+  role!: UserRole;
 }

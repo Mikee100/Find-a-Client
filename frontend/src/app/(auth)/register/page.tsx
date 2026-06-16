@@ -3,7 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { register } from "@/lib/api";
+import { AppRole, register } from "@/lib/api";
+
+function getRedirectPath(role: AppRole): string {
+  if (role === "ADMIN") {
+    return "/admin/dashboard";
+  }
+
+  if (role === "CLIENT") {
+    return "/client/projects/new?onboarding=1";
+  }
+
+  return "/developer/settings?onboarding=1";
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -22,7 +34,7 @@ export default function RegisterPage() {
     const password = String(formData.get("password") ?? "");
     const fullName = String(formData.get("fullName") ?? "").trim();
     const username = String(formData.get("username") ?? "").trim();
-    const role = String(formData.get("role") ?? "developer");
+    const role = String(formData.get("role") ?? "DEVELOPER").toUpperCase() as AppRole;
     const acceptTerms = formData.get("acceptTerms") === "on";
 
     if (!acceptTerms) {
@@ -31,16 +43,10 @@ export default function RegisterPage() {
       return;
     }
 
-    if (role !== "developer") {
-      setPending(false);
-      setError("Backend currently sets all registrations to developer in MVP.");
-      return;
-    }
-
     try {
-      await register({ email, password, fullName, username });
-      setSuccess("Account created. Redirecting to dashboard...");
-      router.push("/developer/dashboard");
+      const result = await register({ email, password, fullName, username, role });
+      setSuccess("Account created. Redirecting to onboarding...");
+      router.push(getRedirectPath(result.role));
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Registration failed";
       setError(message);
@@ -118,11 +124,11 @@ export default function RegisterPage() {
             <select
               id="role"
               name="role"
-              defaultValue="developer"
+              defaultValue="DEVELOPER"
               className="rounded-md border border-neutral-300 bg-white px-3 py-2"
             >
-              <option value="developer">Developer</option>
-              <option value="client">Client (coming soon)</option>
+              <option value="DEVELOPER">Developer</option>
+              <option value="CLIENT">Client</option>
             </select>
           </div>
 

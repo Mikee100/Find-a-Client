@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { NotificationType } from "@prisma/client";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { Resend } from "resend";
 import { ConfigService } from "@nestjs/config";
+import { NOTIFICATION_TYPE, NotificationType } from "src/common/constants/domain-enums.constant";
 import { PrismaService } from "src/prisma/prisma.service";
 import { buildPagination } from "src/common/utils/pagination.util";
 
@@ -47,7 +47,7 @@ export class NotificationsService {
   async dispatch(userId: string, type: NotificationType, payload: Record<string, unknown>): Promise<void> {
     await this.prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue } });
 
-    if (type === NotificationType.NEW_MESSAGE || type === NotificationType.DEAL_INTEREST) {
+    if (type === NOTIFICATION_TYPE.NEW_MESSAGE || type === NOTIFICATION_TYPE.DEAL_INTEREST) {
       const user = await this.prisma.user.findUnique({ where: { id: userId } });
       if (user) {
         await this.resend.emails.send({

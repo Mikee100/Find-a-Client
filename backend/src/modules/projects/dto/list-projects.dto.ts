@@ -1,9 +1,9 @@
-import { IsArray, IsEnum, IsNumberString, IsOptional, IsString } from "class-validator";
-import { PricingType, ProjectCategory } from "@prisma/client";
+import { IsArray, IsIn, IsNumberString, IsOptional, IsString } from "class-validator";
+import { PRICING_TYPE, PROJECT_CATEGORY, PricingType, ProjectCategory } from "src/common/constants/domain-enums.constant";
 
 export class ListProjectsDto {
   @IsOptional()
-  @IsEnum(ProjectCategory, { message: "Category is invalid." })
+  @IsIn(Object.values(PROJECT_CATEGORY), { message: "Category is invalid." })
   category?: ProjectCategory;
 
   @IsOptional()
@@ -17,7 +17,7 @@ export class ListProjectsDto {
   industries?: string[];
 
   @IsOptional()
-  @IsEnum(PricingType, { message: "Pricing type is invalid." })
+  @IsIn(Object.values(PRICING_TYPE), { message: "Pricing type is invalid." })
   pricingType?: PricingType;
 
   @IsOptional()

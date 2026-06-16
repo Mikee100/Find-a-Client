@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { DragEvent, FormEvent, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ClientDashboardNavbar from "@/features/client/client-dashboard-navbar";
 import {
   ProjectCategory,
   PricingType,
   createProject,
-  publishProject
+  publishProject,
+  uploadMediaFile
 } from "@/lib/api";
 
 const CATEGORY_OPTIONS: Array<{ value: ProjectCategory; label: string }> = [
@@ -38,6 +39,11 @@ function parseCommaList(value: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+function mergeCommaLists(existing: string, incoming: string[]): string {
+  const merged = [...parseCommaList(existing), ...incoming];
+  return [...new Set(merged)].join(", ");
+}
+
 function SectionCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border border-neutral-200 bg-white/95 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)] md:p-5">
@@ -47,6 +53,59 @@ function SectionCard({ title, subtitle, children }: { title: string; subtitle: s
       </div>
       <div className="grid gap-4">{children}</div>
     </section>
+  );
+}
+
+function UploadDropZone({
+  label,
+  accept,
+  multiple,
+  onFiles
+}: {
+  label: string;
+  accept: string;
+  multiple?: boolean;
+  onFiles: (files: File[]) => void;
+}) {
+  const [isActive, setIsActive] = useState(false);
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsActive(false);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length > 0) {
+      onFiles(files);
+    }
+  };
+
+  return (
+    <div
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsActive(true);
+      }}
+      onDragLeave={() => setIsActive(false)}
+      onDrop={handleDrop}
+      className={`rounded-lg border border-dashed p-3 text-center text-xs transition ${
+        isActive ? "border-cyan-500 bg-cyan-50 text-cyan-800" : "border-neutral-300 bg-white text-neutral-600"
+      }`}
+    >
+      <p className="font-medium">{label}</p>
+      <p className="mt-1">Drag files here or choose from device</p>
+      <input
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        onChange={(event) => {
+          const files = event.target.files ? Array.from(event.target.files) : [];
+          if (files.length > 0) {
+            onFiles(files);
+          }
+          event.target.value = "";
+        }}
+        className="mt-2 text-xs"
+      />
+    </div>
   );
 }
 
@@ -65,6 +124,8 @@ type FieldName =
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOnboardingFlow = searchParams.get("onboarding") === "1";
 
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -91,8 +152,10 @@ export default function NewProjectPage() {
   const [securityRequirements, setSecurityRequirements] = useState("");
 
   const [demoUrl, setDemoUrl] = useState("");
+  const [backgroundUrl, setBackgroundUrl] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
+  const [screenshotsInput, setScreenshotsInput] = useState("");
   const [referenceLinks, setReferenceLinks] = useState("");
   const [existingProductUrl, setExistingProductUrl] = useState("");
 
@@ -102,6 +165,7 @@ export default function NewProjectPage() {
   const [publishNow, setPublishNow] = useState(false);
 
   const [pending, setPending] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({});
@@ -279,8 +343,10 @@ export default function NewProjectPage() {
         price,
         currency: needsPrice ? currency.trim().toUpperCase() : undefined,
         demoUrl: demoUrl.trim() || undefined,
+        backgroundUrl: backgroundUrl.trim() || undefined,
         thumbnailUrl: thumbnailUrl.trim() || undefined,
-        videoUrl: videoUrl.trim() || undefined
+        videoUrl: videoUrl.trim() || undefined,
+        screenshots: parseCommaList(screenshotsInput)
       });
 
       if (publishNow) {
@@ -299,11 +365,93 @@ export default function NewProjectPage() {
     }
   }
 
+  async function uploadThumbnailFile(file: File) {
+    if (!file) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setError(null);
+
+    try {
+      const upload = await uploadMediaFile(file, { mediaType: "THUMBNAIL" });
+      setThumbnailUrl(upload.url);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload thumbnail.";
+      setError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  async function uploadBackgroundFile(file: File) {
+    if (!file) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setError(null);
+
+    try {
+      const upload = await uploadMediaFile(file, { mediaType: "IMAGE" });
+      setBackgroundUrl(upload.url);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload background image.";
+      setError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  async function uploadScreenshotFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setError(null);
+
+    try {
+      const uploads = await Promise.all(files.map((file) => uploadMediaFile(file, { mediaType: "SCREENSHOT" })));
+      setScreenshotsInput((prev) => mergeCommaLists(prev, uploads.map((item) => item.url)));
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload screenshot files.";
+      setError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  async function uploadVideoFile(file: File) {
+    if (!file) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setError(null);
+
+    try {
+      const upload = await uploadMediaFile(file, { mediaType: "VIDEO" });
+      setVideoUrl(upload.url);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload video.";
+      setError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbf4ff_0%,#f8fafc_45%,#f1f5f9_100%)]">
       <ClientDashboardNavbar />
 
       <section className="mx-auto w-full max-w-7xl p-4 md:p-6">
+        {isOnboardingFlow ? (
+          <div className="mb-4 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+            Welcome to client onboarding. Publish your first project brief to start receiving developer proposals.
+          </div>
+        ) : null}
+
         <div className="mb-4 overflow-hidden rounded-2xl border border-cyan-100 bg-linear-to-r from-slate-900 via-cyan-900 to-teal-700 p-5 text-white shadow-[0_20px_50px_rgba(15,23,42,0.25)] md:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -672,40 +820,116 @@ export default function NewProjectPage() {
               </label>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Demo URL</span>
-                <input
-                  type="url"
-                  value={demoUrl}
-                  onChange={(event) => setDemoUrl(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="https://example.com/demo"
-                />
-              </label>
+            <section className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3 md:p-4">
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-neutral-900">Visual Assets</h3>
+                <p className="mt-0.5 text-xs text-neutral-600">Upload media to Cloudinary or paste direct URLs.</p>
+              </div>
 
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Thumbnail URL</span>
-                <input
-                  type="url"
-                  value={thumbnailUrl}
-                  onChange={(event) => setThumbnailUrl(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="https://example.com/thumb.jpg"
-                />
-              </label>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-neutral-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Background Image</p>
+                  <input
+                    type="url"
+                    value={backgroundUrl}
+                    onChange={(event) => setBackgroundUrl(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    placeholder="https://example.com/background.jpg"
+                  />
+                  <div className="mt-2">
+                    <UploadDropZone
+                      label="Upload background image"
+                      accept="image/png,image/jpeg,image/webp"
+                      onFiles={(files) => {
+                        if (files[0]) {
+                          void uploadBackgroundFile(files[0]);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
 
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Video URL</span>
-                <input
-                  type="url"
-                  value={videoUrl}
-                  onChange={(event) => setVideoUrl(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="https://youtube.com/watch?v=..."
-                />
-              </label>
-            </div>
+                <div className="rounded-lg border border-neutral-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Thumbnail</p>
+                  <input
+                    type="url"
+                    value={thumbnailUrl}
+                    onChange={(event) => setThumbnailUrl(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    placeholder="https://example.com/thumb.jpg"
+                  />
+                  <div className="mt-2">
+                    <UploadDropZone
+                      label="Upload thumbnail"
+                      accept="image/png,image/jpeg,image/webp"
+                      onFiles={(files) => {
+                        if (files[0]) {
+                          void uploadThumbnailFile(files[0]);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-white p-3 md:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Screenshots</p>
+                  <textarea
+                    value={screenshotsInput}
+                    onChange={(event) => setScreenshotsInput(event.target.value)}
+                    className="mt-2 min-h-20 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    placeholder="https://example.com/screen-1.png, https://example.com/screen-2.png"
+                  />
+                  <div className="mt-2">
+                    <UploadDropZone
+                      label="Upload one or more screenshots"
+                      accept="image/png,image/jpeg,image/webp"
+                      multiple
+                      onFiles={(files) => {
+                        void uploadScreenshotFiles(files);
+                      }}
+                    />
+                  </div>
+                  {parseCommaList(screenshotsInput).length > 0 ? (
+                    <p className="mt-2 text-xs text-neutral-600">{parseCommaList(screenshotsInput).length} screenshot URLs added</p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Demo URL</p>
+                  <input
+                    type="url"
+                    value={demoUrl}
+                    onChange={(event) => setDemoUrl(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    placeholder="https://example.com/demo"
+                  />
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Video</p>
+                  <input
+                    type="url"
+                    value={videoUrl}
+                    onChange={(event) => setVideoUrl(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    placeholder="https://youtube.com/watch?v=..."
+                  />
+                  <div className="mt-2">
+                    <UploadDropZone
+                      label="Upload MP4 video"
+                      accept="video/mp4"
+                      onFiles={(files) => {
+                        if (files[0]) {
+                          void uploadVideoFile(files[0]);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {mediaUploading ? <p className="text-xs font-medium text-neutral-600">Uploading media to Cloudinary...</p> : null}
 
             <div className="grid gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm">
               <label className="flex items-center gap-2 text-neutral-700">

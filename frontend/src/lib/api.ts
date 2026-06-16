@@ -34,6 +34,7 @@ export interface RegisterPayload {
   password: string;
   fullName: string;
   username: string;
+  role: AppRole;
 }
 
 export interface LoginPayload {
@@ -84,6 +85,7 @@ export type ProjectCategory =
   | "OTHER";
 
 export type PricingType = "FIXED" | "NEGOTIABLE" | "FREE" | "CONTACT";
+export type ProjectMediaType = "IMAGE" | "VIDEO" | "SCREENSHOT";
 
 export type NotificationType =
   | "NEW_MESSAGE"
@@ -127,6 +129,7 @@ export interface ProjectDetail {
   price: number | string | null;
   currency: string;
   demoUrl: string | null;
+  backgroundUrl: string | null;
   thumbnailUrl: string | null;
   videoUrl: string | null;
   likeCount: number;
@@ -138,6 +141,13 @@ export interface ProjectDetail {
     fullName: string;
     username: string;
   };
+  media: Array<{
+    id: string;
+    type: ProjectMediaType;
+    url: string;
+    caption: string | null;
+    order: number;
+  }>;
 }
 
 interface SavedProjectEntry {
@@ -190,8 +200,34 @@ export interface CreateProjectPayload {
   price?: number;
   currency?: string;
   demoUrl?: string;
+  backgroundUrl?: string;
   thumbnailUrl?: string;
   videoUrl?: string;
+  screenshots?: string[];
+}
+
+export interface UpdateProjectPayload {
+  title?: string;
+  shortDescription?: string;
+  longDescription?: string;
+  category?: ProjectCategory;
+  status?: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  techStack?: string[];
+  industries?: string[];
+  pricingType?: PricingType;
+  price?: number;
+  currency?: string;
+  demoUrl?: string;
+  backgroundUrl?: string;
+  thumbnailUrl?: string;
+  videoUrl?: string;
+  screenshots?: string[];
+}
+
+export interface UploadMediaOptions {
+  projectId?: string;
+  mediaType?: "IMAGE" | "VIDEO" | "SCREENSHOT" | "THUMBNAIL";
+  caption?: string;
 }
 
 async function parseError(response: Response): Promise<string> {
@@ -339,6 +375,12 @@ export async function publishProject(slug: string): Promise<void> {
   });
 }
 
+export async function updateProject(slug: string, payload: UpdateProjectPayload): Promise<void> {
+  await requestJson<unknown, UpdateProjectPayload>("PUT", `/projects/${slug}`, {
+    body: payload
+  });
+}
+
 export async function listProjects(): Promise<ProjectListItem[]> {
   return requestJson<ProjectListItem[]>("GET", "/projects");
 }
@@ -357,4 +399,41 @@ export async function getMessageThreads(): Promise<ThreadSummary[]> {
 
 export async function getNotifications(limit = 20): Promise<NotificationItem[]> {
   return requestJson<NotificationItem[]>("GET", `/notifications?limit=${limit}`);
+}
+
+export async function uploadMediaFile(file: File, options?: UploadMediaOptions): Promise<{ url: string; publicId: string }> {
+  const csrfToken = readCookie(CSRF_COOKIE_NAME);
+  const formData = new FormData();
+  formData.append("file", file);
+
+  if (options?.projectId) {
+    formData.append("projectId", options.projectId);
+  }
+  if (options?.mediaType) {
+    formData.append("mediaType", options.mediaType);
+  }
+  if (options?.caption) {
+    formData.append("caption", options.caption);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/media/upload`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      ...(csrfToken ? { "x-csrf-token": csrfToken } : {})
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const payload = (await response.json()) as { url: string; publicId: string } | ApiEnvelope<{ url: string; publicId: string }>;
+
+  if (typeof payload === "object" && payload !== null && "success" in payload && "data" in payload) {
+    return (payload as ApiEnvelope<{ url: string; publicId: string }>).data;
+  }
+
+  return payload as { url: string; publicId: string };
 }

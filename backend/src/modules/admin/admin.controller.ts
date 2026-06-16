@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Param, Put } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { USER_ROLE } from "src/common/constants/user-role.constant";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { AdminService } from "src/modules/admin/admin.service";
 
 @Controller("admin")
-@Roles(UserRole.ADMIN)
+@Roles(USER_ROLE.ADMIN)
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 

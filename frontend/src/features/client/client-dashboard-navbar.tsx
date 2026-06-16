@@ -58,6 +58,7 @@ export default function ClientDashboardNavbar() {
             onSignOut={onSignOut}
             onSignOutEverywhere={onSignOutEverywhere}
             dashboardHref="/client/dashboard"
+            settingsHref="/client/settings"
           />
         </div>
       </nav>

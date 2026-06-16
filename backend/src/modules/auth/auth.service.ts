@@ -1,10 +1,11 @@
 import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { Prisma, UserRole } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { createHash } from "crypto";
 import { WebSocket } from "ws";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 import { PrismaService } from "src/prisma/prisma.service";
 import { toSlug } from "src/common/utils/slug.util";
 import { LoginDto } from "src/modules/auth/dto/login.dto";
@@ -54,14 +55,14 @@ export class AuthService {
       });
       return payload.role;
     } catch {
-      return UserRole.DEVELOPER;
+      return USER_ROLE.DEVELOPER;
     }
   }
 
   /**
    * Registers a new user in Supabase Auth and local profile store.
    */
-  async register(dto: RegisterDto, context: AuthRequestContext = {}): Promise<{ userId: string } & TokenPair> {
+  async register(dto: RegisterDto, context: AuthRequestContext = {}): Promise<{ userId: string; role: UserRole } & TokenPair> {
     this.assertSupabaseConfigured();
     this.assertRateLimit("register", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 10, 60_000);
 
@@ -81,7 +82,8 @@ export class AuthService {
         email_confirm: true,
         user_metadata: {
           fullName: dto.fullName,
-          username
+          username,
+          role: dto.role
         }
       });
       data = response.data;
@@ -104,14 +106,14 @@ export class AuthService {
         email: dto.email,
         username,
         fullName: dto.fullName,
-        role: UserRole.DEVELOPER,
+        role: dto.role,
         skills: []
       }
     });
 
     const tokenPair = await this.issueTokens(user.id, user.email, user.role);
     await this.logAuthEvent("register_success", true, context, { userId: user.id, email: user.email });
-    return { userId: user.id, ...tokenPair };
+    return { userId: user.id, role: user.role, ...tokenPair };
   }
 
   /**
