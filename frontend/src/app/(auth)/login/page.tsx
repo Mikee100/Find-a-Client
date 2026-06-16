@@ -4,10 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
-import { login } from "@/lib/api";
-import { getRoleFromAccessToken } from "@/lib/auth";
+import { AppRole, login } from "@/lib/api";
 
-function getRedirectPath(role: ReturnType<typeof getRoleFromAccessToken>): string {
+function getRedirectPath(role: AppRole): string {
 	if (role === "ADMIN") {
 		return "/admin/dashboard";
 	}
@@ -55,8 +54,8 @@ export default function LoginPage() {
 		}
 
 		try {
-			const tokens = await login({ email, password });
-			const role = getRoleFromAccessToken(tokens.accessToken);
+			const result = await login({ email, password });
+			const role = result.role;
 			const redirectPath = getRedirectPath(role);
 
 			setSuccess("Signed in successfully. Redirecting...");

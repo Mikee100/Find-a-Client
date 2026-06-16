@@ -1,6 +1,5 @@
-import { AuthTokens, clearTokens, readTokens, saveTokens } from "@/lib/auth";
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const CSRF_COOKIE_NAME = process.env.NEXT_PUBLIC_AUTH_CSRF_COOKIE_NAME ?? "csrf_token";
 
 interface ApiErrorBody {
   message?: string | string[];
@@ -12,6 +11,23 @@ interface ApiEnvelope<T> {
 }
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+let inFlightRefresh: Promise<boolean> | null = null;
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const token = `${name}=`;
+  for (const chunk of document.cookie.split(";")) {
+    const part = chunk.trim();
+    if (part.startsWith(token)) {
+      return decodeURIComponent(part.slice(token.length));
+    }
+  }
+
+  return null;
+}
 
 export interface RegisterPayload {
   email: string;
@@ -25,11 +41,22 @@ export interface LoginPayload {
   password: string;
 }
 
-interface RegisterResponse extends AuthTokens {
+export type AppRole = "DEVELOPER" | "CLIENT" | "ADMIN";
+
+interface RegisterResponse {
   userId: string;
+  role: AppRole;
 }
 
-type TokenResponse = AuthTokens;
+interface LoginResponse {
+  role: AppRole;
+}
+
+export interface AuthSession {
+  sub: string;
+  email: string;
+  role: AppRole;
+}
 
 export type ProjectCategory =
   | "WEB_APP"
@@ -105,7 +132,10 @@ export interface CreateProjectPayload {
   industries: string[];
   pricingType: PricingType;
   price?: number;
+  currency?: string;
   demoUrl?: string;
+  thumbnailUrl?: string;
+  videoUrl?: string;
 }
 
 async function parseError(response: Response): Promise<string> {
@@ -128,17 +158,47 @@ async function parseError(response: Response): Promise<string> {
 async function requestJson<TResponse, TBody = unknown>(
   method: HttpMethod,
   path: string,
-  options?: { body?: TBody; token?: string }
+  options?: { body?: TBody; allowRetryOn401?: boolean }
 ): Promise<TResponse> {
   const hasBody = options?.body !== undefined;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      ...(hasBody ? { "Content-Type": "application/json" } : {}),
-      ...(options?.token ? { Authorization: `Bearer ${options.token}` } : {})
-    },
-    body: hasBody ? JSON.stringify(options?.body) : undefined
-  });
+  const allowRetryOn401 = options?.allowRetryOn401 ?? true;
+  const csrfToken = readCookie(CSRF_COOKIE_NAME);
+  const isMutation = method === "POST" || method === "PUT" || method === "DELETE";
+
+  const send = async (): Promise<Response> =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method,
+      credentials: "include",
+      headers: {
+        ...(hasBody ? { "Content-Type": "application/json" } : {}),
+        ...(isMutation && csrfToken ? { "x-csrf-token": csrfToken } : {})
+      },
+      body: hasBody ? JSON.stringify(options?.body) : undefined
+    });
+
+  const response = await send();
+
+  if (response.status === 401 && allowRetryOn401 && path !== "/auth/refresh") {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      const retryResponse = await send();
+      if (!retryResponse.ok) {
+        throw new Error(await parseError(retryResponse));
+      }
+
+      const retryPayload = (await retryResponse.json()) as TResponse | ApiEnvelope<TResponse>;
+      if (
+        typeof retryPayload === "object" &&
+        retryPayload !== null &&
+        "success" in retryPayload &&
+        "data" in retryPayload
+      ) {
+        return (retryPayload as ApiEnvelope<TResponse>).data;
+      }
+
+      return retryPayload as TResponse;
+    }
+  }
 
   if (!response.ok) {
     throw new Error(await parseError(response));
@@ -155,125 +215,71 @@ async function requestJson<TResponse, TBody = unknown>(
 
 async function postJson<TResponse, TBody>(
   path: string,
-  body: TBody,
-  token?: string
+  body: TBody
 ): Promise<TResponse> {
-  return requestJson<TResponse, TBody>("POST", path, { body, token });
+  return requestJson<TResponse, TBody>("POST", path, { body });
 }
 
 export async function register(payload: RegisterPayload): Promise<RegisterResponse> {
-  const data = await postJson<RegisterResponse, RegisterPayload>("/auth/register", payload);
-  saveTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken });
-  return data;
+  return postJson<RegisterResponse, RegisterPayload>("/auth/register", payload);
 }
 
-export async function login(payload: LoginPayload): Promise<TokenResponse> {
-  const data = await postJson<TokenResponse, LoginPayload>("/auth/login", payload);
-  saveTokens(data);
-  return data;
+export async function login(payload: LoginPayload): Promise<LoginResponse> {
+  return postJson<LoginResponse, LoginPayload>("/auth/login", payload);
 }
 
-export async function refreshSession(): Promise<TokenResponse | null> {
-  const tokens = readTokens();
-  if (!tokens?.refreshToken) {
-    return null;
+export async function refreshSession(): Promise<boolean> {
+  if (inFlightRefresh) {
+    return inFlightRefresh;
   }
 
-  try {
-    const data = await postJson<TokenResponse, { refreshToken: string }>("/auth/refresh", {
-      refreshToken: tokens.refreshToken
-    });
-    saveTokens(data);
-    return data;
-  } catch {
-    clearTokens();
-    return null;
-  }
+  inFlightRefresh = (async () => {
+    try {
+      await requestJson<{ refreshed: true }, Record<string, never>>("POST", "/auth/refresh", {
+        body: {},
+        allowRetryOn401: false
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      inFlightRefresh = null;
+    }
+  })();
+
+  return inFlightRefresh;
 }
 
 export async function logout(): Promise<void> {
-  const tokens = readTokens();
-  if (!tokens?.refreshToken) {
-    clearTokens();
-    return;
-  }
+  await postJson<{ loggedOut: true }, Record<string, never>>("/auth/logout", {});
+}
 
-  try {
-    await postJson<{ loggedOut: true }, { refreshToken: string }>(
-      "/auth/logout",
-      { refreshToken: tokens.refreshToken },
-      tokens.accessToken
-    );
-  } finally {
-    clearTokens();
-  }
+export async function getAuthSession(): Promise<AuthSession> {
+  return requestJson<AuthSession>("GET", "/auth/session");
 }
 
 export async function updateProfile(payload: UpdateProfilePayload): Promise<void> {
-  const tokens = readTokens();
-  if (!tokens?.accessToken) {
-    throw new Error("You must be signed in.");
-  }
-
-  await requestJson<unknown, UpdateProfilePayload>("PUT", "/users/me", {
-    body: payload,
-    token: tokens.accessToken
-  });
+  await requestJson<unknown, UpdateProfilePayload>("PUT", "/users/me", { body: payload });
 }
 
 export async function createProject(payload: CreateProjectPayload): Promise<ProjectResponse> {
-  const tokens = readTokens();
-  if (!tokens?.accessToken) {
-    throw new Error("You must be signed in.");
-  }
-
-  return requestJson<ProjectResponse, CreateProjectPayload>("POST", "/projects", {
-    body: payload,
-    token: tokens.accessToken
-  });
+  return requestJson<ProjectResponse, CreateProjectPayload>("POST", "/projects", { body: payload });
 }
 
 export async function publishProject(slug: string): Promise<void> {
-  const tokens = readTokens();
-  if (!tokens?.accessToken) {
-    throw new Error("You must be signed in.");
-  }
-
   await requestJson<unknown, { status: "PUBLISHED" }>("PUT", `/projects/${slug}`, {
-    body: { status: "PUBLISHED" },
-    token: tokens.accessToken
+    body: { status: "PUBLISHED" }
   });
 }
 
 export async function getSavedProjects(): Promise<SavedProjectEntry[]> {
-  const tokens = readTokens();
-  if (!tokens?.accessToken) {
-    throw new Error("You must be signed in.");
-  }
-
-  return requestJson<SavedProjectEntry[]>("GET", "/users/me/saved", {
-    token: tokens.accessToken
-  });
+  return requestJson<SavedProjectEntry[]>("GET", "/users/me/saved");
 }
 
 export async function getMessageThreads(): Promise<ThreadSummary[]> {
-  const tokens = readTokens();
-  if (!tokens?.accessToken) {
-    throw new Error("You must be signed in.");
-  }
-
-  return requestJson<ThreadSummary[]>("GET", "/messages/threads", {
-    token: tokens.accessToken
-  });
+  return requestJson<ThreadSummary[]>("GET", "/messages/threads");
 }
 
 export async function getNotifications(limit = 20): Promise<NotificationItem[]> {
-  const tokens = readTokens();
-  if (!tokens?.accessToken) {
-    throw new Error("You must be signed in.");
-  }
-
-  return requestJson<NotificationItem[]>("GET", `/notifications?limit=${limit}`, {
-    token: tokens.accessToken
-  });
+  return requestJson<NotificationItem[]>("GET", `/notifications?limit=${limit}`);
 }

@@ -1,7 +1,8 @@
 import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { UserRole } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
+import { createHash } from "crypto";
 import { WebSocket } from "ws";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { PrismaService } from "src/prisma/prisma.service";
@@ -17,9 +18,15 @@ export interface TokenPair {
   refreshToken: string;
 }
 
+export interface AuthRequestContext {
+  ipAddress?: string;
+  userAgent?: string;
+  identifier?: string;
+}
+
 @Injectable()
 export class AuthService {
-  private readonly refreshStore = new Map<string, string>();
+  private readonly authRateLimitStore = new Map<string, { count: number; resetAt: number }>();
   private readonly supabaseAnon: SupabaseClient;
   private readonly supabaseAdmin: SupabaseClient;
 
@@ -40,15 +47,28 @@ export class AuthService {
     );
   }
 
+  getRoleFromAccessToken(accessToken: string): UserRole {
+    try {
+      const payload = this.jwtService.verify<{ role: UserRole }>(accessToken, {
+        secret: this.configService.getOrThrow<string>("JWT_SECRET")
+      });
+      return payload.role;
+    } catch {
+      return UserRole.DEVELOPER;
+    }
+  }
+
   /**
    * Registers a new user in Supabase Auth and local profile store.
    */
-  async register(dto: RegisterDto): Promise<{ userId: string } & TokenPair> {
+  async register(dto: RegisterDto, context: AuthRequestContext = {}): Promise<{ userId: string } & TokenPair> {
     this.assertSupabaseConfigured();
+    this.assertRateLimit("register", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 10, 60_000);
 
     const username = toSlug(dto.username);
     const existing = await this.prisma.user.findFirst({ where: { OR: [{ email: dto.email }, { username }] } });
     if (existing) {
+      await this.logAuthEvent("register_conflict", false, context, { email: dto.email });
       throw new HttpException("Email or username already exists", HttpStatus.CONFLICT);
     }
 
@@ -71,6 +91,10 @@ export class AuthService {
     }
 
     if (error || !data.user) {
+      await this.logAuthEvent("register_failed", false, context, {
+        email: dto.email,
+        metadata: { reason: this.mapSupabaseMessage(error?.message) ?? "Registration failed" }
+      });
       throw new HttpException(this.mapSupabaseMessage(error?.message) ?? "Registration failed", HttpStatus.BAD_REQUEST);
     }
 
@@ -86,14 +110,16 @@ export class AuthService {
     });
 
     const tokenPair = await this.issueTokens(user.id, user.email, user.role);
+    await this.logAuthEvent("register_success", true, context, { userId: user.id, email: user.email });
     return { userId: user.id, ...tokenPair };
   }
 
   /**
    * Logs in with Supabase Auth and returns app JWT tokens.
    */
-  async login(dto: LoginDto): Promise<TokenPair> {
+  async login(dto: LoginDto, context: AuthRequestContext = {}): Promise<TokenPair> {
     this.assertSupabaseConfigured();
+    this.assertRateLimit("login", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 8, 60_000);
 
     let data: Awaited<ReturnType<typeof this.supabaseAnon.auth.signInWithPassword>>["data"];
     let error: Awaited<ReturnType<typeof this.supabaseAnon.auth.signInWithPassword>>["error"];
@@ -109,46 +135,108 @@ export class AuthService {
     }
 
     if (error || !data.user) {
+      await this.logAuthEvent("login_failed", false, context, {
+        email: dto.email,
+        metadata: { reason: this.mapSupabaseMessage(error?.message) ?? "Invalid credentials" }
+      });
       throw new HttpException(this.mapSupabaseMessage(error?.message) ?? "Invalid credentials", HttpStatus.UNAUTHORIZED);
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: data.user.id } });
     if (!user) {
+      await this.logAuthEvent("login_failed", false, context, {
+        email: dto.email,
+        metadata: { reason: "User profile not found" }
+      });
       throw new HttpException("User profile not found", HttpStatus.NOT_FOUND);
     }
 
-    return this.issueTokens(user.id, user.email, user.role);
+    const tokenPair = await this.issueTokens(user.id, user.email, user.role);
+    await this.logAuthEvent("login_success", true, context, { userId: user.id, email: user.email });
+    return tokenPair;
   }
 
   /**
    * Rotates refresh token and issues new pair.
    */
-  async refresh(dto: RefreshTokenDto): Promise<TokenPair> {
-    const payload = await this.jwtService.verifyAsync<{ sub: string }>(dto.refreshToken, {
-      secret: this.configService.getOrThrow<string>("JWT_REFRESH_SECRET")
-    });
+  async refresh(dto: RefreshTokenDto, context: AuthRequestContext = {}): Promise<TokenPair> {
+    this.assertRateLimit("refresh", context.ipAddress ?? "unknown", 30, 60_000);
 
-    const stored = this.refreshStore.get(payload.sub);
-    if (stored !== dto.refreshToken) {
+    let payload: { sub: string };
+    try {
+      payload = await this.jwtService.verifyAsync<{ sub: string }>(dto.refreshToken, {
+        secret: this.configService.getOrThrow<string>("JWT_REFRESH_SECRET")
+      });
+    } catch {
+      await this.logAuthEvent("refresh_failed", false, context, { metadata: { reason: "Token verification failed" } });
+      throw new HttpException("Invalid refresh token", HttpStatus.UNAUTHORIZED);
+    }
+
+    let session;
+    try {
+      session = await this.prisma.refreshSession.findUnique({ where: { userId: payload.sub } });
+    } catch (error) {
+      this.throwAuthStorageError(error);
+    }
+    const tokenHash = this.hashToken(dto.refreshToken);
+    if (!session || session.revokedAt || session.tokenHash !== tokenHash || session.expiresAt < new Date()) {
+      await this.logAuthEvent("refresh_failed", false, context, {
+        userId: payload.sub,
+        metadata: { reason: "Session invalid or expired" }
+      });
       throw new HttpException("Invalid refresh token", HttpStatus.UNAUTHORIZED);
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) {
+      await this.logAuthEvent("refresh_failed", false, context, {
+        userId: payload.sub,
+        metadata: { reason: "User not found" }
+      });
       throw new HttpException("User not found", HttpStatus.NOT_FOUND);
     }
 
-    return this.issueTokens(user.id, user.email, user.role);
+    const tokenPair = await this.issueTokens(user.id, user.email, user.role);
+    await this.logAuthEvent("refresh_success", true, context, { userId: user.id, email: user.email });
+    return tokenPair;
   }
 
   /**
    * Logs out user by blacklisting and deleting refresh token.
    */
-  async logout(refreshToken: string): Promise<{ loggedOut: true }> {
-    const payload = await this.jwtService.verifyAsync<{ sub: string; exp: number }>(refreshToken, {
-      secret: this.configService.getOrThrow<string>("JWT_REFRESH_SECRET")
-    });
-    this.refreshStore.delete(payload.sub);
+  async logout(refreshToken: string, context: AuthRequestContext = {}): Promise<{ loggedOut: true }> {
+    try {
+      const payload = await this.jwtService.verifyAsync<{ sub: string }>(refreshToken, {
+        secret: this.configService.getOrThrow<string>("JWT_REFRESH_SECRET")
+      });
+      let session;
+      try {
+        session = await this.prisma.refreshSession.findUnique({ where: { userId: payload.sub } });
+      } catch (error) {
+        this.throwAuthStorageError(error);
+      }
+      if (session && session.tokenHash === this.hashToken(refreshToken)) {
+        try {
+          await this.prisma.refreshSession.update({
+            where: { userId: payload.sub },
+            data: { revokedAt: new Date() }
+          });
+        } catch (error) {
+          this.throwAuthStorageError(error);
+        }
+      }
+
+      await this.logAuthEvent("logout_success", true, context, { userId: payload.sub });
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      await this.logAuthEvent("logout_invalid_token", false, context, {
+        metadata: { reason: "Token verification failed during logout" }
+      });
+    }
+
     return { loggedOut: true };
   }
 
@@ -226,8 +314,87 @@ export class AuthService {
       }
     );
 
-    this.refreshStore.set(userId, refreshToken);
+    try {
+      await this.prisma.refreshSession.upsert({
+        where: { userId },
+        create: {
+          userId,
+          tokenHash: this.hashToken(refreshToken),
+          expiresAt: new Date(Date.now() + refreshTtl * 1000)
+        },
+        update: {
+          tokenHash: this.hashToken(refreshToken),
+          expiresAt: new Date(Date.now() + refreshTtl * 1000),
+          revokedAt: null
+        }
+      });
+    } catch (error) {
+      this.throwAuthStorageError(error);
+    }
+
     return { accessToken, refreshToken };
+  }
+
+  private hashToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private assertRateLimit(scope: string, key: string, limit: number, ttlMs: number): void {
+    const now = Date.now();
+    const compound = `${scope}:${key}`;
+    const existing = this.authRateLimitStore.get(compound);
+
+    if (!existing || existing.resetAt <= now) {
+      this.authRateLimitStore.set(compound, { count: 1, resetAt: now + ttlMs });
+      return;
+    }
+
+    if (existing.count >= limit) {
+      throw new HttpException("Too many authentication attempts. Please try again later.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    existing.count += 1;
+    this.authRateLimitStore.set(compound, existing);
+  }
+
+  private async logAuthEvent(
+    event: string,
+    success: boolean,
+    context: AuthRequestContext,
+    details?: { userId?: string; email?: string; metadata?: Prisma.InputJsonValue }
+  ): Promise<void> {
+    try {
+      await this.prisma.authAuditLog.create({
+        data: {
+          userId: details?.userId,
+          email: details?.email,
+          event,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          success,
+          metadata: details?.metadata
+        }
+      });
+    } catch {
+      // Avoid blocking auth flow on logging failure.
+    }
+  }
+
+  private throwAuthStorageError(error: unknown): never {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof (error as { code?: unknown }).code === "string" &&
+      (error as { code: string }).code === "P2021"
+    ) {
+      throw new HttpException(
+        "Authentication storage is not ready. Run backend database migrations before using auth endpoints.",
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
+
+    throw new HttpException("Authentication storage error", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   private parseTtlToSeconds(value: string): number {

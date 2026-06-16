@@ -45,6 +45,8 @@ Critical variables:
 - `DATABASE_URL`, `DIRECT_URL`
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `JWT_SECRET`, `JWT_REFRESH_SECRET`
+- `AUTH_COOKIE_SECURE`, `AUTH_COOKIE_SAME_SITE`, `AUTH_COOKIE_DOMAIN`
+- `AUTH_ACCESS_COOKIE_NAME`, `AUTH_REFRESH_COOKIE_NAME`, `AUTH_CSRF_COOKIE_NAME`
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
 - `RESEND_API_KEY`
 - `FRONTEND_URL`
@@ -141,7 +143,7 @@ Error responses:
 ## Current Delivery Scope
 
 Implemented modules and endpoints:
-- Auth: register, login, refresh, logout, Google/GitHub redirect helpers
+- Auth: register, login, refresh, logout, session endpoint, Google/GitHub redirect helpers
 - Users: profile read/update, avatar upload, saved projects
 - Projects: create/list/detail/update/archive, like/save, question endpoints
 - Media: upload/delete via Cloudinary
@@ -152,3 +154,11 @@ Implemented modules and endpoints:
 - Admin: moderation and featured toggle
 
 The codebase is designed for iterative hardening on top of this baseline.
+
+## Security Hardening Notes
+
+- Access and refresh tokens are delivered in HttpOnly cookies (not localStorage).
+- CSRF protection uses double-submit cookie checks (`x-csrf-token` must match CSRF cookie).
+- Refresh sessions are persisted in PostgreSQL (`RefreshSession` model) and survive restarts.
+- Auth audit events are persisted in PostgreSQL (`AuthAuditLog` model).
+- Auth rate limiting is enforced per endpoint and request identity context.
