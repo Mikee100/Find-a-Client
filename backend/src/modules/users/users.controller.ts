@@ -19,9 +19,9 @@ export class UsersController {
     private readonly mediaService: MediaService
   ) {}
 
-  @Get(":username")
-  getByUsername(@Param("username") username: string) {
-    return this.usersService.getPublicProfile(username);
+  @Get("me")
+  getMe(@CurrentUser() user: CurrentUserPayload) {
+    return this.usersService.getMe(user.sub);
   }
 
   @Put("me")
@@ -39,5 +39,10 @@ export class UsersController {
   @Get("me/saved")
   getSaved(@CurrentUser() user: CurrentUserPayload) {
     return this.usersService.getSavedProjects(user.sub);
+  }
+
+  @Get(":username")
+  getByUsername(@Param("username") username: string) {
+    return this.usersService.getPublicProfile(username);
   }
 }

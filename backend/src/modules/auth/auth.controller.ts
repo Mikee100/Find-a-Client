@@ -154,6 +154,17 @@ export class AuthController {
     return { loggedOut: true as const };
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post("logout-all")
+  async logoutAll(@CurrentUser() user: CurrentUserPayload, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    await this.authService.logoutAll(user.sub, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request)
+    });
+    this.clearAuthCookies(response);
+    return { loggedOutAll: true as const };
+  }
+
   @Get("session")
   session(@CurrentUser() user: CurrentUserPayload) {
     return user;

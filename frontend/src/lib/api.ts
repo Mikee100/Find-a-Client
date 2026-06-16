@@ -58,6 +58,21 @@ export interface AuthSession {
   role: AppRole;
 }
 
+export interface CurrentUserProfile {
+  id: string;
+  email: string;
+  username: string;
+  fullName: string;
+  avatarUrl: string | null;
+  role: AppRole;
+  bio: string | null;
+  skills: string[];
+  location: string | null;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  linkedinUrl: string | null;
+}
+
 export type ProjectCategory =
   | "WEB_APP"
   | "MOBILE_APP"
@@ -82,6 +97,47 @@ interface ProjectResponse {
   slug: string;
   title: string;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+}
+
+export interface ProjectListItem {
+  id: string;
+  slug: string;
+  title: string;
+  shortDescription: string;
+  category: ProjectCategory;
+  pricingType: PricingType;
+  price: number | string | null;
+  currency: string;
+  likeCount: number;
+  viewCount: number;
+  createdAt: string;
+}
+
+export interface ProjectDetail {
+  id: string;
+  slug: string;
+  title: string;
+  shortDescription: string;
+  longDescription: string;
+  category: ProjectCategory;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  techStack: string[];
+  industries: string[];
+  pricingType: PricingType;
+  price: number | string | null;
+  currency: string;
+  demoUrl: string | null;
+  thumbnailUrl: string | null;
+  videoUrl: string | null;
+  likeCount: number;
+  viewCount: number;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    id: string;
+    fullName: string;
+    username: string;
+  };
 }
 
 interface SavedProjectEntry {
@@ -163,11 +219,12 @@ async function requestJson<TResponse, TBody = unknown>(
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const hasBody = options?.body !== undefined;
   const allowRetryOn401 = options?.allowRetryOn401 ?? true;
-  const csrfToken = readCookie(CSRF_COOKIE_NAME);
   const isMutation = method === "POST" || method === "PUT" || method === "DELETE";
 
-  const send = async (): Promise<Response> =>
-    fetch(`${API_BASE_URL}${normalizedPath}`, {
+  const send = async (): Promise<Response> => {
+    const csrfToken = isMutation ? readCookie(CSRF_COOKIE_NAME) : null;
+
+    return fetch(`${API_BASE_URL}${normalizedPath}`, {
       method,
       credentials: "include",
       headers: {
@@ -176,6 +233,7 @@ async function requestJson<TResponse, TBody = unknown>(
       },
       body: hasBody ? JSON.stringify(options?.body) : undefined
     });
+  };
 
   const response = await send();
 
@@ -255,12 +313,20 @@ export async function logout(): Promise<void> {
   await postJson<{ loggedOut: true }, Record<string, never>>("/auth/logout", {});
 }
 
+export async function logoutEverywhere(): Promise<void> {
+  await postJson<{ loggedOutAll: true }, Record<string, never>>("/auth/logout-all", {});
+}
+
 export async function getAuthSession(): Promise<AuthSession> {
   return requestJson<AuthSession>("GET", "/auth/session");
 }
 
 export async function updateProfile(payload: UpdateProfilePayload): Promise<void> {
   await requestJson<unknown, UpdateProfilePayload>("PUT", "/users/me", { body: payload });
+}
+
+export async function getCurrentUserProfile(): Promise<CurrentUserProfile> {
+  return requestJson<CurrentUserProfile>("GET", "/users/me");
 }
 
 export async function createProject(payload: CreateProjectPayload): Promise<ProjectResponse> {
@@ -271,6 +337,14 @@ export async function publishProject(slug: string): Promise<void> {
   await requestJson<unknown, { status: "PUBLISHED" }>("PUT", `/projects/${slug}`, {
     body: { status: "PUBLISHED" }
   });
+}
+
+export async function listProjects(): Promise<ProjectListItem[]> {
+  return requestJson<ProjectListItem[]>("GET", "/projects");
+}
+
+export async function getProjectBySlug(slug: string): Promise<ProjectDetail> {
+  return requestJson<ProjectDetail>("GET", `/projects/${slug}`);
 }
 
 export async function getSavedProjects(): Promise<SavedProjectEntry[]> {

@@ -6,7 +6,7 @@ import { useState } from "react";
 import AccountMenu from "@/features/shared/account-menu";
 import { logout, logoutEverywhere } from "@/lib/api";
 
-export default function ClientDashboardNavbar() {
+export default function MarketplaceNavbar() {
   const router = useRouter();
   const [pendingSignOut, setPendingSignOut] = useState(false);
 
@@ -32,32 +32,32 @@ export default function ClientDashboardNavbar() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur">
-      <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 md:px-6">
+      <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
           <Link href="/" className="text-lg font-bold tracking-tight text-neutral-900">
             Find a Client
           </Link>
-          <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">
-            Client
+          <span className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
+            Marketplace
           </span>
         </div>
 
         <div className="flex items-center gap-2 text-sm">
-          <Link href="/client/dashboard" className="rounded-md bg-neutral-100 px-2 py-1 font-semibold text-neutral-900">
-            Overview
+          <Link href="/projects" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
+            Projects
           </Link>
           <Link href="/client/projects/new" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
-            Create Project
+            Post Project
           </Link>
-          <Link href="/developers" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
-            Find Developers
+          <Link href="/developer/dashboard" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
+            Dashboard
           </Link>
           <AccountMenu
-            roleLabel="Client"
+            roleLabel="Account"
             pendingSignOut={pendingSignOut}
             onSignOut={onSignOut}
             onSignOutEverywhere={onSignOutEverywhere}
-            dashboardHref="/client/dashboard"
+            dashboardHref="/dashboard"
           />
         </div>
       </nav>

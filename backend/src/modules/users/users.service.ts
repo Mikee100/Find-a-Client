@@ -6,6 +6,32 @@ import { UpdateUserDto } from "src/modules/users/dto/update-user.dto";
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        fullName: true,
+        avatarUrl: true,
+        role: true,
+        bio: true,
+        skills: true,
+        location: true,
+        websiteUrl: true,
+        githubUrl: true,
+        linkedinUrl: true
+      }
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    return user;
+  }
+
   /**
    * Returns public profile with published projects.
    */
