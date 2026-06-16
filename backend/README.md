@@ -50,6 +50,7 @@ Critical variables:
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
 - `RESEND_API_KEY`
 - `FRONTEND_URL`
+- `FRONTEND_URLS` (optional comma-separated origins, e.g. `https://find-a-client.vercel.app,https://preview.example.com`)
 
 ## Local Development
 
