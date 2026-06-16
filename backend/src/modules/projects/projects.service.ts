@@ -12,6 +12,10 @@ import { UpdateProjectDto } from "src/modules/projects/dto/update-project.dto";
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private normalizeStringList(values: string[]): string[] {
+    return [...new Set(values.map((value) => sanitizeInput(value).trim()).filter(Boolean))];
+  }
+
   /**
    * Creates a new project for the authenticated developer.
    */
@@ -19,6 +23,9 @@ export class ProjectsService {
     if (role !== UserRole.DEVELOPER) {
       throw new ForbiddenException("Only developers can create projects");
     }
+
+    const techStack = this.normalizeStringList(dto.techStack);
+    const industries = this.normalizeStringList(dto.industries);
 
     const slug = toSlug(`${dto.title}-${Date.now()}`);
     return this.prisma.project.create({
@@ -29,12 +36,15 @@ export class ProjectsService {
         longDescription: sanitizeRichText(dto.longDescription),
         category: dto.category,
         status: ProjectStatus.DRAFT,
-        techStack: dto.techStack,
-        industries: dto.industries,
+        techStack,
+        industries,
         pricingType: dto.pricingType,
         price: dto.price,
+        currency: dto.currency ?? "USD",
         authorId,
-        demoUrl: dto.demoUrl
+        demoUrl: dto.demoUrl,
+        thumbnailUrl: dto.thumbnailUrl,
+        videoUrl: dto.videoUrl
       }
     });
   }
