@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ChevronRight, Menu, X, Cloud, Code2, ShieldCheck, Boxes, Cpu, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -102,19 +103,19 @@ export function HeroSection() {
               <div className="relative -mr-56 mt-8 overflow-hidden px-2 sm:mr-0 sm:mt-12 md:mt-20">
                 <div aria-hidden className="absolute inset-0 z-10 bg-gradient-to-b from-transparent from-35% to-[#0a0a0a]" />
                 <div className="relative mx-auto max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-black p-4 shadow-lg shadow-black/40 ring-1 ring-white/15">
-                  <img
+                  <Image
                     className="relative hidden aspect-[15/8] rounded-2xl object-cover dark:block"
                     src="https://images.unsplash.com/photo-1518773553398-650c184e0bb3?auto=format&fit=crop&w=2400&q=80"
                     alt="app screen dark"
-                    width="2700"
-                    height="1440"
+                    width={2700}
+                    height={1440}
                   />
-                  <img
+                  <Image
                     className="relative aspect-[15/8] rounded-2xl border border-white/15 object-cover dark:hidden"
                     src="https://images.unsplash.com/photo-1516116216624-53e697fedbea?auto=format&fit=crop&w=2400&q=80"
                     alt="app screen light"
-                    width="2700"
-                    height="1440"
+                    width={2700}
+                    height={1440}
                   />
                 </div>
               </div>
