@@ -12,6 +12,12 @@ export default function ClientDashboardPage() {
             Client workspace scaffold is ready. Add discovery, hiring requests, and billing views here.
           </p>
           <p className="mt-3 text-neutral-600">
+            Ready to post work?{" "}
+            <Link href="/client/projects/new" className="font-semibold text-teal-700">
+              Create a project
+            </Link>
+          </p>
+          <p className="mt-3 text-neutral-600">
             Go to <Link href="/developer/dashboard" className="font-semibold text-teal-700">Developer Dashboard</Link>
           </p>
         </section>

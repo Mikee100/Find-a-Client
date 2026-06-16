@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import AccountMenu from "@/features/shared/account-menu";
 
 interface DeveloperDashboardNavbarProps {
   onSignOut: () => void;
+  onSignOutEverywhere: () => void;
   pendingSignOut: boolean;
 }
 
 export default function DeveloperDashboardNavbar({
   onSignOut,
+  onSignOutEverywhere,
   pendingSignOut
 }: DeveloperDashboardNavbarProps) {
   return (
@@ -30,13 +33,13 @@ export default function DeveloperDashboardNavbar({
           <Link href="/projects" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
             Browse Projects
           </Link>
-          <button
-            onClick={onSignOut}
-            disabled={pendingSignOut}
-            className="rounded-md bg-teal-700 px-3 py-1.5 font-semibold text-white disabled:opacity-70"
-          >
-            {pendingSignOut ? "Signing out..." : "Sign out"}
-          </button>
+          <AccountMenu
+            roleLabel="Developer"
+            pendingSignOut={pendingSignOut}
+            onSignOut={onSignOut}
+            onSignOutEverywhere={onSignOutEverywhere}
+            dashboardHref="/developer/dashboard"
+          />
         </div>
       </nav>
     </header>

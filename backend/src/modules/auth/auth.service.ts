@@ -241,6 +241,31 @@ export class AuthService {
   }
 
   /**
+   * Revokes all active refresh sessions for a user.
+   */
+  async logoutAll(userId: string, context: AuthRequestContext = {}): Promise<{ loggedOutAll: true }> {
+    try {
+      await this.prisma.refreshSession.updateMany({
+        where: {
+          userId,
+          revokedAt: null
+        },
+        data: {
+          revokedAt: new Date()
+        }
+      });
+      await this.logAuthEvent("logout_all_success", true, context, { userId });
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.throwAuthStorageError(error);
+    }
+
+    return { loggedOutAll: true };
+  }
+
+  /**
    * Builds provider auth URL for frontend redirect flow.
    */
   getOAuthRedirect(provider: "google" | "github"): { url: string } {
