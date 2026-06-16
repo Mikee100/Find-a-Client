@@ -11,6 +11,10 @@ if (!(globalThis as { WebSocket?: unknown }).WebSocket) {
 
 async function bootstrap(): Promise<void> {
   const quietStartupLogs = process.env.QUIET_STARTUP_LOGS !== "false";
+  const allowedOrigins = [
+    ...(process.env.FRONTEND_URLS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+    process.env.FRONTEND_URL?.trim() ?? ""
+  ].filter(Boolean);
 
   const app = await NestFactory.create(AppModule, {
     logger: quietStartupLogs ? ["error", "warn"] : ["log", "error", "warn", "debug", "verbose"]
@@ -19,7 +23,19 @@ async function bootstrap(): Promise<void> {
   app.use(helmet());
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL,
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS`), false);
+    },
     credentials: true
   });
 

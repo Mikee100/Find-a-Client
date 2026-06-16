@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/+$/, "");
 const CSRF_COOKIE_NAME = process.env.NEXT_PUBLIC_AUTH_CSRF_COOKIE_NAME ?? "csrf_token";
 
 interface ApiErrorBody {
@@ -160,13 +160,14 @@ async function requestJson<TResponse, TBody = unknown>(
   path: string,
   options?: { body?: TBody; allowRetryOn401?: boolean }
 ): Promise<TResponse> {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const hasBody = options?.body !== undefined;
   const allowRetryOn401 = options?.allowRetryOn401 ?? true;
   const csrfToken = readCookie(CSRF_COOKIE_NAME);
   const isMutation = method === "POST" || method === "PUT" || method === "DELETE";
 
   const send = async (): Promise<Response> =>
-    fetch(`${API_BASE_URL}${path}`, {
+    fetch(`${API_BASE_URL}${normalizedPath}`, {
       method,
       credentials: "include",
       headers: {
