@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma, ProjectStatus } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { PROJECT_STATUS } from "src/common/constants/domain-enums.constant";
 import { PrismaService } from "src/prisma/prisma.service";
 
 interface SearchQuery {
@@ -17,7 +18,7 @@ export class SearchService {
    */
   async search(query: SearchQuery) {
     const where: Prisma.ProjectWhereInput = {
-      status: ProjectStatus.PUBLISHED,
+      status: PROJECT_STATUS.PUBLISHED,
       deletedAt: null,
       category: query.category as Prisma.EnumProjectCategoryFilter,
       techStack: query.tech ? { has: query.tech } : undefined,

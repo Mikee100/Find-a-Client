@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 import { CurrentUser, CurrentUserPayload } from "src/common/decorators/current-user.decorator";
 import { Public } from "src/common/decorators/public.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
@@ -17,7 +17,7 @@ export class ProjectsController {
     private readonly questionsService: QuestionsService
   ) {}
 
-  @Roles(UserRole.DEVELOPER)
+  @Roles(USER_ROLE.DEVELOPER)
   @Post()
   create(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateProjectDto) {
     return this.projectsService.create(user.sub, user.role as UserRole, dto);

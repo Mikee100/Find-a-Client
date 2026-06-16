@@ -13,13 +13,15 @@ interface JwtPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(configService: ConfigService) {
+    const accessCookieName = configService.get<string>("AUTH_ACCESS_COOKIE_NAME", "access_token");
+
     const cookieExtractor = (request: Request): string | null => {
       const raw = request?.headers?.cookie;
       if (!raw) {
         return null;
       }
 
-      const token = "access_token=";
+      const token = `${accessCookieName}=`;
       for (const chunk of raw.split(";")) {
         const part = chunk.trim();
         if (part.startsWith(token)) {

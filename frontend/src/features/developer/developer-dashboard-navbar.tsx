@@ -39,6 +39,7 @@ export default function DeveloperDashboardNavbar({
             onSignOut={onSignOut}
             onSignOutEverywhere={onSignOutEverywhere}
             dashboardHref="/developer/dashboard"
+            settingsHref="/developer/settings"
           />
         </div>
       </nav>

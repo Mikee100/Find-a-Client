@@ -1,9 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { DragEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
-import { getProjectBySlug, ProjectDetail } from "@/lib/api";
+import { getAuthSession, getProjectBySlug, ProjectCategory, ProjectDetail, PricingType, updateProject, uploadMediaFile } from "@/lib/api";
+import FullPageLoader from "@/components/ui/full-page-loader";
+
+const CATEGORY_OPTIONS: ProjectCategory[] = [
+  "WEB_APP",
+  "MOBILE_APP",
+  "API",
+  "DESKTOP",
+  "AI_ML",
+
+  "ECOMMERCE",
+  "MANAGEMENT_SYSTEM",
+  "OTHER"
+];
+
+const PRICING_OPTIONS: PricingType[] = ["FIXED", "NEGOTIABLE", "FREE", "CONTACT"];
+
+const STATUS_OPTIONS: Array<ProjectDetail["status"]> = ["DRAFT", "PUBLISHED", "ARCHIVED"];
 
 function formatMoney(price: number | string | null, currency: string, pricingType: ProjectDetail["pricingType"]): string {
   if (pricingType === "FREE") {
@@ -79,12 +98,102 @@ function parseIntakeDetails(longDescription: string): {
   return { narrative, details };
 }
 
+function parseCommaList(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function mergeCommaLists(existing: string, incoming: string[]): string {
+  const merged = [...parseCommaList(existing), ...incoming];
+  return [...new Set(merged)].join(", ");
+}
+
+function UploadDropZone({
+  label,
+  accept,
+  multiple,
+  onFiles
+}: {
+  label: string;
+  accept: string;
+  multiple?: boolean;
+  onFiles: (files: File[]) => void;
+}) {
+  const [isActive, setIsActive] = useState(false);
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsActive(false);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length > 0) {
+      onFiles(files);
+    }
+  };
+
+  return (
+    <div
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsActive(true);
+      }}
+      onDragLeave={() => setIsActive(false)}
+      onDrop={handleDrop}
+      className={`rounded-lg border border-dashed p-3 text-center text-xs transition ${
+        isActive ? "border-cyan-500 bg-cyan-50 text-cyan-800" : "border-neutral-300 bg-white text-neutral-600"
+      }`}
+    >
+      <p className="font-medium">{label}</p>
+      <p className="mt-1">Drag files here or choose from device</p>
+      <input
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        onChange={(event) => {
+          const files = event.target.files ? Array.from(event.target.files) : [];
+          if (files.length > 0) {
+            onFiles(files);
+          }
+          event.target.value = "";
+        }}
+        className="mt-2 text-xs"
+      />
+    </div>
+  );
+}
+
 export default function ProjectDetailPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? "";
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [requirementsQuery, setRequirementsQuery] = useState("");
+  const [showFullOverview, setShowFullOverview] = useState(false);
+  const [copiedState, setCopiedState] = useState<"none" | "url" | "summary">("none");
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
+  const [editTitle, setEditTitle] = useState("");
+  const [editShortDescription, setEditShortDescription] = useState("");
+  const [editLongDescription, setEditLongDescription] = useState("");
+  const [editCategory, setEditCategory] = useState<ProjectCategory>("WEB_APP");
+  const [editStatus, setEditStatus] = useState<ProjectDetail["status"]>("DRAFT");
+  const [editPricingType, setEditPricingType] = useState<PricingType>("FIXED");
+  const [editPrice, setEditPrice] = useState("");
+  const [editCurrency, setEditCurrency] = useState("USD");
+  const [editTechStack, setEditTechStack] = useState("");
+  const [editIndustries, setEditIndustries] = useState("");
+  const [editDemoUrl, setEditDemoUrl] = useState("");
+  const [editBackgroundUrl, setEditBackgroundUrl] = useState("");
+  const [editThumbnailUrl, setEditThumbnailUrl] = useState("");
+  const [editVideoUrl, setEditVideoUrl] = useState("");
+  const [editScreenshots, setEditScreenshots] = useState("");
 
   useEffect(() => {
     if (!slug) {
@@ -119,144 +228,759 @@ export default function ProjectDetailPage() {
     };
   }, [slug]);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const auth = await getAuthSession();
+        setViewerId(auth.sub);
+      } catch {
+        setViewerId(null);
+      }
+    })();
+  }, []);
+
   const parsed = useMemo(() => parseIntakeDetails(project?.longDescription ?? ""), [project?.longDescription]);
+  const filteredDetails = useMemo(() => {
+    const normalizedQuery = requirementsQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return parsed.details;
+    }
+
+    return parsed.details.filter((item) => {
+      return item.label.toLowerCase().includes(normalizedQuery) || item.value.toLowerCase().includes(normalizedQuery);
+    });
+  }, [parsed.details, requirementsQuery]);
+
+  const overviewText = parsed.narrative.trim();
+  const hasLongOverview = overviewText.length > 540;
+  const visibleOverview = hasLongOverview && !showFullOverview ? `${overviewText.slice(0, 540).trimEnd()}...` : overviewText;
+  const isAuthenticated = Boolean(viewerId);
+  const canEdit = Boolean(project && viewerId && project.author.id === viewerId);
+  const galleryImages = useMemo(() => {
+    if (!project) {
+      return [] as string[];
+    }
+
+    const screenshotUrls = [...(project.media ?? [])]
+      .filter((item) => item.type === "SCREENSHOT" || item.type === "IMAGE")
+      .sort((left, right) => left.order - right.order)
+      .map((item) => item.url);
+
+    const merged = [
+      ...(project.backgroundUrl ? [project.backgroundUrl] : []),
+      ...(project.thumbnailUrl ? [project.thumbnailUrl] : []),
+      ...screenshotUrls
+    ];
+    return [...new Set(merged.filter(Boolean))];
+  }, [project]);
+
+  const copyProjectUrl = async (): Promise<void> => {
+    if (typeof window === "undefined" || !navigator.clipboard) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(window.location.href);
+    setCopiedState("url");
+    window.setTimeout(() => setCopiedState("none"), 1500);
+  };
+
+  const copySummary = async (): Promise<void> => {
+    if (!project || typeof window === "undefined" || !navigator.clipboard) {
+      return;
+    }
+
+    const summary = [
+      `Project: ${project.title}`,
+      `Price: ${formatMoney(project.price, project.currency, project.pricingType)}`,
+      `Category: ${friendlyLabel(project.category)}`,
+      `Status: ${friendlyLabel(project.status)}`,
+      "",
+      project.shortDescription
+    ].join("\n");
+
+    await navigator.clipboard.writeText(summary);
+    setCopiedState("summary");
+    window.setTimeout(() => setCopiedState("none"), 1500);
+  };
+
+  const handleSaveUpdate = async (): Promise<void> => {
+    if (!project) {
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    const normalizedPricingType = editPricingType;
+    const parsedPrice = Number(editPrice);
+    const shouldSendPrice = normalizedPricingType === "FIXED" && Number.isFinite(parsedPrice);
+
+    try {
+      await updateProject(project.slug, {
+        title: editTitle.trim(),
+        shortDescription: editShortDescription.trim(),
+        longDescription: editLongDescription.trim(),
+        category: editCategory,
+        status: editStatus,
+        pricingType: normalizedPricingType,
+        ...(shouldSendPrice ? { price: parsedPrice } : {}),
+        currency: editCurrency.trim().toUpperCase(),
+        techStack: parseCommaList(editTechStack),
+        industries: parseCommaList(editIndustries),
+        demoUrl: editDemoUrl.trim() || undefined,
+        backgroundUrl: editBackgroundUrl.trim() || undefined,
+        thumbnailUrl: editThumbnailUrl.trim() || undefined,
+        videoUrl: editVideoUrl.trim() || undefined,
+        screenshots: parseCommaList(editScreenshots)
+      });
+
+      const refreshed = await getProjectBySlug(project.slug);
+      setProject(refreshed);
+      setIsEditing(false);
+      setSaveSuccess("Project updated.");
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : "Failed to update project.";
+      setSaveError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  async function uploadThumbnailFile(file: File) {
+    if (!file) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setSaveError(null);
+
+    try {
+      const upload = await uploadMediaFile(file, { mediaType: "THUMBNAIL" });
+      setEditThumbnailUrl(upload.url);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload thumbnail.";
+      setSaveError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  async function uploadBackgroundFile(file: File) {
+    if (!file) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setSaveError(null);
+
+    try {
+      const upload = await uploadMediaFile(file, { mediaType: "IMAGE" });
+      setEditBackgroundUrl(upload.url);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload background image.";
+      setSaveError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  async function uploadScreenshotFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setSaveError(null);
+
+    try {
+      const uploads = await Promise.all(files.map((file) => uploadMediaFile(file, { mediaType: "SCREENSHOT" })));
+      setEditScreenshots((prev) => mergeCommaLists(prev, uploads.map((item) => item.url)));
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload screenshots.";
+      setSaveError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  async function uploadVideoFile(file: File) {
+    if (!file) {
+      return;
+    }
+
+    setMediaUploading(true);
+    setSaveError(null);
+
+    try {
+      const upload = await uploadMediaFile(file, { mediaType: "VIDEO" });
+      setEditVideoUrl(upload.url);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload video.";
+      setSaveError(message);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-neutral-50 text-neutral-900">
+        <MarketplaceNavbar />
+        <FullPageLoader label="Loading project" fullScreen={false} />
+      </main>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,#cffafe_0%,#f8fafc_35%,#f1f5f9_100%)]">
+    <main className="min-h-screen bg-neutral-50 text-neutral-900">
       <MarketplaceNavbar />
 
-      <section className="mx-auto w-full max-w-7xl p-4 md:p-6">
-        {loading ? <p className="text-sm text-neutral-600">Loading project...</p> : null}
-        {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}
+      <section className="mx-auto w-full max-w-6xl px-3 py-4 md:px-5 md:py-6">
+        {error ? <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}
 
         {project ? (
-          <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
-            <article className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] md:p-6">
-              <div className="overflow-hidden rounded-2xl border border-cyan-100 bg-linear-to-r from-slate-900 via-cyan-900 to-teal-700 p-4 text-white md:p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-cyan-100">Project brief</p>
-                    <h1 className="mt-1 text-2xl font-semibold md:text-3xl">{project.title}</h1>
-                    <p className="mt-2 max-w-3xl text-sm text-cyan-50">{project.shortDescription}</p>
+          <div className="space-y-3">
+            <header className="relative overflow-hidden border border-neutral-200 bg-white p-3 md:p-4">
+              {project.backgroundUrl ? (
+                <>
+                  <div className="absolute inset-0">
+                    <Image src={project.backgroundUrl} alt="Project background" fill className="object-cover" unoptimized />
                   </div>
-                  <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1 text-sm font-semibold text-cyan-50">
-                    {formatMoney(project.price, project.currency, project.pricingType)}
-                  </span>
-                </div>
+                  <div className="absolute inset-0 bg-white/85" />
+                </>
+              ) : null}
 
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-white/30 bg-white/10 px-2.5 py-1">{friendlyLabel(project.category)}</span>
-                  <span className="rounded-full border border-white/30 bg-white/10 px-2.5 py-1">Status: {friendlyLabel(project.status)}</span>
-                  <span className="rounded-full border border-white/30 bg-white/10 px-2.5 py-1">Likes: {project.likeCount}</span>
-                  <span className="rounded-full border border-white/30 bg-white/10 px-2.5 py-1">Views: {project.viewCount}</span>
+              <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 pb-3 text-xs text-neutral-500">
+                <div className="flex items-center gap-2">
+                  <Link href="/projects" className="font-medium hover:text-neutral-800">
+                    Projects
+                  </Link>
+                  <span>/</span>
+                  <span className="truncate">{project.slug}</span>
+                </div>
+                <span>Updated {new Date(project.updatedAt).toLocaleDateString()}</span>
+              </div>
+
+              <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-2xl font-semibold tracking-tight md:text-[30px]">{project.title}</h1>
+                  <p className="mt-1 max-w-3xl text-sm leading-6 text-neutral-700">{project.shortDescription}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Budget</p>
+                  <p className="mt-1 text-lg font-semibold text-neutral-900">
+                    {formatMoney(project.price, project.currency, project.pricingType)}
+                  </p>
                 </div>
               </div>
 
-              <section className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-600">Overview</h2>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-800">{parsed.narrative}</p>
-              </section>
+              <div className="relative z-10 mt-3 grid gap-2 border-t border-neutral-100 pt-3 text-xs md:grid-cols-5">
+                <div className="border border-neutral-200 px-2.5 py-2">
+                  <p className="text-neutral-500">Category</p>
+                  <p className="mt-0.5 font-medium text-neutral-800">{friendlyLabel(project.category)}</p>
+                </div>
+                <div className="border border-neutral-200 px-2.5 py-2">
+                  <p className="text-neutral-500">Status</p>
+                  <p className="mt-0.5 font-medium text-neutral-800">{friendlyLabel(project.status)}</p>
+                </div>
+                <div className="border border-neutral-200 px-2.5 py-2">
+                  <p className="text-neutral-500">Likes</p>
+                  <p className="mt-0.5 font-medium text-neutral-800">{project.likeCount}</p>
+                </div>
+                <div className="border border-neutral-200 px-2.5 py-2">
+                  <p className="text-neutral-500">Views</p>
+                  <p className="mt-0.5 font-medium text-neutral-800">{project.viewCount}</p>
+                </div>
+                <div className="border border-neutral-200 px-2.5 py-2">
+                  <p className="text-neutral-500">Created</p>
+                  <p className="mt-0.5 font-medium text-neutral-800">{new Date(project.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
 
-              <section className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-neutral-200 bg-white p-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-600">Tech Stack</h3>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {project.techStack.map((item) => (
-                      <span key={item} className="rounded-md bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
+              <div className="relative z-10 mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyProjectUrl();
+                  }}
+                  className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
+                >
+                  {copiedState === "url" ? "Link copied" : "Copy link"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copySummary();
+                  }}
+                  className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
+                >
+                  {copiedState === "summary" ? "Summary copied" : "Copy summary"}
+                </button>
+                {project.demoUrl ? (
+                  <a
+                    href={project.demoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="border border-neutral-900 bg-neutral-900 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700"
+                  >
+                    Open demo
+                  </a>
+                ) : null}
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!project) {
+                        return;
+                      }
+
+                      setIsEditing((current) => {
+                        const next = !current;
+                        if (next) {
+                          setEditTitle(project.title);
+                          setEditShortDescription(project.shortDescription);
+                          setEditLongDescription(project.longDescription);
+                          setEditCategory(project.category);
+                          setEditStatus(project.status);
+                          setEditPricingType(project.pricingType);
+                          setEditPrice(project.price === null || project.price === undefined ? "" : String(project.price));
+                          setEditCurrency(project.currency || "USD");
+                          setEditTechStack(project.techStack.join(", "));
+                          setEditIndustries(project.industries.join(", "));
+                          setEditDemoUrl(project.demoUrl ?? "");
+                          setEditBackgroundUrl(project.backgroundUrl ?? "");
+                          setEditThumbnailUrl(project.thumbnailUrl ?? "");
+                          setEditVideoUrl(project.videoUrl ?? "");
+                          setEditScreenshots(
+                            [...(project.media ?? [])]
+                              .filter((item) => item.type === "SCREENSHOT" || item.type === "IMAGE")
+                              .sort((left, right) => left.order - right.order)
+                              .map((item) => item.url)
+                              .join(", ")
+                          );
+                        }
+                        return next;
+                      });
+                      setSaveError(null);
+                      setSaveSuccess(null);
+                    }}
+                    className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
+                  >
+                    {isEditing ? "Close editor" : "Edit project"}
+                  </button>
+                ) : (
+                  <Link
+                    href="/login"
+                    className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
+                  >
+                    Sign in to edit
+                  </Link>
+                )}
+              </div>
+
+              {saveError ? <p className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{saveError}</p> : null}
+              {saveSuccess ? <p className="mt-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">{saveSuccess}</p> : null}
+            </header>
+
+            {isEditing ? (
+              <section className="border border-neutral-200 bg-white p-3 md:p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Edit Project</h2>
+                  <span className="text-xs text-neutral-500">{canEdit ? "Owner mode" : "Read-only mode"}</span>
                 </div>
 
-                <div className="rounded-xl border border-neutral-200 bg-white p-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-600">Industries</h3>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {project.industries.map((item) => (
-                      <span key={item} className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </section>
+                {!canEdit ? (
+                  <p className="mb-3 border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    You can view this editor, but only the project owner can save updates.
+                  </p>
+                ) : null}
 
-              {parsed.details.length > 0 ? (
-                <section className="rounded-xl border border-neutral-200 bg-white p-4">
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-600">Detailed Requirements</h2>
-                  <div className="mt-3 grid gap-2 md:grid-cols-2">
-                    {parsed.details.map((item) => (
-                      <div key={`${item.label}-${item.value}`} className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{item.label}</p>
-                        <p className="mt-1 text-sm leading-6 text-neutral-800">{item.value}</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="text-xs text-neutral-600">
+                    Title
+                    <input
+                      value={editTitle}
+                      onChange={(event) => setEditTitle(event.target.value)}
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                    />
+                  </label>
+
+                  <label className="text-xs text-neutral-600">
+                    Short Description
+                    <input
+                      value={editShortDescription}
+                      onChange={(event) => setEditShortDescription(event.target.value)}
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-3 block text-xs text-neutral-600">
+                  Long Description
+                  <textarea
+                    value={editLongDescription}
+                    onChange={(event) => setEditLongDescription(event.target.value)}
+                    className="mt-1 block min-h-36 w-full border border-neutral-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-neutral-900"
+                  />
+                </label>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-4">
+                  <label className="text-xs text-neutral-600">
+                    Category
+                    <select
+                      value={editCategory}
+                      onChange={(event) => setEditCategory(event.target.value as ProjectCategory)}
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                    >
+                      {CATEGORY_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {friendlyLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-xs text-neutral-600">
+                    Status
+                    <select
+                      value={editStatus}
+                      onChange={(event) => setEditStatus(event.target.value as ProjectDetail["status"])}
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                    >
+                      {STATUS_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {friendlyLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-xs text-neutral-600">
+                    Pricing Type
+                    <select
+                      value={editPricingType}
+                      onChange={(event) => setEditPricingType(event.target.value as PricingType)}
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                    >
+                      {PRICING_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {friendlyLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-xs text-neutral-600">
+                    Currency
+                    <input
+                      value={editCurrency}
+                      onChange={(event) => setEditCurrency(event.target.value)}
+                      maxLength={3}
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm uppercase outline-none transition focus:border-neutral-900"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="text-xs text-neutral-600">
+                    Price (for FIXED)
+                    <input
+                      type="number"
+                      value={editPrice}
+                      onChange={(event) => setEditPrice(event.target.value)}
+                      min={0}
+                      step="0.01"
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                    />
+                  </label>
+
+                  <label className="text-xs text-neutral-600">
+                    Tech Stack (comma separated)
+                    <input
+                      value={editTechStack}
+                      onChange={(event) => setEditTechStack(event.target.value)}
+                      className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-3 block text-xs text-neutral-600">
+                  Industries (comma separated)
+                  <input
+                    value={editIndustries}
+                    onChange={(event) => setEditIndustries(event.target.value)}
+                    className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                  />
+                </label>
+
+                <section className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50/70 p-3">
+                  <div className="mb-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Visual Assets</h3>
+                    <p className="mt-1 text-xs text-neutral-500">Manage hero background, thumbnail, screenshots, and video.</p>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="text-xs text-neutral-600">
+                      Demo URL
+                      <input
+                        value={editDemoUrl}
+                        onChange={(event) => setEditDemoUrl(event.target.value)}
+                        className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                      />
+                    </label>
+
+                    <label className="text-xs text-neutral-600">
+                      Background URL
+                      <input
+                        value={editBackgroundUrl}
+                        onChange={(event) => setEditBackgroundUrl(event.target.value)}
+                        className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                      />
+                      <div className="mt-2">
+                        <UploadDropZone
+                          label="Upload background image"
+                          accept="image/png,image/jpeg,image/webp"
+                          onFiles={(files) => {
+                            if (files[0]) {
+                              void uploadBackgroundFile(files[0]);
+                            }
+                          }}
+                        />
                       </div>
-                    ))}
+                    </label>
+
+                    <label className="text-xs text-neutral-600">
+                      Thumbnail URL
+                      <input
+                        value={editThumbnailUrl}
+                        onChange={(event) => setEditThumbnailUrl(event.target.value)}
+                        className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                      />
+                      <div className="mt-2">
+                        <UploadDropZone
+                          label="Upload thumbnail"
+                          accept="image/png,image/jpeg,image/webp"
+                          onFiles={(files) => {
+                            if (files[0]) {
+                              void uploadThumbnailFile(files[0]);
+                            }
+                          }}
+                        />
+                      </div>
+                    </label>
+
+                    <label className="text-xs text-neutral-600">
+                      Video URL
+                      <input
+                        value={editVideoUrl}
+                        onChange={(event) => setEditVideoUrl(event.target.value)}
+                        className="mt-1 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                      />
+                      <div className="mt-2">
+                        <UploadDropZone
+                          label="Upload MP4 video"
+                          accept="video/mp4"
+                          onFiles={(files) => {
+                            if (files[0]) {
+                              void uploadVideoFile(files[0]);
+                            }
+                          }}
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <label className="mt-3 block text-xs text-neutral-600">
+                    Screenshot URLs (comma separated)
+                    <textarea
+                      value={editScreenshots}
+                      onChange={(event) => setEditScreenshots(event.target.value)}
+                      className="mt-1 block min-h-20 w-full border border-neutral-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-neutral-900"
+                      placeholder="https://example.com/screen-1.png, https://example.com/screen-2.png"
+                    />
+                    <div className="mt-2">
+                      <UploadDropZone
+                        label="Upload one or more screenshots"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
+                        onFiles={(files) => {
+                          void uploadScreenshotFiles(files);
+                        }}
+                      />
+                    </div>
+                  </label>
+                </section>
+
+                {mediaUploading ? <p className="mt-2 text-xs font-medium text-neutral-600">Uploading media to Cloudinary...</p> : null}
+
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || !canEdit}
+                    onClick={() => {
+                      void handleSaveUpdate();
+                    }}
+                    className="border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-60"
+                  >
+                    {!canEdit ? "Owner only" : saving ? "Saving..." : "Save changes"}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            <div className="grid gap-3 xl:grid-cols-[1.45fr_0.9fr]">
+              <article className="space-y-3">
+                {galleryImages.length > 0 ? (
+                  <section className="border border-neutral-200 bg-white p-3 md:p-4">
+                    <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Project Images</h2>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {galleryImages.map((url, index) => (
+                        <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden border border-neutral-200 bg-neutral-100">
+                          <div className="relative h-40 w-full">
+                            <Image src={url} alt={`Project screenshot ${index + 1}`} fill className="object-cover" unoptimized />
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                <section className="border border-neutral-200 bg-white p-3 md:p-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Overview</h2>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-800">{visibleOverview || "No overview provided."}</p>
+                  {hasLongOverview ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowFullOverview((current) => !current)}
+                      className="mt-2 text-xs font-medium text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
+                    >
+                      {showFullOverview ? "Show less" : "Show full overview"}
+                    </button>
+                  ) : null}
+                </section>
+
+                <section className="grid gap-3 md:grid-cols-2">
+                  <div className="border border-neutral-200 bg-white p-3 md:p-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Tech Stack</h3>
+                    {project.techStack.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                        {project.techStack.map((item) => (
+                          <span key={item} className="border border-neutral-200 px-2 py-1 text-neutral-700">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-neutral-600">No tech stack specified.</p>
+                    )}
+                  </div>
+
+                  <div className="border border-neutral-200 bg-white p-3 md:p-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Industries</h3>
+                    {project.industries.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                        {project.industries.map((item) => (
+                          <span key={item} className="border border-neutral-200 px-2 py-1 text-neutral-700">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-neutral-600">No industries specified.</p>
+                    )}
                   </div>
                 </section>
-              ) : null}
-            </article>
+              </article>
 
-            <aside className="space-y-4">
-              <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-600">Project Links</h2>
-                <ul className="mt-3 space-y-2 text-sm">
-                  {project.demoUrl ? (
-                    <li>
-                      <a href={project.demoUrl} className="font-semibold text-teal-700 hover:text-teal-600" target="_blank" rel="noreferrer">
-                        Open Demo
-                      </a>
-                    </li>
-                  ) : null}
-                  {project.videoUrl ? (
-                    <li>
-                      <a href={project.videoUrl} className="font-semibold text-teal-700 hover:text-teal-600" target="_blank" rel="noreferrer">
-                        Watch Video
-                      </a>
-                    </li>
-                  ) : null}
-                  {project.thumbnailUrl ? (
-                    <li>
-                      <a href={project.thumbnailUrl} className="font-semibold text-teal-700 hover:text-teal-600" target="_blank" rel="noreferrer">
-                        View Thumbnail
-                      </a>
-                    </li>
-                  ) : null}
-                  {!project.demoUrl && !project.videoUrl && !project.thumbnailUrl ? (
-                    <li className="text-neutral-600">No external links attached.</li>
-                  ) : null}
-                </ul>
-              </section>
+              <aside className="space-y-3">
+                <section className="border border-neutral-200 bg-white p-3 md:p-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Project Links</h2>
+                  <ul className="mt-2 space-y-1.5 text-sm">
+                    {project.demoUrl ? (
+                      <li>
+                        <a href={project.demoUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+                          Demo
+                        </a>
+                      </li>
+                    ) : null}
+                    {project.videoUrl ? (
+                      <li>
+                        <a href={project.videoUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+                          Video
+                        </a>
+                      </li>
+                    ) : null}
+                    {project.thumbnailUrl ? (
+                      <li>
+                        <a href={project.thumbnailUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+                          Thumbnail
+                        </a>
+                      </li>
+                    ) : null}
+                    {!project.demoUrl && !project.videoUrl && !project.thumbnailUrl ? (
+                      <li className="text-neutral-600">No external links attached.</li>
+                    ) : null}
+                  </ul>
+                </section>
 
-              <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-600">Timeline & Activity</h2>
-                <div className="mt-3 grid gap-2 text-sm text-neutral-700">
-                  <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
-                    <span>Created</span>
-                    <span className="font-medium">{new Date(project.createdAt).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
-                    <span>Updated</span>
-                    <span className="font-medium">{new Date(project.updatedAt).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
-                    <span>Status</span>
-                    <span className="font-medium">{friendlyLabel(project.status)}</span>
-                  </div>
-                </div>
-              </section>
+                <section className="border border-neutral-200 bg-white p-3 md:p-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Fast Facts</h2>
+                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                    <dt className="text-neutral-500">Author</dt>
+                    <dd className="text-neutral-800">{project.author.fullName}</dd>
+                    <dt className="text-neutral-500">Username</dt>
+                    <dd className="text-neutral-800">@{project.author.username}</dd>
+                    <dt className="text-neutral-500">Slug</dt>
+                    <dd className="break-all text-neutral-800">{project.slug}</dd>
+                    <dt className="text-neutral-500">Price Type</dt>
+                    <dd className="text-neutral-800">{friendlyLabel(project.pricingType)}</dd>
+                  </dl>
+                </section>
+              </aside>
+            </div>
 
-              <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-600">Client Intent Snapshot</h2>
-                <p className="mt-2 text-sm leading-6 text-neutral-700">
-                  This project uses a structured intake template to improve quote quality, reduce ambiguity, and speed up developer onboarding.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-neutral-300 bg-neutral-50 px-2.5 py-1">Detailed Scope</span>
-                  <span className="rounded-full border border-neutral-300 bg-neutral-50 px-2.5 py-1">Clear Deliverables</span>
-                  <span className="rounded-full border border-neutral-300 bg-neutral-50 px-2.5 py-1">Collaboration Preferences</span>
-                </div>
-              </section>
-            </aside>
+            <section className="border border-neutral-200 bg-white p-3 md:p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Requirements</h2>
+                <span className="text-xs text-neutral-500">
+                  {filteredDetails.length}/{parsed.details.length}
+                </span>
+              </div>
+
+              {parsed.details.length > 0 ? (
+                <>
+                  <input
+                    value={requirementsQuery}
+                    onChange={(event) => setRequirementsQuery(event.target.value)}
+                    placeholder="Search requirements"
+                    className="mb-3 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
+                  />
+
+                  {filteredDetails.length > 0 ? (
+                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {filteredDetails.map((item) => (
+                        <article key={`${item.label}-${item.value}`} className="border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{item.label}</p>
+                          <p className="mt-1 text-sm leading-6 text-neutral-800">{item.value}</p>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-neutral-600">No requirements match your search.</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-neutral-600">No structured requirements were provided.</p>
+              )}
+            </section>
           </div>
         ) : null}
       </section>

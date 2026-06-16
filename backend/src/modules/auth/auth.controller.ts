@@ -107,7 +107,7 @@ export class AuthController {
       identifier: dto.email
     });
     this.applyAuthCookies(response, result.accessToken, result.refreshToken);
-    return { userId: result.userId, role: "DEVELOPER" as const };
+    return { userId: result.userId, role: result.role };
   }
 
   @Public()
