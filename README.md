@@ -41,6 +41,7 @@ Detailed strategy is in `docs/BRANCHING_STRATEGY.md`.
 
 ## Product blueprint
 - Dashboard and data-entity blueprint: `docs/PRODUCT_MODELS_AND_DASHBOARD_FEATURES.md`
+- Developer-side execution board (gap analysis + task checklist): `docs/DEVELOPER_SIDE_EXECUTION_BOARD.md`
 
 ## Next implementation steps
 1. Build developer analytics cards and inquiry pipeline on top of existing developer dashboard forms.

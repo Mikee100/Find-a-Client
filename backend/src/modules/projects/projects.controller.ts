@@ -5,6 +5,7 @@ import { Public } from "src/common/decorators/public.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { CreateQuestionDto } from "src/modules/questions/dto/create-question.dto";
 import { QuestionsService } from "src/modules/questions/questions.service";
+import { CreateProjectInquiryDto } from "src/modules/projects/dto/create-project-inquiry.dto";
 import { CreateProjectDto } from "src/modules/projects/dto/create-project.dto";
 import { ListProjectsDto } from "src/modules/projects/dto/list-projects.dto";
 import { UpdateProjectDto } from "src/modules/projects/dto/update-project.dto";
@@ -53,6 +54,11 @@ export class ProjectsController {
   @Post(":slug/save")
   save(@Param("slug") slug: string, @CurrentUser() user: CurrentUserPayload) {
     return this.projectsService.toggleSave(slug, user.sub);
+  }
+
+  @Post(":slug/inquiry")
+  inquiry(@Param("slug") slug: string, @CurrentUser() user: CurrentUserPayload, @Body() dto: CreateProjectInquiryDto) {
+    return this.projectsService.trackInquiry(slug, user.sub, dto);
   }
 
   @Get(":slug/questions")

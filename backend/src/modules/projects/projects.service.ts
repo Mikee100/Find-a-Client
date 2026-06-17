@@ -7,6 +7,7 @@ import { sanitizeInput, sanitizeRichText } from "src/common/utils/sanitize.util"
 import { toSlug } from "src/common/utils/slug.util";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateProjectDto } from "src/modules/projects/dto/create-project.dto";
+import { CreateProjectInquiryDto } from "src/modules/projects/dto/create-project-inquiry.dto";
 import { ListProjectsDto } from "src/modules/projects/dto/list-projects.dto";
 import { UpdateProjectDto } from "src/modules/projects/dto/update-project.dto";
 
@@ -212,5 +213,36 @@ export class ProjectsService {
     }
     await this.prisma.saved.create({ data: { userId, projectId: project.id } });
     return { saved: true };
+  }
+
+  /**
+   * Tracks inquiry intent from a potential client and increments inquiry counter.
+   */
+  async trackInquiry(slug: string, userId: string, dto: CreateProjectInquiryDto) {
+    const project = await this.prisma.project.findUnique({
+      where: { slug },
+      select: { id: true, authorId: true, inquiryCount: true }
+    });
+
+    if (!project) {
+      throw new NotFoundException("Project not found");
+    }
+
+    if (project.authorId === userId) {
+      throw new ForbiddenException("You cannot create an inquiry on your own project");
+    }
+
+    const updated = await this.prisma.project.update({
+      where: { id: project.id },
+      data: { inquiryCount: { increment: 1 } },
+      select: { inquiryCount: true }
+    });
+
+    return {
+      tracked: true,
+      inquiryType: dto.type ?? "ASK_QUESTION",
+      inquiryCount: updated.inquiryCount,
+      messageAccepted: Boolean(dto.message?.trim())
+    };
   }
 }

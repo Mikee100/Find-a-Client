@@ -1,0 +1,2 @@
+ALTER TABLE "Project"
+ADD COLUMN "inquiryCount" INTEGER NOT NULL DEFAULT 0;

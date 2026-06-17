@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import {
   getAuthSession,
+  getProfileCompleteness,
   getMyProjects,
   getMessageThreads,
   getNotifications,
@@ -33,6 +34,7 @@ import {
   logoutEverywhere,
   MyProjectListItem,
   NotificationItem,
+  ProfileCompleteness,
   ThreadSummary,
 } from "@/lib/api";
 
@@ -318,13 +320,16 @@ function Hero({
   unread,
   profileViews,
   messages,
+  completeness,
 }: {
   unread: number;
   profileViews: number;
   messages: number;
+  completeness: ProfileCompleteness;
 }) {
-  const completion = 85;
+  const completion = Math.max(0, Math.min(100, completeness.percentage));
   const dash = `${(completion / 100) * 87.96} ${87.96 - (completion / 100) * 87.96}`;
+  const guidance = completeness.nextAction ?? "Your profile is fully optimized";
 
   return (
     <AnimatedCard className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" delay={0.05}>
@@ -359,8 +364,10 @@ function Hero({
               </span>
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-800">Almost there</p>
-              <p className="text-xs text-slate-500">Add reviews and profile photo</p>
+              <p className="text-sm font-medium text-slate-800">
+                {completion >= 90 ? "Strong profile" : "Profile can improve"}
+              </p>
+              <p className="text-xs text-slate-500">{guidance}</p>
             </div>
           </div>
         </div>
@@ -641,6 +648,13 @@ export default function DeveloperDashboardPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [savedProjectsCount, setSavedProjectsCount] = useState(0);
   const [myProjects, setMyProjects] = useState<MyProjectListItem[]>([]);
+  const [completeness, setCompleteness] = useState<ProfileCompleteness>({
+    percentage: 0,
+    completedFields: 0,
+    totalFields: 0,
+    missingFields: [],
+    nextAction: null
+  });
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -660,20 +674,29 @@ export default function DeveloperDashboardPage() {
 
     async function loadDashboardData() {
       try {
-        const [threadData, notificationData, savedData, myProjectData] = await Promise.all([
+        const [threadData, notificationData, savedData, myProjectData, completenessData] = await Promise.all([
           getMessageThreads(),
           getNotifications(20),
           getSavedProjects(),
           getMyProjects(),
+          getProfileCompleteness()
         ]);
         setThreads(threadData);
         setNotifications(notificationData);
         setSavedProjectsCount(savedData.length);
         setMyProjects(myProjectData);
+        setCompleteness(completenessData);
       } catch {
         setThreads([]);
         setNotifications([]);
         setMyProjects([]);
+        setCompleteness({
+          percentage: 0,
+          completedFields: 0,
+          totalFields: 0,
+          missingFields: [],
+          nextAction: null
+        });
       }
     }
 
@@ -738,7 +761,7 @@ export default function DeveloperDashboardPage() {
           />
 
           <main className="space-y-6 p-4 sm:p-6">
-            <Hero unread={Math.max(unreadMessages, 4)} profileViews={12} messages={3} />
+            <Hero unread={Math.max(unreadMessages, 4)} profileViews={12} messages={3} completeness={completeness} />
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
               <StatCard title="Profile views" value="2,480" trend="+14%" subtitle="Last 30 days" delay={0.05} />

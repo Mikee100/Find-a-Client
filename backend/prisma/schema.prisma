@@ -52,17 +52,37 @@ enum NotificationType {
   DEAL_INTEREST
 }
 
+enum ExperienceLevel {
+  JUNIOR
+  MID
+  SENIOR
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  NOT_ACCEPTING_WORK
+}
+
 model User {
   id            String     @id @default(uuid()) @db.Uuid
   email         String     @unique
   username      String     @unique
   fullName      String
   avatarUrl     String?
+  title         String?    @db.VarChar(120)
   bio           String?
   role          UserRole   @default(DEVELOPER)
   skills        String[]
+  primaryStack  String?    @db.VarChar(80)
+  experienceLevel ExperienceLevel @default(MID)
+  availabilityStatus AvailabilityStatus @default(AVAILABLE)
   location      String?
   contactEmail  String?
+  publicEmailEnabled Boolean @default(false)
+  educationEntries String[]  @default([])
+  certificationEntries String[] @default([])
+  languageEntries String[] @default([])
   phoneNumber   String?
   websiteUrl    String?
   githubUrl     String?
@@ -128,6 +148,7 @@ model Project {
   isFeatured        Boolean           @default(false)
   viewCount         Int               @default(0)
   likeCount         Int               @default(0)
+  inquiryCount      Int               @default(0)
   authorId          String            @db.Uuid
   author            User              @relation(fields: [authorId], references: [id])
   backgroundUrl     String?

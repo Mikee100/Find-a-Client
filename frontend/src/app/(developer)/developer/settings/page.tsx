@@ -38,6 +38,18 @@ const SKILL_OPTIONS = [
   "UI/UX"
 ];
 
+const EXPERIENCE_OPTIONS = [
+  { value: "JUNIOR", label: "Junior" },
+  { value: "MID", label: "Mid" },
+  { value: "SENIOR", label: "Senior" }
+] as const;
+
+const AVAILABILITY_OPTIONS = [
+  { value: "AVAILABLE", label: "Available" },
+  { value: "BUSY", label: "Busy" },
+  { value: "NOT_ACCEPTING_WORK", label: "Not accepting work" }
+] as const;
+
 const BIO_TEMPLATES = [
   {
     id: "fullstack",
@@ -63,13 +75,40 @@ const BIO_TEMPLATES = [
 
 type SettingsErrors = {
   fullName?: string;
+  title?: string;
+  primaryStack?: string;
   bio?: string;
   contactEmail?: string;
   phoneNumber?: string;
   websiteUrl?: string;
   githubUrl?: string;
   linkedinUrl?: string;
+  educationEntries?: string;
+  certificationEntries?: string;
+  languageEntries?: string;
 };
+
+function parseMultilineEntries(value: string): string[] {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function parseCommaEntries(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function formatMultilineEntries(entries?: string[] | null): string {
+  return (entries ?? []).join("\n");
+}
+
+function formatCommaEntries(entries?: string[] | null): string {
+  return (entries ?? []).join(", ");
+}
 
 function toCandidateUrl(value: string): string {
   const trimmed = value.trim();
@@ -159,11 +198,19 @@ export default function DeveloperSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState("");
+  const [title, setTitle] = useState("");
   const [bio, setBio] = useState("");
   const [selectedBioTemplate, setSelectedBioTemplate] = useState<(typeof BIO_TEMPLATES)[number]["id"] | "existing">("fullstack");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [primaryStack, setPrimaryStack] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState<"JUNIOR" | "MID" | "SENIOR">("MID");
+  const [availabilityStatus, setAvailabilityStatus] = useState<"AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK">("AVAILABLE");
   const [location, setLocation] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  const [publicEmailEnabled, setPublicEmailEnabled] = useState(false);
+  const [educationEntriesText, setEducationEntriesText] = useState("");
+  const [certificationEntriesText, setCertificationEntriesText] = useState("");
+  const [languageEntriesText, setLanguageEntriesText] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
@@ -176,13 +223,21 @@ export default function DeveloperSettingsPage() {
         const me = await getCurrentUserProfile();
         setProfile(me);
         setFullName(me.fullName ?? "");
+        setTitle(me.title ?? "");
         const existingBio = me.bio ?? "";
         const matchedTemplate = BIO_TEMPLATES.find((item) => item.text === existingBio);
         setBio(existingBio || BIO_TEMPLATES[0].text);
         setSelectedBioTemplate(matchedTemplate ? matchedTemplate.id : "existing");
         setSelectedSkills((me.skills ?? []).filter((skill) => SKILL_OPTIONS.includes(skill)));
+        setPrimaryStack(me.primaryStack ?? "");
+        setExperienceLevel(me.experienceLevel ?? "MID");
+        setAvailabilityStatus(me.availabilityStatus ?? "AVAILABLE");
         setLocation(me.location && LOCATION_OPTIONS.includes(me.location) ? me.location : "Remote");
         setContactEmail(me.contactEmail ?? me.email ?? "");
+        setPublicEmailEnabled(me.publicEmailEnabled ?? false);
+        setEducationEntriesText(formatMultilineEntries(me.educationEntries));
+        setCertificationEntriesText(formatMultilineEntries(me.certificationEntries));
+        setLanguageEntriesText(formatCommaEntries(me.languageEntries));
         setPhoneNumber(me.phoneNumber ?? "");
         setWebsiteUrl(me.websiteUrl ?? "");
         setGithubUrl(me.githubUrl ?? "");
@@ -238,12 +293,25 @@ export default function DeveloperSettingsPage() {
 
     const nextErrors: SettingsErrors = {};
     const trimmedName = fullName.trim();
+    const trimmedTitle = title.trim();
     const trimmedBio = bio.trim();
+    const trimmedPrimaryStack = primaryStack.trim();
     const trimmedContactEmail = contactEmail.trim();
     const trimmedPhoneNumber = phoneNumber.trim();
+    const parsedEducationEntries = parseMultilineEntries(educationEntriesText);
+    const parsedCertificationEntries = parseMultilineEntries(certificationEntriesText);
+    const parsedLanguageEntries = parseCommaEntries(languageEntriesText);
 
     if (trimmedName.length > 0 && trimmedName.length < 2) {
       nextErrors.fullName = "Full name must be at least 2 characters.";
+    }
+
+    if (trimmedTitle.length > 0 && (trimmedTitle.length < 2 || trimmedTitle.length > 120)) {
+      nextErrors.title = "Title must be between 2 and 120 characters.";
+    }
+
+    if (trimmedPrimaryStack.length > 0 && (trimmedPrimaryStack.length < 2 || trimmedPrimaryStack.length > 80)) {
+      nextErrors.primaryStack = "Primary stack must be between 2 and 80 characters.";
     }
 
     if (trimmedBio.length > 500) {
@@ -273,6 +341,18 @@ export default function DeveloperSettingsPage() {
       nextErrors.linkedinUrl = linkedinError;
     }
 
+    if (parsedEducationEntries.some((entry) => entry.length > 200)) {
+      nextErrors.educationEntries = "Each education entry must be 200 characters or less.";
+    }
+
+    if (parsedCertificationEntries.some((entry) => entry.length > 200)) {
+      nextErrors.certificationEntries = "Each certification entry must be 200 characters or less.";
+    }
+
+    if (parsedLanguageEntries.some((entry) => entry.length > 60)) {
+      nextErrors.languageEntries = "Each language entry must be 60 characters or less.";
+    }
+
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       setError("Please fix the highlighted fields and try again.");
@@ -283,10 +363,18 @@ export default function DeveloperSettingsPage() {
     try {
       await updateProfile({
         fullName: trimmedName || undefined,
+        title: trimmedTitle || undefined,
         bio: trimmedBio || undefined,
         skills: selectedSkills,
+        primaryStack: trimmedPrimaryStack || undefined,
+        experienceLevel,
+        availabilityStatus,
         location: location.trim() || undefined,
         contactEmail: trimmedContactEmail || undefined,
+        publicEmailEnabled,
+        educationEntries: parsedEducationEntries,
+        certificationEntries: parsedCertificationEntries,
+        languageEntries: parsedLanguageEntries,
         phoneNumber: trimmedPhoneNumber || undefined,
         websiteUrl: websiteUrl.trim() || undefined,
         githubUrl: githubUrl.trim() || undefined,
@@ -356,6 +444,17 @@ export default function DeveloperSettingsPage() {
                   </label>
 
                   <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-neutral-800">Professional title</span>
+                    <input
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.title ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      placeholder="Full-stack Developer"
+                    />
+                    {fieldErrors.title ? <span className="text-xs text-red-600">{fieldErrors.title}</span> : <span className="text-xs text-neutral-500">This appears on your public profile card.</span>}
+                  </label>
+
+                  <label className="grid gap-1 text-sm">
                     <span className="font-medium text-neutral-800">Username</span>
                     <input
                       value={profile?.username ?? ""}
@@ -422,6 +521,47 @@ export default function DeveloperSettingsPage() {
                     </div>
                     <span className="text-xs text-neutral-500">Selected: {selectedSkills.length}</span>
                   </div>
+
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-neutral-800">Primary stack</span>
+                    <input
+                      value={primaryStack}
+                      onChange={(event) => setPrimaryStack(event.target.value)}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.primaryStack ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      placeholder="Next.js + NestJS"
+                    />
+                    {fieldErrors.primaryStack ? <span className="text-xs text-red-600">{fieldErrors.primaryStack}</span> : <span className="text-xs text-neutral-500">Used as a ranking signal for matching.</span>}
+                  </label>
+
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-neutral-800">Experience level</span>
+                    <select
+                      value={experienceLevel}
+                      onChange={(event) => setExperienceLevel(event.target.value as "JUNIOR" | "MID" | "SENIOR")}
+                      className="rounded-lg border border-neutral-300 px-3 py-2 outline-none transition focus:border-cyan-500"
+                    >
+                      {EXPERIENCE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-neutral-800">Availability status</span>
+                    <select
+                      value={availabilityStatus}
+                      onChange={(event) => setAvailabilityStatus(event.target.value as "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK")}
+                      className="rounded-lg border border-neutral-300 px-3 py-2 outline-none transition focus:border-cyan-500"
+                    >
+                      {AVAILABILITY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </section>
 
@@ -438,6 +578,19 @@ export default function DeveloperSettingsPage() {
                       placeholder="you@example.com"
                     />
                     {fieldErrors.contactEmail ? <span className="text-xs text-red-600">{fieldErrors.contactEmail}</span> : null}
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={publicEmailEnabled}
+                      onChange={(event) => setPublicEmailEnabled(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-neutral-300"
+                    />
+                    <span>
+                      <span className="block font-medium text-neutral-800">Show contact email publicly</span>
+                      <span className="text-xs text-neutral-600">Turn this off to keep your contact email private while still receiving platform messages.</span>
+                    </span>
                   </label>
 
                   <label className="grid gap-1 text-sm">
@@ -482,6 +635,53 @@ export default function DeveloperSettingsPage() {
                       placeholder="linkedin.com/in/username"
                     />
                     {fieldErrors.linkedinUrl ? <span className="text-xs text-red-600">{fieldErrors.linkedinUrl}</span> : <span className="text-xs text-neutral-500">Must be a linkedin.com profile/company URL.</span>}
+                  </label>
+
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-neutral-800">Education entries</span>
+                    <textarea
+                      value={educationEntriesText}
+                      onChange={(event) => setEducationEntriesText(event.target.value)}
+                      rows={4}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.educationEntries ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      placeholder="University of Technology | B.Sc Computer Science | 2016 - 2020"
+                    />
+                    {fieldErrors.educationEntries ? (
+                      <span className="text-xs text-red-600">{fieldErrors.educationEntries}</span>
+                    ) : (
+                      <span className="text-xs text-neutral-500">One entry per line. Use format: School | Degree | Period.</span>
+                    )}
+                  </label>
+
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-neutral-800">Certifications</span>
+                    <textarea
+                      value={certificationEntriesText}
+                      onChange={(event) => setCertificationEntriesText(event.target.value)}
+                      rows={4}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.certificationEntries ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      placeholder="AWS Certified Developer | Amazon Web Services | 2025"
+                    />
+                    {fieldErrors.certificationEntries ? (
+                      <span className="text-xs text-red-600">{fieldErrors.certificationEntries}</span>
+                    ) : (
+                      <span className="text-xs text-neutral-500">One entry per line. Use format: Certification | Issuer | Year.</span>
+                    )}
+                  </label>
+
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-neutral-800">Languages</span>
+                    <input
+                      value={languageEntriesText}
+                      onChange={(event) => setLanguageEntriesText(event.target.value)}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.languageEntries ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      placeholder="English, French"
+                    />
+                    {fieldErrors.languageEntries ? (
+                      <span className="text-xs text-red-600">{fieldErrors.languageEntries}</span>
+                    ) : (
+                      <span className="text-xs text-neutral-500">Comma-separated list (example: English, French).</span>
+                    )}
                   </label>
                 </div>
               </section>
