@@ -85,4 +85,34 @@ export class UsersService {
       orderBy: { createdAt: "desc" }
     });
   }
+
+  /**
+   * Lists projects created by current authenticated user.
+   */
+  async getMyProjects(userId: string) {
+    return this.prisma.project.findMany({
+      where: {
+        authorId: userId,
+        deletedAt: null
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        shortDescription: true,
+        category: true,
+        status: true,
+        techStack: true,
+        likeCount: true,
+        viewCount: true,
+        thumbnailUrl: true,
+        backgroundUrl: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+  }
 }

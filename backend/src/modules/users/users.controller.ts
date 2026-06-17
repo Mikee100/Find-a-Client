@@ -41,6 +41,11 @@ export class UsersController {
     return this.usersService.getSavedProjects(user.sub);
   }
 
+  @Get("me/projects")
+  getMyProjects(@CurrentUser() user: CurrentUserPayload) {
+    return this.usersService.getMyProjects(user.sub);
+  }
+
   @Get(":username")
   getByUsername(@Param("username") username: string) {
     return this.usersService.getPublicProfile(username);

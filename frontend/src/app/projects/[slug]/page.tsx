@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
 import { getAuthSession, getProjectBySlug, ProjectCategory, ProjectDetail, PricingType, updateProject, uploadMediaFile } from "@/lib/api";
 import FullPageLoader from "@/components/ui/full-page-loader";
@@ -225,6 +225,7 @@ function UploadDropZone({
 
 export default function ProjectDetailPage() {
   const params = useParams<{ slug: string }>();
+  const searchParams = useSearchParams();
   const slug = params.slug ?? "";
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -233,7 +234,9 @@ export default function ProjectDetailPage() {
   const [showFullOverview, setShowFullOverview] = useState(false);
   const [copiedState, setCopiedState] = useState<"none" | "url" | "summary">("none");
   const [viewerId, setViewerId] = useState<string | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [hasHandledEditDeepLink, setHasHandledEditDeepLink] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -319,6 +322,8 @@ export default function ProjectDetailPage() {
         setViewerId(auth.sub);
       } catch {
         setViewerId(null);
+      } finally {
+        setAuthResolved(true);
       }
     })();
   }, []);
@@ -340,6 +345,24 @@ export default function ProjectDetailPage() {
   const visibleOverview = hasLongOverview && !showFullOverview ? `${overviewText.slice(0, 540).trimEnd()}...` : overviewText;
   const isAuthenticated = Boolean(viewerId);
   const canEdit = Boolean(project && viewerId && project.author.id === viewerId);
+  const editQuery = (searchParams.get("edit") ?? "").trim().toLowerCase();
+  const hasEditQuery = editQuery === "1" || editQuery === "true" || editQuery === "yes";
+
+  useEffect(() => {
+    if (!hasEditQuery || hasHandledEditDeepLink || !project || !authResolved) {
+      return;
+    }
+
+    if (canEdit) {
+      initializeEditForm(project);
+      setIsEditing(true);
+      setSaveError(null);
+      setSaveSuccess(null);
+    }
+
+    setHasHandledEditDeepLink(true);
+  }, [authResolved, canEdit, hasEditQuery, hasHandledEditDeepLink, project]);
+
   const editDiff = useMemo(() => {
     if (!project) {
       return {

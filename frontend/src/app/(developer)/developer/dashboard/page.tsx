@@ -1,725 +1,767 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  Bell,
+  Briefcase,
+  ChevronRight,
+  CircleHelp,
+  FolderKanban,
+  LayoutGrid,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Search,
+  Settings,
+  Sparkles,
+  UserCircle2,
+  Users,
+  X,
+  Zap,
+} from "lucide-react";
+import BrandLogo from "@/components/ui/brand-logo";
 import {
   getAuthSession,
-  NotificationItem,
+  getMyProjects,
   getMessageThreads,
   getNotifications,
   getSavedProjects,
   logout,
   logoutEverywhere,
+  MyProjectListItem,
+  NotificationItem,
+  ThreadSummary,
 } from "@/lib/api";
-import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+type ActivityItem = {
+  id: string;
+  title: string;
+  detail: string;
+  time: string;
+  unread?: boolean;
+};
 
-type Thread = { id: string; unreadCount: number; updatedAt: string; preview: string };
+type RecommendationItem = {
+  id: string;
+  title: string;
+  budget: string;
+  timeline: string;
+  skills: string[];
+  match: number;
+};
 
-// ─── Mock data ──────────────────────────────────────────────────────────────
+type NavItem = {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  href: string;
+  active?: boolean;
+};
 
-const MOCK_EARNINGS = [
-  { month: "J", amount: 2400 },
-  { month: "F", amount: 3100 },
-  { month: "M", amount: 2800 },
-  { month: "A", amount: 4200 },
-  { month: "M", amount: 3900 },
-  { month: "J", amount: 5100 },
+const navItems: NavItem[] = [
+  { label: "Dashboard", icon: LayoutGrid, href: "/developer/dashboard", active: true },
+  { label: "My Profile", icon: UserCircle2, href: "/developers/profile" },
+  { label: "Portfolio", icon: FolderKanban, href: "/developer/projects/new" },
+  { label: "Projects", icon: Briefcase, href: "/projects" },
+  { label: "Messages", icon: MessageSquare, href: "/developer/messages" },
+  { label: "Analytics", icon: Zap, href: "/developer/dashboard#analytics" },
+  { label: "AI Match", icon: Sparkles, href: "/developer/dashboard#ai-match" },
+  { label: "Saved Clients", icon: Users, href: "/developer/dashboard#saved-clients" },
+  { label: "Notifications", icon: Bell, href: "/developer/dashboard#notifications" },
+  { label: "Settings", icon: Settings, href: "/developers/settings" },
+  { label: "Help", icon: CircleHelp, href: "/developer/dashboard#help" },
 ];
 
-const MOCK_SKILLS = [
-  { label: "React", level: 92 },
-  { label: "Node.js", level: 85 },
-  { label: "TypeScript", level: 88 },
-  { label: "PostgreSQL", level: 78 },
-  { label: "Docker", level: 65 },
+const recommendationItems: RecommendationItem[] = [
+  {
+    id: "r1",
+    title: "B2B SaaS Billing Portal",
+    budget: "$8k - $12k",
+    timeline: "4 - 6 weeks",
+    skills: ["React", "Node", "Stripe"],
+    match: 93,
+  },
+  {
+    id: "r2",
+    title: "Healthcare Scheduling Revamp",
+    budget: "$5k - $9k",
+    timeline: "3 - 5 weeks",
+    skills: ["TypeScript", "PostgreSQL", "UX"],
+    match: 88,
+  },
+  {
+    id: "r3",
+    title: "Marketplace Messaging Layer",
+    budget: "$6k - $10k",
+    timeline: "5 - 7 weeks",
+    skills: ["WebSockets", "Redis", "Backend"],
+    match: 85,
+  },
 ];
 
-const MOCK_PROJECTS = [
-  { id: "1", title: "E-commerce Storefront", status: "Live", tech: ["Next.js", "Stripe"], views: 284, saves: 31 },
-  { id: "2", title: "SaaS Analytics Dashboard", status: "Live", tech: ["React", "D3.js"], views: 196, saves: 18 },
-  { id: "3", title: "Mobile Booking App", status: "Draft", tech: ["Flutter", "Firebase"], views: 0, saves: 0 },
-];
-
-const MOCK_REVIEWS = [
-  { id: "r1", client: "Miriam A.", initials: "MA", rating: 5, text: "Delivered on time, clean code, great communication throughout.", date: "2 weeks ago" },
-  { id: "r2", client: "Tom R.", initials: "TR", rating: 5, text: "Exactly what we needed. Will hire again without hesitation.", date: "1 month ago" },
-  { id: "r3", client: "Priya S.", initials: "PS", rating: 4, text: "Very professional. Minor revision needed but sorted quickly.", date: "2 months ago" },
-];
-
-const MOCK_ACTIVITY = [
-  { id: "a1", label: "INQ", text: "New inquiry from a client in London", time: "5m ago", hot: true },
-  { id: "a2", label: "SAVE", text: "'SaaS Dashboard' was saved by a client", time: "22m ago", hot: false },
-  { id: "a3", label: "REV", text: "New 5-star review received", time: "2h ago", hot: false },
-  { id: "a4", label: "DEAL", text: "Deal interest on E-commerce project", time: "Yesterday", hot: false },
-  { id: "a5", label: "VIEW", text: "Profile viewed 14 times today", time: "Today", hot: false },
-];
-
-const MOCK_CALENDAR = [
-  { id: "c1", title: "Discovery call — Tom R.", when: "Today · 3:00 PM", accent: "#38bdf8" },
-  { id: "c2", title: "Proposal deadline — Miriam A.", when: "Tomorrow · 11:59 PM", accent: "#f87171" },
-  { id: "c3", title: "Handoff — Priya S.", when: "Jun 20 · 2:00 PM", accent: "#34d399" },
-];
-
-const MOCK_PROFILE = [
-  { label: "Bio written", done: true },
-  { label: "Profile photo", done: false },
-  { label: "3+ projects live", done: true },
-  { label: "Hourly rate set", done: true },
-  { label: "Skills added", done: true },
-  { label: "First testimonial", done: false },
-];
-
-// ─── Tokens ─────────────────────────────────────────────────────────────────
-// Background: #0d0d0f  Surface: #141417  Border: #242428
-// Accent: #7c6fff (violet)  Green: #22c55e  Amber: #f59e0b  Red: #ef4444
-// Text-primary: #f4f4f5  Text-secondary: #71717a  Text-muted: #3f3f46
-
-// ─── Shared atoms ───────────────────────────────────────────────────────────
-
-function Pill({ children, color = "neutral" }: { children: React.ReactNode; color?: "violet" | "green" | "amber" | "red" | "neutral" }) {
-  const c = {
-    violet: "bg-violet-950/60 text-violet-300 border-violet-800/60",
-    green: "bg-emerald-950/60 text-emerald-400 border-emerald-800/60",
-    amber: "bg-amber-950/60 text-amber-400 border-amber-800/60",
-    red: "bg-red-950/60 text-red-400 border-red-800/60",
-    neutral: "bg-slate-200/60 text-slate-600 border-zinc-700/60",
-  }[color];
-  return <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${c}`}>{children}</span>;
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
-function PanelLabel({ children }: { children: React.ReactNode }) {
+function formatProjectStatus(status: "DRAFT" | "PUBLISHED" | "ARCHIVED"): string {
+  return status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function AnimatedCard({
+  children,
+  delay = 0,
+  className,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+}) {
   return (
-    <p className="mb-3 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">{children}</p>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay }}
+      className={className}
+    >
+      {children}
+    </motion.div>
   );
 }
 
-function Divider() {
-  return <div className="my-3 border-t border-slate-200" />;
-}
-
-// ─── LEFT: Pipeline ─────────────────────────────────────────────────────────
-
-function Pipeline({ inquiry, proposal, contracts }: { inquiry: Thread[]; proposal: Thread[]; contracts: NotificationItem[] }) {
-  const stages = [
-    { key: "inquiry", label: "Inquiry", count: inquiry.length, dot: "bg-amber-400", items: inquiry },
-    { key: "proposal", label: "Proposal", count: proposal.length, dot: "bg-violet-400", items: proposal },
-    { key: "contract", label: "Contract", count: contracts.length, dot: "bg-emerald-400", items: contracts },
-  ];
-
+function Sidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   return (
-    <div>
-      <PanelLabel>Pipeline</PanelLabel>
-      {/* Stage header row */}
-      <div className="mb-3 flex items-center gap-0">
-        {stages.map((s, i) => (
-          <div key={s.key} className="flex flex-1 items-center">
-            <div className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{s.label}</span>
-              </div>
-              <span className="text-xl font-bold text-slate-900">{s.count}</span>
-            </div>
-            {i < stages.length - 1 && (
-              <div className="mx-1 text-slate-400 text-sm">›</div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Thread cards */}
-      <div className="space-y-1.5">
-        {inquiry.length === 0 && proposal.length === 0 && contracts.length === 0 && (
-          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-[11px] text-slate-500">
-            No active threads yet. Your pipeline will populate as clients reach out.
-          </div>
-        )}
-        {(inquiry.slice(0, 2)).map((t) => (
-          <div key={t.id} className="group flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-amber-800/60 hover:bg-slate-50 transition-colors cursor-pointer">
-            <span className="mt-0.5 rounded-sm bg-amber-950/80 px-1 py-0.5 text-[9px] font-bold text-amber-400 shrink-0">INQ</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] text-slate-700 line-clamp-1 font-medium">Thread {t.id.slice(0, 8)}</p>
-              <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{t.preview || "No preview"}</p>
-            </div>
-            <span className="text-[10px] text-slate-500 shrink-0">{t.unreadCount > 0 ? `${t.unreadCount} new` : ""}</span>
-          </div>
-        ))}
-        {(proposal.slice(0, 2)).map((t) => (
-          <div key={t.id} className="group flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-violet-800/60 hover:bg-slate-50 transition-colors cursor-pointer">
-            <span className="mt-0.5 rounded-sm bg-violet-950/80 px-1 py-0.5 text-[9px] font-bold text-violet-400 shrink-0">PRO</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] text-slate-700 line-clamp-1 font-medium">Thread {t.id.slice(0, 8)}</p>
-              <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{t.preview || "No preview"}</p>
-            </div>
-            <span className="text-[10px] text-slate-500 shrink-0">{new Date(t.updatedAt).toLocaleDateString()}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── LEFT: Projects ─────────────────────────────────────────────────────────
-
-function Projects({ saved, savedState }: { saved: Array<{ id: string; project: { slug: string; title: string } }>; savedState: string }) {
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <PanelLabel>My projects</PanelLabel>
-        <Link href="/developer/projects/new" className="text-[10px] font-semibold text-violet-400 hover:text-violet-300">+ New</Link>
-      </div>
-      <div className="space-y-1.5">
-        {MOCK_PROJECTS.map((p) => (
-          <div key={p.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-[11px] font-semibold text-slate-800 truncate">{p.title}</p>
-                <Pill color={p.status === "Live" ? "green" : "neutral"}>{p.status}</Pill>
-              </div>
-              <div className="mt-1 flex gap-1.5">
-                {p.tech.map((t) => <span key={t} className="text-[9px] text-slate-500 bg-slate-200 rounded px-1.5 py-0.5">{t}</span>)}
-                {p.status === "Live" && <span className="ml-auto text-[9px] text-slate-500">{p.views}v · {p.saves}s</span>}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {saved.length > 0 && (
-        <>
-          <Divider />
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Saved opportunities</span>
-            <Link href="/projects" className="text-[10px] text-violet-400 hover:text-violet-300">Browse</Link>
-          </div>
-          {savedState && <p className="text-[10px] text-slate-500 mb-2">{savedState}</p>}
-          <div className="space-y-1">
-            {saved.map((s) => (
-              <a key={s.id} href={`/projects/${s.project.slug}`} className="block rounded-lg border border-slate-200 px-2.5 py-2 text-[11px] font-medium text-violet-400 hover:text-violet-300 hover:bg-slate-50 transition-colors">
-                {s.project.title}
-              </a>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── CENTER: Earnings ────────────────────────────────────────────────────────
-
-function Earnings() {
-  const max = Math.max(...MOCK_EARNINGS.map((e) => e.amount));
-  const total = MOCK_EARNINGS.reduce((s, e) => s + e.amount, 0);
-  const last = MOCK_EARNINGS[MOCK_EARNINGS.length - 1];
-  const prev = MOCK_EARNINGS[MOCK_EARNINGS.length - 2];
-  const trend = ((last.amount - prev.amount) / prev.amount * 100).toFixed(0);
-  const isUp = last.amount >= prev.amount;
-
-  return (
-    <div>
-      <PanelLabel>Revenue runway</PanelLabel>
-      <div className="mb-4 flex items-end gap-4">
-        <div>
-          <p className="text-3xl font-bold tracking-tight text-slate-900">${total.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">6-month total</p>
+    <>
+      <aside className="hidden lg:flex lg:w-72 lg:flex-col lg:border-r lg:border-slate-200 lg:bg-white lg:px-4 lg:py-5">
+        <div className="mb-5 px-2">
+          <BrandLogo />
         </div>
-        <div className={`mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold ${isUp ? "bg-emerald-950/60 text-emerald-400" : "bg-red-950/60 text-red-400"}`}>
-          <span>{isUp ? "↑" : "↓"}</span>
-          <span>{Math.abs(Number(trend))}% MoM</span>
-        </div>
-      </div>
+        <nav className="space-y-1">
+          {navItems.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                item.active
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <item.icon className="h-4 w-4" />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </nav>
+      </aside>
 
-      {/* Bar chart */}
-      <div className="flex items-end gap-1.5 h-16">
-        {MOCK_EARNINGS.map((e) => (
-          <div key={e.month} className="flex flex-1 flex-col items-center gap-1.5">
-            <div
-              className="w-full rounded-sm transition-all"
-              style={{
-                height: `${(e.amount / max) * 100}%`,
-                background: e.month === last.month
-                  ? "linear-gradient(to top, #7c6fff, #a78bfa)"
-                  : "#27272a",
-              }}
-              title={`$${e.amount}`}
-            />
-            <span className="text-[9px] font-medium text-slate-500">{e.month}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {[
-          { label: "Avg/mo", val: `$${Math.round(total / MOCK_EARNINGS.length).toLocaleString()}` },
-          { label: "Best mo", val: `$${Math.max(...MOCK_EARNINGS.map(e => e.amount)).toLocaleString()}` },
-          { label: "This mo", val: `$${last.amount.toLocaleString()}` },
-        ].map((item) => (
-          <div key={item.label} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-center">
-            <p className="text-[9px] text-slate-500 uppercase tracking-wide">{item.label}</p>
-            <p className="text-xs font-bold text-slate-800 mt-0.5">{item.val}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── CENTER: Activity ────────────────────────────────────────────────────────
-
-function Activity({ threads }: { threads: Thread[] }) {
-  const items = threads.length > 0
-    ? threads.map((t) => ({ id: t.id, label: "MSG", text: t.preview || "Thread update", time: new Date(t.updatedAt).toLocaleDateString(), hot: t.unreadCount > 0 }))
-    : MOCK_ACTIVITY;
-
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <PanelLabel>Signal stream</PanelLabel>
-        <span className="flex items-center gap-1 text-[9px] text-emerald-500">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Live
-        </span>
-      </div>
-      <div className="space-y-1">
-        {items.slice(0, 7).map((item) => (
-          <div key={item.id} className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors ${item.hot ? "border border-violet-800/40 bg-violet-950/20" : "border border-slate-200 bg-slate-50 hover:bg-white"}`}>
-            <span className={`mt-0.5 rounded-sm px-1 py-0.5 text-[9px] font-bold shrink-0 ${item.hot ? "bg-violet-900 text-violet-300" : "bg-slate-200 text-slate-500"}`}>
-              {item.label}
-            </span>
-            <p className="flex-1 min-w-0 text-[11px] text-slate-600 line-clamp-1">{item.text}</p>
-            <span className="text-[9px] text-slate-400 shrink-0 whitespace-nowrap">{item.time}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── CENTER: Reviews ─────────────────────────────────────────────────────────
-
-function Reviews() {
-  const avg = (MOCK_REVIEWS.reduce((s, r) => s + r.rating, 0) / MOCK_REVIEWS.length).toFixed(1);
-
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <PanelLabel>Client reviews</PanelLabel>
-        <div className="flex items-center gap-1.5">
-          <span className="text-amber-400 text-xs">★</span>
-          <span className="text-xs font-bold text-slate-800">{avg}</span>
-          <span className="text-[10px] text-slate-500">/ {MOCK_REVIEWS.length} reviews</span>
-        </div>
-      </div>
-      <div className="space-y-2">
-        {MOCK_REVIEWS.map((r) => (
-          <div key={r.id} className="rounded-lg border border-slate-200 bg-white p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-600 shrink-0">{r.initials}</div>
-              <span className="text-[11px] font-semibold text-slate-700">{r.client}</span>
-              <span className="ml-auto text-[10px] text-amber-400">{"★".repeat(r.rating)}</span>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">{r.text}</p>
-            <p className="mt-1.5 text-[9px] text-slate-400">{r.date}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── RIGHT: Availability ─────────────────────────────────────────────────────
-
-function Availability() {
-  const [status, setStatus] = useState<"open" | "busy" | "away">("open");
-  const opts = [
-    { val: "open" as const, label: "Open", dot: "bg-emerald-400", active: "border-emerald-700 bg-emerald-950/40 text-emerald-300" },
-    { val: "busy" as const, label: "Busy", dot: "bg-amber-400", active: "border-amber-700 bg-amber-950/40 text-amber-300" },
-    { val: "away" as const, label: "Away", dot: "bg-zinc-500", active: "border-zinc-600 bg-slate-200 text-slate-700" },
-  ];
-  const cur = opts.find((o) => o.val === status)!;
-
-  return (
-    <div>
-      <PanelLabel>Availability</PanelLabel>
-      <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-        <span className={`h-2 w-2 rounded-full ${cur.dot}`} />
-        <span className="text-xs font-semibold text-slate-800 capitalize">{status === "open" ? "Open to work" : status}</span>
-        <span className="ml-auto text-[9px] text-slate-500">Visible to clients</span>
-      </div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {opts.map((o) => (
+      {open ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
           <button
-            key={o.val}
-            onClick={() => setStatus(o.val)}
-            className={`rounded-lg border py-2 text-[11px] font-semibold transition-colors ${status === o.val ? o.active : "border-slate-200 bg-white text-slate-500 hover:text-slate-600 hover:border-slate-300"}`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
+            aria-label="Close sidebar overlay"
+            className="absolute inset-0 bg-slate-950/40"
+            onClick={onClose}
+          />
+          <aside className="relative h-full w-72 border-r border-slate-200 bg-white px-4 py-5">
+            <div className="mb-5 flex items-center justify-between px-2">
+              <BrandLogo />
+              <button
+                onClick={onClose}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-600"
+                aria-label="Close sidebar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <nav className="space-y-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  onClick={onClose}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                    item.active
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </nav>
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }
 
-// ─── RIGHT: Profile ring + checklist ─────────────────────────────────────────
-
-function ProfileReadiness() {
-  const done = MOCK_PROFILE.filter((i) => i.done).length;
-  const pct = Math.round((done / MOCK_PROFILE.length) * 100);
-
+function Topbar({
+  onOpenSidebar,
+  unreadMessages,
+  unreadNotifications,
+}: {
+  onOpenSidebar: () => void;
+  unreadMessages: number;
+  unreadNotifications: number;
+}) {
   return (
-    <div>
-      <PanelLabel>Profile readiness</PanelLabel>
-      <div className="mb-3 flex items-center gap-3">
-        {/* ring */}
-        <div className="relative h-14 w-14 shrink-0">
-          <svg viewBox="0 0 36 36" className="h-14 w-14 -rotate-90">
-            <circle cx="18" cy="18" r="14" fill="none" stroke="#27272a" strokeWidth="3.5" />
-            <circle
-              cx="18" cy="18" r="14" fill="none"
-              stroke="#7c6fff" strokeWidth="3.5"
-              strokeDasharray={`${(pct / 100) * 87.96} ${87.96 - (pct / 100) * 87.96}`}
-              strokeLinecap="round"
-            />
-          </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-slate-800">{pct}%</span>
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+        <button
+          onClick={onOpenSidebar}
+          className="rounded-lg border border-slate-200 p-2 text-slate-600 lg:hidden"
+          aria-label="Open sidebar"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+
+        <div className="hidden min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:flex">
+          <Search className="h-4 w-4 text-slate-500" />
+          <input
+            aria-label="Search"
+            placeholder="Search developers, projects, companies, messages..."
+            className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+          />
+          <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">⌘K</span>
         </div>
-        <div>
-          <p className="text-xs font-semibold text-slate-700">{done}/{MOCK_PROFILE.length} complete</p>
-          <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">Complete your profile to rank higher in search.</p>
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        {MOCK_PROFILE.map((item) => (
-          <div key={item.label} className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 ${item.done ? "opacity-50" : "border border-slate-200 bg-white"}`}>
-            <span className={`h-3.5 w-3.5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${item.done ? "bg-emerald-900 text-emerald-400" : "bg-slate-200 text-slate-500"}`}>
-              {item.done ? "✓" : "○"}
+
+        <button className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+          <Sparkles className="h-4 w-4" />
+          <span className="hidden sm:inline">AI Search</span>
+        </button>
+
+        <button className="relative rounded-lg border border-slate-200 p-2 text-slate-600">
+          <MessageSquare className="h-4 w-4" />
+          {unreadMessages > 0 ? (
+            <span className="absolute -right-1 -top-1 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
+              {unreadMessages}
             </span>
-            <span className={`text-[11px] ${item.done ? "text-slate-500 line-through" : "text-slate-600"}`}>{item.label}</span>
-          </div>
-        ))}
+          ) : null}
+        </button>
+
+        <button className="relative rounded-lg border border-slate-200 p-2 text-slate-600">
+          <Bell className="h-4 w-4" />
+          {unreadNotifications > 0 ? (
+            <span className="absolute -right-1 -top-1 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
+              {unreadNotifications}
+            </span>
+          ) : null}
+        </button>
+
+        <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm">
+          <div className="h-7 w-7 rounded-full bg-slate-200" />
+          <span className="hidden text-slate-700 sm:inline">Michael</span>
+        </button>
       </div>
-    </div>
+    </header>
   );
 }
 
-// ─── RIGHT: Discovery score ───────────────────────────────────────────────────
-
-function DiscoveryScore() {
-  const score = 74;
+function StatCard({
+  title,
+  value,
+  trend,
+  subtitle,
+  delay,
+}: {
+  title: string;
+  value: string;
+  trend: string;
+  subtitle: string;
+  delay: number;
+}) {
   return (
-    <div>
-      <PanelLabel>Discovery score</PanelLabel>
-      <div className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] text-slate-500">Ranking strength</span>
-          <span className="text-xs font-bold text-slate-800">{score}<span className="text-slate-500">/100</span></span>
+    <AnimatedCard delay={delay}>
+      <article className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium text-slate-600">{title}</p>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{trend}</span>
         </div>
-        <div className="h-1.5 w-full rounded-full bg-slate-200">
-          <div
-            className="h-1.5 rounded-full"
-            style={{ width: `${score}%`, background: "linear-gradient(to right, #7c6fff, #818cf8)" }}
+        <p className="text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
+        <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+        <div className="mt-4 h-10 overflow-hidden rounded-md bg-slate-100">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: "76%" }}
+            transition={{ duration: 0.7, delay: delay + 0.1 }}
+            className="h-full bg-blue-500/20"
           />
         </div>
-      </div>
-      <div className="space-y-1.5">
-        {[
-          "Add a profile video (+2× visibility)",
-          "Reply within 24h to all inquiries",
-          "Publish at least one live demo link",
-        ].map((tip) => (
-          <div key={tip} className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
-            <span className="mt-0.5 text-amber-500 text-[10px] shrink-0">→</span>
-            <p className="text-[10px] text-slate-500 leading-relaxed">{tip}</p>
-          </div>
-        ))}
-      </div>
-    </div>
+      </article>
+    </AnimatedCard>
   );
 }
 
-// ─── RIGHT: Skills ────────────────────────────────────────────────────────────
-
-function Skills() {
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <PanelLabel>Skill stack</PanelLabel>
-        <button className="text-[10px] text-violet-400 hover:text-violet-300">Edit</button>
-      </div>
-      <div className="space-y-2.5">
-        {MOCK_SKILLS.map((s) => (
-          <div key={s.label}>
-            <div className="flex justify-between text-[10px] mb-1">
-              <span className="text-slate-600 font-medium">{s.label}</span>
-              <span className="text-slate-400">{s.level}</span>
-            </div>
-            <div className="h-px w-full bg-slate-200 relative">
-              <div
-                className="h-px absolute top-0 left-0"
-                style={{ width: `${s.level}%`, background: "linear-gradient(to right, #7c6fff88, #7c6fff)" }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── RIGHT: Upcoming ─────────────────────────────────────────────────────────
-
-function Upcoming() {
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <PanelLabel>Upcoming</PanelLabel>
-        <button className="text-[10px] text-violet-400 hover:text-violet-300">+ Add</button>
-      </div>
-      <div className="space-y-1.5">
-        {MOCK_CALENDAR.map((c) => (
-          <div key={c.id} className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
-            <div className="mt-0.5 h-2 w-2 rounded-full shrink-0" style={{ background: c.accent }} />
-            <div>
-              <p className="text-[11px] font-medium text-slate-700">{c.title}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">{c.when}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── RIGHT: Quick actions ─────────────────────────────────────────────────────
-
-function Actions({ onLogout, onLogoutEverywhere, pending }: { onLogout: () => void; onLogoutEverywhere: () => void; pending: boolean }) {
-  const links = [
-    { label: "Browse projects", href: "/projects" },
-    { label: "Edit profile", href: "/developers/settings" },
-    { label: "New project", href: "/developer/projects/new" },
-    { label: "Messages", href: "/developer/messages" },
-    { label: "Client workspace", href: "/client/dashboard" },
-    { label: "Admin panel", href: "/admin/dashboard" },
-  ];
-  return (
-    <div>
-      <PanelLabel>Quick nav</PanelLabel>
-      <div className="grid grid-cols-2 gap-1">
-        {links.map((a) => (
-          <Link
-            key={a.href}
-            href={a.href}
-            className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-          >
-            {a.label}
-          </Link>
-        ))}
-        <button
-          disabled={pending}
-          onClick={onLogout}
-          className="rounded-lg border border-red-900/60 bg-red-950/30 px-2.5 py-2 text-[11px] font-medium text-red-500 hover:bg-red-950/60 transition-colors disabled:opacity-40"
-        >
-          {pending ? "Signing out…" : "Sign out"}
-        </button>
-        <button
-          disabled={pending}
-          onClick={onLogoutEverywhere}
-          className="rounded-lg border border-slate-200 px-2.5 py-2 text-[11px] font-medium text-slate-500 hover:text-red-500 hover:border-red-900/60 transition-colors disabled:opacity-40"
-        >
-          All devices
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── TOP: Metric bar ─────────────────────────────────────────────────────────
-
-function MetricBar({
-  unread, threads, deals, conversion, saved,
-}: { unread: number; threads: number; deals: number; conversion: number; saved: number }) {
-  const metrics = [
-    { label: "Unread messages", val: unread, sub: `in ${threads} threads`, accent: "#7c6fff" },
-    { label: "Deal signals", val: deals, sub: "contract-interest", accent: "#34d399" },
-    { label: "Conversion", val: `${conversion}%`, sub: "deals per thread", accent: "#f59e0b" },
-    { label: "Saved projects", val: saved, sub: "shortlisted", accent: "#38bdf8" },
-    { label: "Profile views", val: "—", sub: "connect analytics", accent: "#a1a1aa" },
-  ];
+function Hero({
+  unread,
+  profileViews,
+  messages,
+}: {
+  unread: number;
+  profileViews: number;
+  messages: number;
+}) {
+  const completion = 85;
+  const dash = `${(completion / 100) * 87.96} ${87.96 - (completion / 100) * 87.96}`;
 
   return (
-    <div className="grid grid-cols-5 divide-x divide-slate-200 rounded-2xl border border-slate-200 bg-white overflow-hidden">
-      {metrics.map((m) => (
-        <div key={m.label} className="px-4 py-3">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{m.label}</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900 tracking-tight" style={{ color: typeof m.val === "number" && m.val > 0 ? m.accent : undefined }}>
-            {m.val}
+    <AnimatedCard className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" delay={0.05}>
+      <div className="grid gap-6 lg:grid-cols-[1fr_210px]">
+        <div>
+          <p className="text-sm font-medium text-slate-500">Good Morning, Michael</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Welcome back.</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+            Your profile received more attention today. You have {unread} new inquiries, {profileViews} profile views, and {messages} client messages.
           </p>
-          <p className="text-[9px] text-slate-500 mt-0.5">{m.sub}</p>
         </div>
-      ))}
-    </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-medium text-slate-500">Profile completion</p>
+          <div className="mt-3 flex items-center gap-3">
+            <div className="relative h-16 w-16 shrink-0">
+              <svg viewBox="0 0 36 36" className="h-16 w-16 -rotate-90">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#E5E7EB" strokeWidth="3.5" />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="14"
+                  fill="none"
+                  stroke="#2563EB"
+                  strokeWidth="3.5"
+                  strokeDasharray={dash}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-900">
+                {completion}%
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-800">Almost there</p>
+              <p className="text-xs text-slate-500">Add reviews and profile photo</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AnimatedCard>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function PortfolioGrid({ projects }: { projects: MyProjectListItem[] }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">Portfolio</h2>
+        <Link href="/developer/projects/new" className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
+          New project <ChevronRight className="h-4 w-4" />
+        </Link>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {projects.map((project, index) => (
+          <AnimatedCard key={project.id} delay={0.05 + index * 0.06}>
+            <article className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+              <div className="relative h-32 w-full border-b border-slate-200">
+                <Image
+                  src={project.thumbnailUrl ?? project.backgroundUrl ?? "/dashboard_preview.png"}
+                  alt={project.title}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div className="p-4">
+                <h3 className="text-base font-semibold text-slate-900">{project.title}</h3>
+                <p className="mt-1 text-sm text-slate-600">{project.shortDescription}</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(project.techStack.length > 0 ? project.techStack : [project.category]).slice(0, 4).map((tech) => (
+                    <span key={tech} className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                      {tech}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-4 flex items-center gap-3 text-xs text-slate-500">
+                  <span>{project.viewCount} views</span>
+                  <span>{project.likeCount} likes</span>
+                  <span>{formatProjectStatus(project.status)}</span>
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <Link href={`/projects/${project.slug}`} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                    Open
+                  </Link>
+                  <Link href={`/projects/${project.slug}?edit=1`} className="text-sm font-medium text-slate-600 hover:text-slate-900">
+                    Edit
+                  </Link>
+                </div>
+              </div>
+            </article>
+          </AnimatedCard>
+        ))}
+      </div>
+      {projects.length === 0 ? (
+        <p className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+          No projects yet. Publish your first project to build your portfolio.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ActivityFeed({
+  activities,
+}: {
+  activities: ActivityItem[];
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="notifications">
+      <h2 className="mb-4 text-lg font-semibold text-slate-900">Activity timeline</h2>
+      <div className="space-y-3">
+        {activities.map((item, index) => (
+          <AnimatedCard key={item.id} delay={0.05 + index * 0.04}>
+            <article className={`rounded-xl border px-4 py-3 ${item.unread ? "border-blue-200 bg-blue-50/60" : "border-slate-200 bg-slate-50"}`}>
+              <p className="text-sm font-medium text-slate-800">{item.title}</p>
+              <p className="mt-0.5 text-sm text-slate-600">{item.detail}</p>
+              <p className="mt-1 text-xs text-slate-500">{item.time}</p>
+            </article>
+          </AnimatedCard>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MessagesPreview({ threads }: { threads: ThreadSummary[] }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">Messages preview</h2>
+        <Link href="/developer/messages" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+          Open inbox
+        </Link>
+      </div>
+      <div className="space-y-3">
+        {threads.slice(0, 4).map((thread) => (
+          <article key={thread.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-full bg-slate-200" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-medium text-slate-800">Thread {thread.id.slice(0, 8)}</p>
+                  <span className="text-xs text-slate-500">{formatTime(thread.updatedAt)}</span>
+                </div>
+                <p className="mt-0.5 truncate text-sm text-slate-600">
+                  {thread.messages[0]?.content ?? "New message activity"}
+                </p>
+              </div>
+              {thread.unreadCount > 0 ? (
+                <span className="rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {thread.unreadCount}
+                </span>
+              ) : null}
+            </div>
+          </article>
+        ))}
+        {threads.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+            No conversations yet. New client messages will appear here.
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function RecommendedProjects() {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="saved-clients">
+      <h2 className="mb-4 text-lg font-semibold text-slate-900">Recommended projects</h2>
+      <div className="space-y-3">
+        {recommendationItems.map((item, index) => (
+          <AnimatedCard key={item.id} delay={0.06 + index * 0.05}>
+            <article className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-600">
+                    {item.budget} · {item.timeline}
+                  </p>
+                </div>
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                  {item.match}% match
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {item.skills.map((skill) => (
+                  <span key={skill} className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600">
+                    {skill}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">Apply</button>
+                <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">Bookmark</button>
+              </div>
+            </article>
+          </AnimatedCard>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AiMatchWidget() {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="ai-match">
+      <div className="mb-3 flex items-center gap-2">
+        <Sparkles className="h-5 w-5 text-blue-600" />
+        <h2 className="text-lg font-semibold text-slate-900">AI Match</h2>
+      </div>
+      <p className="text-sm text-slate-600">
+        Based on your portfolio, we found <span className="font-semibold text-slate-900">18 businesses</span> looking for React + Node developers.
+      </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Match score</p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">91/100</p>
+          <p className="mt-1 text-xs text-slate-500">Excellent fit in SaaS and healthcare projects</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Suggested action</p>
+          <p className="mt-1 text-sm font-medium text-slate-900">Publish one more case study this week</p>
+          <p className="mt-1 text-xs text-slate-500">This can improve project match confidence by up to 11%</p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function AnalyticsCard({
+  label,
+  value,
+  change,
+}: {
+  label: string;
+  value: string;
+  change: string;
+}) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 text-xs text-slate-500">{change}</p>
+    </article>
+  );
+}
+
+function AnalyticsSection() {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="analytics">
+      <h2 className="mb-4 text-lg font-semibold text-slate-900">Analytics</h2>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <AnalyticsCard label="Profile views" value="2,480" change="+14% this month" />
+        <AnalyticsCard label="Portfolio visits" value="1,940" change="+11% this month" />
+        <AnalyticsCard label="Messages" value="312" change="+9% this month" />
+        <AnalyticsCard label="Applications" value="76" change="+6% this month" />
+        <AnalyticsCard label="Client saves" value="124" change="+18% this month" />
+        <AnalyticsCard label="Referral sources" value="Top: Search" change="57% of traffic" />
+      </div>
+    </section>
+  );
+}
+
+function UtilityActions({
+  pending,
+  onLogout,
+  onLogoutEverywhere,
+}: {
+  pending: boolean;
+  onLogout: () => Promise<void>;
+  onLogoutEverywhere: () => Promise<void>;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="help">
+      <h2 className="mb-4 text-lg font-semibold text-slate-900">Quick actions</h2>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/developers/settings" className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+          Edit profile
+        </Link>
+        <Link href="/projects" className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+          Browse projects
+        </Link>
+        <button
+          disabled={pending}
+          onClick={() => {
+            void onLogout();
+          }}
+          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-50"
+        >
+          <LogOut className="h-4 w-4" />
+          {pending ? "Signing out..." : "Sign out"}
+        </button>
+        <button
+          disabled={pending}
+          onClick={() => {
+            void onLogoutEverywhere();
+          }}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Sign out all devices
+        </button>
+      </div>
+    </section>
+  );
+}
 
 export default function DeveloperDashboardPage() {
   const router = useRouter();
   const [hasSession, setHasSession] = useState<boolean | undefined>(undefined);
   const [pendingLogout, setPendingLogout] = useState(false);
-  const [savedState, setSavedState] = useState("");
-  const [analyticsState, setAnalyticsState] = useState("");
-  const [threadCount, setThreadCount] = useState(0);
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [dealInterestCount, setDealInterestCount] = useState(0);
-  const [inquiryThreads, setInquiryThreads] = useState<Thread[]>([]);
-  const [proposalThreads, setProposalThreads] = useState<Thread[]>([]);
-  const [contractNotifications, setContractNotifications] = useState<NotificationItem[]>([]);
-  const [savedProjects, setSavedProjects] = useState<Array<{ id: string; project: { slug: string; title: string } }>>([]);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [savedProjectsCount, setSavedProjectsCount] = useState(0);
+  const [myProjects, setMyProjects] = useState<MyProjectListItem[]>([]);
 
   useEffect(() => {
     queueMicrotask(() => {
       void getAuthSession()
         .then(() => setHasSession(true))
-        .catch(() => { setHasSession(false); router.replace("/login"); });
+        .catch(() => {
+          setHasSession(false);
+          router.replace("/login");
+        });
     });
   }, [router]);
 
   useEffect(() => {
-    if (!hasSession) return;
-    async function loadSaved() {
-      try {
-        setSavedState("Loading…");
-        const items = await getSavedProjects();
-        setSavedProjects(items.map((i) => ({ id: i.id, project: i.project })));
-        setSavedState(items.length ? "" : "No saved projects yet.");
-      } catch (e) { setSavedState(e instanceof Error ? e.message : "Failed."); }
+    if (!hasSession) {
+      return;
     }
-    async function loadAnalytics() {
+
+    async function loadDashboardData() {
       try {
-        setAnalyticsState("Loading analytics…");
-        const [threads, notifications] = await Promise.all([getMessageThreads(), getNotifications(30)]);
-        const inquiry = threads.filter((t) => t.unreadCount > 0).map((t) => ({ id: t.id, unreadCount: t.unreadCount, updatedAt: t.updatedAt, preview: t.messages[0]?.content ?? "" }));
-        const proposal = threads.filter((t) => t.unreadCount === 0).map((t) => ({ id: t.id, unreadCount: t.unreadCount, updatedAt: t.updatedAt, preview: t.messages[0]?.content ?? "" }));
-        const contracts = notifications.filter((n) => n.type === "DEAL_INTEREST");
-        setThreadCount(threads.length);
-        setUnreadMessageCount(threads.reduce((s, t) => s + t.unreadCount, 0));
-        setDealInterestCount(contracts.length);
-        setInquiryThreads(inquiry);
-        setProposalThreads(proposal);
-        setContractNotifications(contracts);
-        setAnalyticsState("");
-      } catch (e) { setAnalyticsState(e instanceof Error ? e.message : "Failed."); }
+        const [threadData, notificationData, savedData, myProjectData] = await Promise.all([
+          getMessageThreads(),
+          getNotifications(20),
+          getSavedProjects(),
+          getMyProjects(),
+        ]);
+        setThreads(threadData);
+        setNotifications(notificationData);
+        setSavedProjectsCount(savedData.length);
+        setMyProjects(myProjectData);
+      } catch {
+        setThreads([]);
+        setNotifications([]);
+        setMyProjects([]);
+      }
     }
-    void loadSaved();
-    void loadAnalytics();
+
+    void loadDashboardData();
   }, [hasSession]);
 
-  async function onLogout() { setPendingLogout(true); await logout(); router.replace("/login"); }
-  async function onLogoutEverywhere() { setPendingLogout(true); await logoutEverywhere(); router.replace("/login"); }
+  async function onLogout() {
+    setPendingLogout(true);
+    await logout();
+    router.replace("/login");
+  }
 
-  const conversionRate = useMemo(() => (threadCount === 0 ? 0 : Math.round((dealInterestCount / threadCount) * 100)), [dealInterestCount, threadCount]);
-  const spotlightThreads = useMemo(
-    () => [...inquiryThreads, ...proposalThreads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5),
-    [inquiryThreads, proposalThreads],
+  async function onLogoutEverywhere() {
+    setPendingLogout(true);
+    await logoutEverywhere();
+    router.replace("/login");
+  }
+
+  const unreadMessages = useMemo(
+    () => threads.reduce((sum, thread) => sum + thread.unreadCount, 0),
+    [threads],
   );
 
-  if (!hasSession) return null;
+  const unreadNotifications = useMemo(
+    () => notifications.filter((notification) => !notification.isRead).length,
+    [notifications],
+  );
+
+  const activities: ActivityItem[] = useMemo(() => {
+    if (threads.length > 0) {
+      return threads.slice(0, 5).map((thread) => ({
+        id: thread.id,
+        title: "Client sent a message",
+        detail: thread.messages[0]?.content ?? "New thread activity",
+        time: formatTime(thread.updatedAt),
+        unread: thread.unreadCount > 0,
+      }));
+    }
+
+    return [
+      { id: "a1", title: "John viewed your profile", detail: "Your profile was viewed from a FinTech company", time: "5m ago", unread: true },
+      { id: "a2", title: "Sarah bookmarked your portfolio", detail: "Project card got bookmarked", time: "22m ago" },
+      { id: "a3", title: "New AI recommendation", detail: "You matched with 3 new projects", time: "1h ago" },
+      { id: "a4", title: "Proposal accepted", detail: "Client approved your proposal terms", time: "Yesterday" },
+    ];
+  }, [threads]);
+
+  if (!hasSession) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="flex min-h-screen">
+        <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
 
-      {/* Subtle noise overlay for texture */}
-      <div className="pointer-events-none fixed inset-0 opacity-[0.012]" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E\")", backgroundRepeat: "repeat", backgroundSize: "100px" }} />
-
-      <DeveloperDashboardNavbar onSignOut={onLogout} onSignOutEverywhere={onLogoutEverywhere} pendingSignOut={pendingLogout} />
-
-      <div className="mx-auto w-full max-w-[1600px] px-4 pb-12 pt-4 md:px-6">
-
-        {/* ── Page header ── */}
-        <div className="mb-4 flex items-end justify-between gap-4 border-b border-slate-200 pb-4">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Developer workspace</p>
-            <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">Command center</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-medium text-slate-600">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Session active
-            </span>
-            {analyticsState && (
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] text-slate-500">{analyticsState}</span>
-            )}
-          </div>
-        </div>
-
-        {/* ── Metric bar ── */}
-        <div className="mb-4">
-          <MetricBar
-            unread={unreadMessageCount}
-            threads={threadCount}
-            deals={dealInterestCount}
-            conversion={conversionRate}
-            saved={savedProjects.length}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+            unreadMessages={unreadMessages}
+            unreadNotifications={unreadNotifications}
           />
-        </div>
 
-        {/* ── Three-column cockpit ── */}
-        <div className="grid gap-3 xl:grid-cols-[280px_1fr_260px] xl:items-start">
+          <main className="space-y-6 p-4 sm:p-6">
+            <Hero unread={Math.max(unreadMessages, 4)} profileViews={12} messages={3} />
 
-          {/* ─ LEFT: work stream ─ */}
-          <aside className="space-y-0 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
-            <div className="border-b border-slate-200 px-4 py-3">
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Work stream</p>
-            </div>
-            <div className="divide-y divide-slate-200">
-              <div className="p-4">
-                <Pipeline inquiry={inquiryThreads} proposal={proposalThreads} contracts={contractNotifications} />
-              </div>
-              <div className="p-4">
-                <Projects saved={savedProjects} savedState={savedState} />
-              </div>
-            </div>
-          </aside>
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+              <StatCard title="Profile views" value="2,480" trend="+14%" subtitle="Last 30 days" delay={0.05} />
+              <StatCard title="Messages" value={String(unreadMessages)} trend="+9%" subtitle="Unread now" delay={0.09} />
+              <StatCard title="Saved by clients" value={String(savedProjectsCount)} trend="+6%" subtitle="This week" delay={0.13} />
+              <StatCard title="Projects" value={String(myProjects.length)} trend="Live" subtitle="Your portfolio" delay={0.17} />
+              <StatCard title="Applications" value="76" trend="+5%" subtitle="Conversion" delay={0.21} />
+              <StatCard title="Revenue" value="$12.4k" trend="future" subtitle="Planning metric" delay={0.25} />
+            </section>
 
-          {/* ─ CENTER: performance ─ */}
-          <main className="space-y-0 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
-            <div className="border-b border-slate-200 px-4 py-3">
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Performance</p>
+            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <PortfolioGrid projects={myProjects} />
+              <MessagesPreview threads={threads} />
             </div>
-            <div className="divide-y divide-slate-200">
-              <div className="p-4">
-                <Earnings />
+
+            <div className="grid gap-6 xl:grid-cols-3">
+              <div className="xl:col-span-2">
+                <ActivityFeed activities={activities} />
               </div>
-              <div className="p-4">
-                <Activity threads={spotlightThreads} />
-              </div>
-              <div className="p-4">
-                <Reviews />
-              </div>
+              <AiMatchWidget />
             </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <RecommendedProjects />
+              <AnalyticsSection />
+            </div>
+
+            <UtilityActions
+              pending={pendingLogout}
+              onLogout={onLogout}
+              onLogoutEverywhere={onLogoutEverywhere}
+            />
           </main>
-
-          {/* ─ RIGHT: profile + status ─ */}
-          <aside className="space-y-0 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden xl:sticky xl:top-6">
-            <div className="border-b border-slate-200 px-4 py-3">
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Profile &amp; status</p>
-            </div>
-            <div className="divide-y divide-slate-200">
-              <div className="p-4"><Availability /></div>
-              <div className="p-4"><ProfileReadiness /></div>
-              <div className="p-4"><DiscoveryScore /></div>
-              <div className="p-4"><Skills /></div>
-              <div className="p-4"><Upcoming /></div>
-              <div className="p-4"><Actions onLogout={onLogout} onLogoutEverywhere={onLogoutEverywhere} pending={pendingLogout} /></div>
-            </div>
-          </aside>
-
         </div>
       </div>
     </div>
