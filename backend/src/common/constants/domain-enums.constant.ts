@@ -37,3 +37,19 @@ export const NOTIFICATION_TYPE = {
 } as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPE)[keyof typeof NOTIFICATION_TYPE];
+
+export const EXPERIENCE_LEVEL = {
+  JUNIOR: "JUNIOR",
+  MID: "MID",
+  SENIOR: "SENIOR"
+} as const;
+
+export type ExperienceLevel = (typeof EXPERIENCE_LEVEL)[keyof typeof EXPERIENCE_LEVEL];
+
+export const AVAILABILITY_STATUS = {
+  AVAILABLE: "AVAILABLE",
+  BUSY: "BUSY",
+  NOT_ACCEPTING_WORK: "NOT_ACCEPTING_WORK"
+} as const;
+
+export type AvailabilityStatus = (typeof AVAILABILITY_STATUS)[keyof typeof AVAILABILITY_STATUS];

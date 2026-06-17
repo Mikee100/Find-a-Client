@@ -8,6 +8,26 @@ interface ApiErrorBody {
   };
 }
 
+export interface CreatedThread {
+  id: string;
+  participantAId: string;
+  participantBId: string;
+  projectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateThreadPayload {
+  recipientId: string;
+  projectId?: string;
+  initialMessage?: string;
+}
+
+export interface ProjectInquiryPayload {
+  type?: "ASK_QUESTION" | "OFFER_PROJECT";
+  message?: string;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   data: T;
@@ -72,15 +92,91 @@ export interface CurrentUserProfile {
   username: string;
   fullName: string;
   avatarUrl: string | null;
+  title: string | null;
   role: AppRole;
   bio: string | null;
   skills: string[];
+  primaryStack: string | null;
+  experienceLevel: "JUNIOR" | "MID" | "SENIOR";
+  availabilityStatus: "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK";
   location: string | null;
   contactEmail: string | null;
+  publicEmailEnabled: boolean;
+  educationEntries: string[];
+  certificationEntries: string[];
+  languageEntries: string[];
   phoneNumber: string | null;
   websiteUrl: string | null;
   githubUrl: string | null;
   linkedinUrl: string | null;
+}
+
+export interface DeveloperSearchItem {
+  id: string;
+  username: string;
+  fullName: string;
+  avatarUrl: string | null;
+  title: string | null;
+  bio: string | null;
+  skills: string[];
+  primaryStack: string | null;
+  experienceLevel: "JUNIOR" | "MID" | "SENIOR";
+  availabilityStatus: "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK";
+  location: string | null;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  linkedinUrl: string | null;
+  projectCount: number;
+  profileCompleteness: number;
+  score: number;
+  scoreBreakdown: {
+    completeness: number;
+    skillMatches: number;
+    requestedSkills: number;
+    projectEngagement: number;
+  };
+  updatedAt: string;
+}
+
+export interface PublicDeveloperProfile {
+  id: string;
+  username: string;
+  fullName: string;
+  avatarUrl: string | null;
+  title: string | null;
+  bio: string | null;
+  skills: string[];
+  primaryStack: string | null;
+  experienceLevel: "JUNIOR" | "MID" | "SENIOR";
+  availabilityStatus: "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK";
+  location: string | null;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  linkedinUrl: string | null;
+  contactEmail: string | null;
+  projects: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    shortDescription: string;
+    techStack: string[];
+    likeCount: number;
+    viewCount: number;
+    inquiryCount: number;
+    thumbnailUrl: string | null;
+    backgroundUrl: string | null;
+    demoUrl: string | null;
+    createdAt: string;
+  }>;
+}
+
+export interface SearchDevelopersParams {
+  q?: string;
+  skills?: string[];
+  experienceLevel?: "JUNIOR" | "MID" | "SENIOR";
+  availabilityStatus?: "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK";
+  location?: string;
+  limit?: number;
 }
 
 export type ProjectCategory =
@@ -204,12 +300,28 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+export interface ProfileCompleteness {
+  percentage: number;
+  completedFields: number;
+  totalFields: number;
+  missingFields: string[];
+  nextAction: string | null;
+}
+
 export interface UpdateProfilePayload {
   fullName?: string;
+  title?: string;
   bio?: string;
   skills?: string[];
+  primaryStack?: string;
+  experienceLevel?: "JUNIOR" | "MID" | "SENIOR";
+  availabilityStatus?: "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK";
   location?: string;
   contactEmail?: string;
+  publicEmailEnabled?: boolean;
+  educationEntries?: string[];
+  certificationEntries?: string[];
+  languageEntries?: string[];
   phoneNumber?: string;
   websiteUrl?: string;
   githubUrl?: string;
@@ -456,6 +568,46 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile> {
   return requestJson<CurrentUserProfile>("GET", "/users/me");
 }
 
+export async function searchDevelopers(params: SearchDevelopersParams = {}): Promise<DeveloperSearchItem[]> {
+  const searchParams = new URLSearchParams();
+
+  if (params.q?.trim()) {
+    searchParams.set("q", params.q.trim());
+  }
+
+  if (params.skills?.length) {
+    searchParams.set("skills", params.skills.join(","));
+  }
+
+  if (params.experienceLevel) {
+    searchParams.set("experienceLevel", params.experienceLevel);
+  }
+
+  if (params.availabilityStatus) {
+    searchParams.set("availabilityStatus", params.availabilityStatus);
+  }
+
+  if (params.location?.trim()) {
+    searchParams.set("location", params.location.trim());
+  }
+
+  if (params.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString ? `/users/developers/search?${queryString}` : "/users/developers/search";
+  return requestJson<DeveloperSearchItem[]>("GET", path);
+}
+
+export async function getDeveloperPublicProfile(username: string): Promise<PublicDeveloperProfile> {
+  return requestJson<PublicDeveloperProfile>("GET", `/users/${encodeURIComponent(username)}`);
+}
+
+export async function getProfileCompleteness(): Promise<ProfileCompleteness> {
+  return requestJson<ProfileCompleteness>("GET", "/users/me/completeness");
+}
+
 export async function createProject(payload: CreateProjectPayload): Promise<ProjectResponse> {
   return requestJson<ProjectResponse, CreateProjectPayload>("POST", "/projects", { body: payload });
 }
@@ -490,6 +642,18 @@ export async function getMyProjects(): Promise<MyProjectListItem[]> {
 
 export async function getMessageThreads(): Promise<ThreadSummary[]> {
   return requestJson<ThreadSummary[]>("GET", "/messages/threads");
+}
+
+export async function createMessageThread(payload: CreateThreadPayload): Promise<CreatedThread> {
+  return requestJson<CreatedThread, CreateThreadPayload>("POST", "/messages/threads", { body: payload });
+}
+
+export async function trackProjectInquiry(slug: string, payload: ProjectInquiryPayload): Promise<{ tracked: true; inquiryType: string; inquiryCount: number; messageAccepted: boolean }> {
+  return requestJson<{ tracked: true; inquiryType: string; inquiryCount: number; messageAccepted: boolean }, ProjectInquiryPayload>(
+    "POST",
+    `/projects/${encodeURIComponent(slug)}/inquiry`,
+    { body: payload }
+  );
 }
 
 export async function getNotifications(limit = 20): Promise<NotificationItem[]> {

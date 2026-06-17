@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ChevronRight, Menu, X, Cloud, Code2, ShieldCheck, Boxes, Cpu, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedGroup } from '@/components/ui/animated-group';
+import BrandLogo from '@/components/ui/brand-logo';
 import { cn } from '@/lib/utils';
 import { useScroll } from 'motion/react';
 
@@ -179,7 +180,7 @@ export const HeroHeader = () => {
           <div className="relative flex flex-wrap items-center justify-between gap-6 py-3 lg:gap-0 lg:py-4">
             <div className="flex w-full items-center justify-between gap-12 lg:w-auto">
               <Link href="/" aria-label="home" className="flex items-center space-x-2">
-                <Logo />
+                <BrandLogo showText={false} imageClassName="h-9 w-9 rounded-lg" />
               </Link>
 
               <button
@@ -236,10 +237,3 @@ export const HeroHeader = () => {
   );
 };
 
-const Logo = ({ className }: { className?: string }) => {
-  return (
-    <div className={cn('text-sm font-semibold tracking-tight text-white', className)}>
-      find<span className="text-white/30">.</span>a<span className="text-white/30">.</span>client
-    </div>
-  );
-};
