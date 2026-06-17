@@ -62,6 +62,8 @@ model User {
   role          UserRole   @default(DEVELOPER)
   skills        String[]
   location      String?
+  contactEmail  String?
+  phoneNumber   String?
   websiteUrl    String?
   githubUrl     String?
   linkedinUrl   String?

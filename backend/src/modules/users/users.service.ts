@@ -19,6 +19,8 @@ export class UsersService {
         bio: true,
         skills: true,
         location: true,
+        contactEmail: true,
+        phoneNumber: true,
         websiteUrl: true,
         githubUrl: true,
         linkedinUrl: true

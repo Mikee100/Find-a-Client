@@ -15,7 +15,7 @@ function getRedirectPath(role: AppRole): string {
 		return "/client/projects/new?onboarding=1";
 	}
 
-	return "/developer/settings?onboarding=1";
+	return "/developers/settings?onboarding=1";
 }
 
 export default function LoginPage() {

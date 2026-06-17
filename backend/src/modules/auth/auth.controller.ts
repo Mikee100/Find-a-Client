@@ -165,6 +165,7 @@ export class AuthController {
     return { loggedOutAll: true as const };
   }
 
+  @Throttle({ default: { limit: 240, ttl: 60_000 } })
   @Get("session")
   session(@CurrentUser() user: CurrentUserPayload) {
     return user;

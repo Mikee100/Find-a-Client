@@ -13,101 +13,349 @@ import {
   logoutEverywhere,
 } from "@/lib/api";
 import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
-import {
-  Badge,
-  HeaderMetrics,
-  SectionHeading,
-} from "@/features/developer/dashboard/dashboard-ui";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────
 
 type Thread = { id: string; unreadCount: number; updatedAt: string; preview: string };
-type FocusMode = "pipeline" | "delivery" | "profile";
 
-// ─── Mock / placeholder data (replace with real API calls later) ──────────────
+// ─── Mock data ──────────────────────────────────────────────────────────────
 
 const MOCK_EARNINGS = [
-  { month: "Jan", amount: 2400 },
-  { month: "Feb", amount: 3100 },
-  { month: "Mar", amount: 2800 },
-  { month: "Apr", amount: 4200 },
-  { month: "May", amount: 3900 },
-  { month: "Jun", amount: 5100 },
+  { month: "J", amount: 2400 },
+  { month: "F", amount: 3100 },
+  { month: "M", amount: 2800 },
+  { month: "A", amount: 4200 },
+  { month: "M", amount: 3900 },
+  { month: "J", amount: 5100 },
 ];
 
 const MOCK_SKILLS = [
   { label: "React", level: 92 },
   { label: "Node.js", level: 85 },
-  { label: "PostgreSQL", level: 78 },
   { label: "TypeScript", level: 88 },
+  { label: "PostgreSQL", level: 78 },
   { label: "Docker", level: 65 },
 ];
 
 const MOCK_PROJECTS = [
   { id: "1", title: "E-commerce Storefront", status: "Live", tech: ["Next.js", "Stripe"], views: 284, saves: 31 },
-  { id: "2", title: "SaaS Analytics Dashboard", status: "Live", tech: ["React", "D3"], views: 196, saves: 18 },
+  { id: "2", title: "SaaS Analytics Dashboard", status: "Live", tech: ["React", "D3.js"], views: 196, saves: 18 },
   { id: "3", title: "Mobile Booking App", status: "Draft", tech: ["Flutter", "Firebase"], views: 0, saves: 0 },
 ];
 
 const MOCK_REVIEWS = [
-  { id: "r1", client: "Miriam A.", avatar: "MA", rating: 5, text: "Delivered on time, clean code, great communication throughout.", date: "2 weeks ago" },
-  { id: "r2", client: "Tom R.", avatar: "TR", rating: 5, text: "Exactly what we needed. Will hire again.", date: "1 month ago" },
-  { id: "r3", client: "Priya S.", avatar: "PS", rating: 4, text: "Very professional and responsive. Minor revision needed but sorted quickly.", date: "2 months ago" },
+  { id: "r1", client: "Miriam A.", initials: "MA", rating: 5, text: "Delivered on time, clean code, great communication throughout.", date: "2 weeks ago" },
+  { id: "r2", client: "Tom R.", initials: "TR", rating: 5, text: "Exactly what we needed. Will hire again without hesitation.", date: "1 month ago" },
+  { id: "r3", client: "Priya S.", initials: "PS", rating: 4, text: "Very professional. Minor revision needed but sorted quickly.", date: "2 months ago" },
 ];
 
 const MOCK_ACTIVITY = [
-  { id: "a1", icon: "MSG", text: "New inquiry from a client in London", time: "5 min ago", type: "inquiry" },
-  { id: "a2", icon: "SAVE", text: "Your project 'SaaS Dashboard' was saved", time: "22 min ago", type: "save" },
-  { id: "a3", icon: "REV", text: "New 5-star review received", time: "2 hrs ago", type: "review" },
-  { id: "a4", icon: "DEAL", text: "Deal interest signal on E-commerce project", time: "Yesterday", type: "deal" },
-  { id: "a5", icon: "VIEW", text: "Profile viewed 14 times today", time: "Today", type: "view" },
+  { id: "a1", label: "INQ", text: "New inquiry from a client in London", time: "5m ago", hot: true },
+  { id: "a2", label: "SAVE", text: "'SaaS Dashboard' was saved by a client", time: "22m ago", hot: false },
+  { id: "a3", label: "REV", text: "New 5-star review received", time: "2h ago", hot: false },
+  { id: "a4", label: "DEAL", text: "Deal interest on E-commerce project", time: "Yesterday", hot: false },
+  { id: "a5", label: "VIEW", text: "Profile viewed 14 times today", time: "Today", hot: false },
 ];
 
 const MOCK_CALENDAR = [
-  { id: "c1", title: "Discovery call — Tom R.", time: "Today, 3:00 PM", type: "call" },
-  { id: "c2", title: "Proposal deadline — Miriam A.", time: "Tomorrow, 11:59 PM", type: "deadline" },
-  { id: "c3", title: "Project handoff — Priya S.", time: "Jun 20, 2:00 PM", type: "handoff" },
+  { id: "c1", title: "Discovery call — Tom R.", when: "Today · 3:00 PM", accent: "#38bdf8" },
+  { id: "c2", title: "Proposal deadline — Miriam A.", when: "Tomorrow · 11:59 PM", accent: "#f87171" },
+  { id: "c3", title: "Handoff — Priya S.", when: "Jun 20 · 2:00 PM", accent: "#34d399" },
 ];
 
-const MOCK_PROFILE_COMPLETION = [
+const MOCK_PROFILE = [
   { label: "Bio written", done: true },
   { label: "Profile photo", done: false },
-  { label: "3+ projects published", done: true },
+  { label: "3+ projects live", done: true },
   { label: "Hourly rate set", done: true },
   { label: "Skills added", done: true },
   { label: "First testimonial", done: false },
 ];
 
-// ─── Availability Toggle ──────────────────────────────────────────────────────
+// ─── Tokens ─────────────────────────────────────────────────────────────────
+// Background: #0d0d0f  Surface: #141417  Border: #242428
+// Accent: #7c6fff (violet)  Green: #22c55e  Amber: #f59e0b  Red: #ef4444
+// Text-primary: #f4f4f5  Text-secondary: #71717a  Text-muted: #3f3f46
 
-function AvailabilityToggle() {
-  const [status, setStatus] = useState<"open" | "busy" | "away">("open");
-  const options: { value: "open" | "busy" | "away"; label: string; color: string }[] = [
-    { value: "open", label: "Open to work", color: "bg-emerald-500" },
-    { value: "busy", label: "Busy", color: "bg-amber-500" },
-    { value: "away", label: "Away", color: "bg-neutral-400" },
-  ];
-  const current = options.find((o) => o.value === status)!;
+// ─── Shared atoms ───────────────────────────────────────────────────────────
+
+function Pill({ children, color = "neutral" }: { children: React.ReactNode; color?: "violet" | "green" | "amber" | "red" | "neutral" }) {
+  const c = {
+    violet: "bg-violet-950/60 text-violet-300 border-violet-800/60",
+    green: "bg-emerald-950/60 text-emerald-400 border-emerald-800/60",
+    amber: "bg-amber-950/60 text-amber-400 border-amber-800/60",
+    red: "bg-red-950/60 text-red-400 border-red-800/60",
+    neutral: "bg-slate-200/60 text-slate-600 border-zinc-700/60",
+  }[color];
+  return <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${c}`}>{children}</span>;
+}
+
+function PanelLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-emerald-200/70 bg-[linear-gradient(160deg,#ecfdf5_0%,#ffffff_60%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(16,185,129,0.14)]">
-      <SectionHeading title="Availability control" />
-      <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-white/90 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className={`h-2.5 w-2.5 rounded-full ${current.color}`} />
-          <span className="text-sm font-semibold text-neutral-800">{current.label}</span>
-        </div>
-        <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-emerald-700">Live</span>
+    <p className="mb-3 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">{children}</p>
+  );
+}
+
+function Divider() {
+  return <div className="my-3 border-t border-slate-200" />;
+}
+
+// ─── LEFT: Pipeline ─────────────────────────────────────────────────────────
+
+function Pipeline({ inquiry, proposal, contracts }: { inquiry: Thread[]; proposal: Thread[]; contracts: NotificationItem[] }) {
+  const stages = [
+    { key: "inquiry", label: "Inquiry", count: inquiry.length, dot: "bg-amber-400", items: inquiry },
+    { key: "proposal", label: "Proposal", count: proposal.length, dot: "bg-violet-400", items: proposal },
+    { key: "contract", label: "Contract", count: contracts.length, dot: "bg-emerald-400", items: contracts },
+  ];
+
+  return (
+    <div>
+      <PanelLabel>Pipeline</PanelLabel>
+      {/* Stage header row */}
+      <div className="mb-3 flex items-center gap-0">
+        {stages.map((s, i) => (
+          <div key={s.key} className="flex flex-1 items-center">
+            <div className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{s.label}</span>
+              </div>
+              <span className="text-xl font-bold text-slate-900">{s.count}</span>
+            </div>
+            {i < stages.length - 1 && (
+              <div className="mx-1 text-slate-400 text-sm">›</div>
+            )}
+          </div>
+        ))}
       </div>
-      <div className="mt-2 grid grid-cols-3 gap-1.5">
-        {options.map((o) => (
+
+      {/* Thread cards */}
+      <div className="space-y-1.5">
+        {inquiry.length === 0 && proposal.length === 0 && contracts.length === 0 && (
+          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-[11px] text-slate-500">
+            No active threads yet. Your pipeline will populate as clients reach out.
+          </div>
+        )}
+        {(inquiry.slice(0, 2)).map((t) => (
+          <div key={t.id} className="group flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-amber-800/60 hover:bg-slate-50 transition-colors cursor-pointer">
+            <span className="mt-0.5 rounded-sm bg-amber-950/80 px-1 py-0.5 text-[9px] font-bold text-amber-400 shrink-0">INQ</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-slate-700 line-clamp-1 font-medium">Thread {t.id.slice(0, 8)}</p>
+              <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{t.preview || "No preview"}</p>
+            </div>
+            <span className="text-[10px] text-slate-500 shrink-0">{t.unreadCount > 0 ? `${t.unreadCount} new` : ""}</span>
+          </div>
+        ))}
+        {(proposal.slice(0, 2)).map((t) => (
+          <div key={t.id} className="group flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-violet-800/60 hover:bg-slate-50 transition-colors cursor-pointer">
+            <span className="mt-0.5 rounded-sm bg-violet-950/80 px-1 py-0.5 text-[9px] font-bold text-violet-400 shrink-0">PRO</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-slate-700 line-clamp-1 font-medium">Thread {t.id.slice(0, 8)}</p>
+              <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{t.preview || "No preview"}</p>
+            </div>
+            <span className="text-[10px] text-slate-500 shrink-0">{new Date(t.updatedAt).toLocaleDateString()}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── LEFT: Projects ─────────────────────────────────────────────────────────
+
+function Projects({ saved, savedState }: { saved: Array<{ id: string; project: { slug: string; title: string } }>; savedState: string }) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <PanelLabel>My projects</PanelLabel>
+        <Link href="/developer/projects/new" className="text-[10px] font-semibold text-violet-400 hover:text-violet-300">+ New</Link>
+      </div>
+      <div className="space-y-1.5">
+        {MOCK_PROJECTS.map((p) => (
+          <div key={p.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-semibold text-slate-800 truncate">{p.title}</p>
+                <Pill color={p.status === "Live" ? "green" : "neutral"}>{p.status}</Pill>
+              </div>
+              <div className="mt-1 flex gap-1.5">
+                {p.tech.map((t) => <span key={t} className="text-[9px] text-slate-500 bg-slate-200 rounded px-1.5 py-0.5">{t}</span>)}
+                {p.status === "Live" && <span className="ml-auto text-[9px] text-slate-500">{p.views}v · {p.saves}s</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {saved.length > 0 && (
+        <>
+          <Divider />
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Saved opportunities</span>
+            <Link href="/projects" className="text-[10px] text-violet-400 hover:text-violet-300">Browse</Link>
+          </div>
+          {savedState && <p className="text-[10px] text-slate-500 mb-2">{savedState}</p>}
+          <div className="space-y-1">
+            {saved.map((s) => (
+              <a key={s.id} href={`/projects/${s.project.slug}`} className="block rounded-lg border border-slate-200 px-2.5 py-2 text-[11px] font-medium text-violet-400 hover:text-violet-300 hover:bg-slate-50 transition-colors">
+                {s.project.title}
+              </a>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── CENTER: Earnings ────────────────────────────────────────────────────────
+
+function Earnings() {
+  const max = Math.max(...MOCK_EARNINGS.map((e) => e.amount));
+  const total = MOCK_EARNINGS.reduce((s, e) => s + e.amount, 0);
+  const last = MOCK_EARNINGS[MOCK_EARNINGS.length - 1];
+  const prev = MOCK_EARNINGS[MOCK_EARNINGS.length - 2];
+  const trend = ((last.amount - prev.amount) / prev.amount * 100).toFixed(0);
+  const isUp = last.amount >= prev.amount;
+
+  return (
+    <div>
+      <PanelLabel>Revenue runway</PanelLabel>
+      <div className="mb-4 flex items-end gap-4">
+        <div>
+          <p className="text-3xl font-bold tracking-tight text-slate-900">${total.toLocaleString()}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">6-month total</p>
+        </div>
+        <div className={`mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold ${isUp ? "bg-emerald-950/60 text-emerald-400" : "bg-red-950/60 text-red-400"}`}>
+          <span>{isUp ? "↑" : "↓"}</span>
+          <span>{Math.abs(Number(trend))}% MoM</span>
+        </div>
+      </div>
+
+      {/* Bar chart */}
+      <div className="flex items-end gap-1.5 h-16">
+        {MOCK_EARNINGS.map((e) => (
+          <div key={e.month} className="flex flex-1 flex-col items-center gap-1.5">
+            <div
+              className="w-full rounded-sm transition-all"
+              style={{
+                height: `${(e.amount / max) * 100}%`,
+                background: e.month === last.month
+                  ? "linear-gradient(to top, #7c6fff, #a78bfa)"
+                  : "#27272a",
+              }}
+              title={`$${e.amount}`}
+            />
+            <span className="text-[9px] font-medium text-slate-500">{e.month}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {[
+          { label: "Avg/mo", val: `$${Math.round(total / MOCK_EARNINGS.length).toLocaleString()}` },
+          { label: "Best mo", val: `$${Math.max(...MOCK_EARNINGS.map(e => e.amount)).toLocaleString()}` },
+          { label: "This mo", val: `$${last.amount.toLocaleString()}` },
+        ].map((item) => (
+          <div key={item.label} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-center">
+            <p className="text-[9px] text-slate-500 uppercase tracking-wide">{item.label}</p>
+            <p className="text-xs font-bold text-slate-800 mt-0.5">{item.val}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── CENTER: Activity ────────────────────────────────────────────────────────
+
+function Activity({ threads }: { threads: Thread[] }) {
+  const items = threads.length > 0
+    ? threads.map((t) => ({ id: t.id, label: "MSG", text: t.preview || "Thread update", time: new Date(t.updatedAt).toLocaleDateString(), hot: t.unreadCount > 0 }))
+    : MOCK_ACTIVITY;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <PanelLabel>Signal stream</PanelLabel>
+        <span className="flex items-center gap-1 text-[9px] text-emerald-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Live
+        </span>
+      </div>
+      <div className="space-y-1">
+        {items.slice(0, 7).map((item) => (
+          <div key={item.id} className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors ${item.hot ? "border border-violet-800/40 bg-violet-950/20" : "border border-slate-200 bg-slate-50 hover:bg-white"}`}>
+            <span className={`mt-0.5 rounded-sm px-1 py-0.5 text-[9px] font-bold shrink-0 ${item.hot ? "bg-violet-900 text-violet-300" : "bg-slate-200 text-slate-500"}`}>
+              {item.label}
+            </span>
+            <p className="flex-1 min-w-0 text-[11px] text-slate-600 line-clamp-1">{item.text}</p>
+            <span className="text-[9px] text-slate-400 shrink-0 whitespace-nowrap">{item.time}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── CENTER: Reviews ─────────────────────────────────────────────────────────
+
+function Reviews() {
+  const avg = (MOCK_REVIEWS.reduce((s, r) => s + r.rating, 0) / MOCK_REVIEWS.length).toFixed(1);
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <PanelLabel>Client reviews</PanelLabel>
+        <div className="flex items-center gap-1.5">
+          <span className="text-amber-400 text-xs">★</span>
+          <span className="text-xs font-bold text-slate-800">{avg}</span>
+          <span className="text-[10px] text-slate-500">/ {MOCK_REVIEWS.length} reviews</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {MOCK_REVIEWS.map((r) => (
+          <div key={r.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-600 shrink-0">{r.initials}</div>
+              <span className="text-[11px] font-semibold text-slate-700">{r.client}</span>
+              <span className="ml-auto text-[10px] text-amber-400">{"★".repeat(r.rating)}</span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">{r.text}</p>
+            <p className="mt-1.5 text-[9px] text-slate-400">{r.date}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── RIGHT: Availability ─────────────────────────────────────────────────────
+
+function Availability() {
+  const [status, setStatus] = useState<"open" | "busy" | "away">("open");
+  const opts = [
+    { val: "open" as const, label: "Open", dot: "bg-emerald-400", active: "border-emerald-700 bg-emerald-950/40 text-emerald-300" },
+    { val: "busy" as const, label: "Busy", dot: "bg-amber-400", active: "border-amber-700 bg-amber-950/40 text-amber-300" },
+    { val: "away" as const, label: "Away", dot: "bg-zinc-500", active: "border-zinc-600 bg-slate-200 text-slate-700" },
+  ];
+  const cur = opts.find((o) => o.val === status)!;
+
+  return (
+    <div>
+      <PanelLabel>Availability</PanelLabel>
+      <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+        <span className={`h-2 w-2 rounded-full ${cur.dot}`} />
+        <span className="text-xs font-semibold text-slate-800 capitalize">{status === "open" ? "Open to work" : status}</span>
+        <span className="ml-auto text-[9px] text-slate-500">Visible to clients</span>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {opts.map((o) => (
           <button
-            key={o.value}
-            onClick={() => setStatus(o.value)}
-            className={`rounded-lg border py-1.5 text-[11px] font-semibold transition-colors ${
-              status === o.value
-                ? "border-emerald-500 bg-emerald-100 text-emerald-800"
-                : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
-            }`}
+            key={o.val}
+            onClick={() => setStatus(o.val)}
+            className={`rounded-lg border py-2 text-[11px] font-semibold transition-colors ${status === o.val ? o.active : "border-slate-200 bg-white text-slate-500 hover:text-slate-600 hover:border-slate-300"}`}
           >
             {o.label}
           </button>
@@ -117,283 +365,41 @@ function AvailabilityToggle() {
   );
 }
 
-// ─── Mini Earnings Chart ──────────────────────────────────────────────────────
+// ─── RIGHT: Profile ring + checklist ─────────────────────────────────────────
 
-function EarningsChart() {
-  const max = Math.max(...MOCK_EARNINGS.map((e) => e.amount));
-  const total = MOCK_EARNINGS.reduce((s, e) => s + e.amount, 0);
-  const avg = Math.round(total / MOCK_EARNINGS.length);
-  const peak = MOCK_EARNINGS.reduce((best, curr) => (curr.amount > best.amount ? curr : best), MOCK_EARNINGS[0]);
+function ProfileReadiness() {
+  const done = MOCK_PROFILE.filter((i) => i.done).length;
+  const pct = Math.round((done / MOCK_PROFILE.length) * 100);
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-cyan-200/70 bg-[linear-gradient(160deg,#ecfeff_0%,#ffffff_44%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(14,116,144,0.15)]">
-      <SectionHeading
-        title="Revenue runway"
-        action={<span className="rounded-md bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700">Last 6 months</span>}
-      />
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-cyan-200 bg-white/85 px-2.5 py-2">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-neutral-500">Total</p>
-          <p className="text-sm font-bold text-neutral-900">${total.toLocaleString()}</p>
-        </div>
-        <div className="rounded-lg border border-cyan-200 bg-white/85 px-2.5 py-2">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-neutral-500">Avg / mo</p>
-          <p className="text-sm font-bold text-neutral-900">${avg.toLocaleString()}</p>
-        </div>
-        <div className="rounded-lg border border-cyan-200 bg-white/85 px-2.5 py-2">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-neutral-500">Peak</p>
-          <p className="text-sm font-bold text-neutral-900">{peak.month}</p>
-        </div>
-      </div>
-
-      <p className="mb-4 mt-2 text-[11px] text-neutral-500">Projected earnings trend. Replace with live billing metrics when available.</p>
-      <div className="flex items-end gap-1.5 h-20">
-        {MOCK_EARNINGS.map((e) => (
-          <div key={e.month} className="flex flex-1 flex-col items-center gap-1">
-            <div
-              className="w-full cursor-default rounded-t-md bg-linear-to-t from-teal-600 to-cyan-400 transition-colors hover:from-teal-500 hover:to-cyan-300"
-              style={{ height: `${(e.amount / max) * 100}%` }}
-              title={`$${e.amount}`}
-            />
-            <span className="text-[10px] font-medium text-neutral-500">{e.month}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Skill Proficiency ────────────────────────────────────────────────────────
-
-function SkillBars() {
-  return (
-    <div className="rounded-2xl border border-emerald-200/70 bg-[linear-gradient(165deg,#ecfeff_0%,#ffffff_62%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(20,184,166,0.14)]">
-      <SectionHeading
-        title="Skill strength"
-        action={
-          <button className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-600">Tune</button>
-        }
-      />
-      <ul className="mt-3 space-y-3">
-        {MOCK_SKILLS.map((s) => (
-          <li key={s.label}>
-            <div className="mb-1 flex justify-between text-[11px]">
-              <span className="font-medium text-neutral-700">{s.label}</span>
-              <span className="text-neutral-400">{s.level}%</span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-white">
-              <div
-                className="h-1.5 rounded-full bg-linear-to-r from-emerald-500 to-cyan-400"
-                style={{ width: `${s.level}%` }}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Project Showcase Panel ───────────────────────────────────────────────────
-
-function ProjectShowcase() {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur">
-      <SectionHeading
-        title="Active projects"
-        action={
-          <Link href="/developer/projects/new" className="text-[11px] font-semibold text-teal-700 hover:text-teal-600">
-            + New
-          </Link>
-        }
-      />
-      <ul className="mt-3 space-y-1.5">
-        {MOCK_PROJECTS.map((p) => (
-          <li key={p.id} className="rounded-xl border border-neutral-200 bg-neutral-50/80 px-3 py-2.5 transition-colors hover:bg-neutral-100">
-            <div className="flex items-center justify-between gap-2">
-              <p className="min-w-0 truncate text-xs font-semibold text-neutral-800">{p.title}</p>
-              <Badge color={p.status === "Live" ? "green" : "neutral"}>{p.status}</Badge>
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-neutral-500">
-              <span className="rounded-md bg-white px-1.5 py-0.5">{p.tech[0]}</span>
-              <span className="rounded-md bg-white px-1.5 py-0.5">{p.tech[1]}</span>
-              {p.status === "Live" ? <span className="ml-auto">{p.views} views · {p.saves} saves</span> : <span className="ml-auto">Draft</span>}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Reviews Panel ────────────────────────────────────────────────────────────
-
-function ReviewsPanel() {
-  const avg = (MOCK_REVIEWS.reduce((s, r) => s + r.rating, 0) / MOCK_REVIEWS.length).toFixed(1);
-  return (
-    <div className="rounded-2xl border border-indigo-200/70 bg-[linear-gradient(160deg,#eef2ff_0%,#ffffff_48%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(79,70,229,0.14)]">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-neutral-900">Client sentiment</h2>
-          <p className="text-[11px] text-neutral-500">★ {avg} avg · {MOCK_REVIEWS.length} testimonials</p>
-        </div>
-        <Link href="/developer/reviews" className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-600">View all</Link>
-      </div>
-      <ul className="space-y-2">
-        {MOCK_REVIEWS.map((r) => (
-          <li key={r.id} className="rounded-xl border border-indigo-200/70 bg-white/90 p-2.5">
-            <div className="mb-1 flex items-center gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">{r.avatar}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold text-neutral-800">{r.client}</p>
-                <p className="text-[10px] text-neutral-400">{r.date}</p>
-              </div>
-              <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{"★".repeat(r.rating)}</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-neutral-600">{r.text}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Profile Completion ───────────────────────────────────────────────────────
-
-function ProfileCompletion() {
-  const done = MOCK_PROFILE_COMPLETION.filter((i) => i.done).length;
-  const pct = Math.round((done / MOCK_PROFILE_COMPLETION.length) * 100);
-  return (
-    <div className="rounded-2xl border border-emerald-200/70 bg-[linear-gradient(165deg,#f0fdf4_0%,#ffffff_58%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(34,197,94,0.14)]">
-      <SectionHeading title="Profile optimization" />
-      <div className="mt-2 flex items-center gap-3 rounded-xl border border-emerald-200 bg-white/90 px-3 py-2.5">
-        <div className="relative h-12 w-12 shrink-0">
-          <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
-            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+    <div>
+      <PanelLabel>Profile readiness</PanelLabel>
+      <div className="mb-3 flex items-center gap-3">
+        {/* ring */}
+        <div className="relative h-14 w-14 shrink-0">
+          <svg viewBox="0 0 36 36" className="h-14 w-14 -rotate-90">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="#27272a" strokeWidth="3.5" />
             <circle
-              cx="18" cy="18" r="15.9" fill="none"
-              stroke="#0f766e" strokeWidth="3"
-              strokeDasharray={`${pct} ${100 - pct}`}
+              cx="18" cy="18" r="14" fill="none"
+              stroke="#7c6fff" strokeWidth="3.5"
+              strokeDasharray={`${(pct / 100) * 87.96} ${87.96 - (pct / 100) * 87.96}`}
               strokeLinecap="round"
             />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-neutral-700">{pct}%</span>
+          <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-slate-800">{pct}%</span>
         </div>
-        <p className="text-[11px] leading-relaxed text-neutral-600">Complete these items to rank higher and convert more profile views.</p>
+        <div>
+          <p className="text-xs font-semibold text-slate-700">{done}/{MOCK_PROFILE.length} complete</p>
+          <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">Complete your profile to rank higher in search.</p>
+        </div>
       </div>
-      <ul className="mt-3 space-y-1.5">
-        {MOCK_PROFILE_COMPLETION.map((item) => (
-          <li key={item.label} className="flex items-center gap-2 text-[11px]">
-            <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${item.done ? "bg-emerald-100 text-emerald-700" : "bg-neutral-100 text-neutral-400"}`}>
+      <div className="space-y-1.5">
+        {MOCK_PROFILE.map((item) => (
+          <div key={item.label} className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 ${item.done ? "opacity-50" : "border border-slate-200 bg-white"}`}>
+            <span className={`h-3.5 w-3.5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${item.done ? "bg-emerald-900 text-emerald-400" : "bg-slate-200 text-slate-500"}`}>
               {item.done ? "✓" : "○"}
             </span>
-            <span className={item.done ? "text-neutral-600 line-through" : "text-neutral-800"}>{item.label}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Live Activity Feed ───────────────────────────────────────────────────────
-
-function ActivityFeed({ threads }: { threads: Thread[] }) {
-  const typeStyles: Record<string, string> = {
-    inquiry: "bg-sky-100 text-sky-700",
-    save: "bg-indigo-100 text-indigo-700",
-    review: "bg-amber-100 text-amber-700",
-    deal: "bg-emerald-100 text-emerald-700",
-    view: "bg-neutral-200 text-neutral-700",
-    thread: "bg-cyan-100 text-cyan-700",
-  };
-
-  const items = threads.length > 0
-    ? threads.map((t) => ({ id: t.id, icon: "MSG", text: t.preview, time: new Date(t.updatedAt).toLocaleDateString(), type: "thread" }))
-    : MOCK_ACTIVITY;
-
-  return (
-    <div className="rounded-2xl border border-amber-200/70 bg-[linear-gradient(170deg,#fff7ed_0%,#ffffff_55%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(245,158,11,0.15)]">
-      <SectionHeading title="Signal stream" action={<Badge color="amber">Realtime</Badge>} />
-      <ul className="mt-3 space-y-1.5">
-        {items.slice(0, 6).map((item) => (
-          <li key={item.id} className="flex items-start gap-2.5 rounded-lg border border-amber-200/70 bg-white/90 px-2.5 py-2 transition-colors hover:bg-amber-50/40">
-            <span className={`mt-0.5 inline-flex h-5 min-w-8 items-center justify-center rounded-md px-1 text-[9px] font-bold tracking-[0.06em] ${typeStyles[item.type] ?? typeStyles.thread}`}>
-              {item.icon}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="line-clamp-2 text-[11px] leading-relaxed text-neutral-800">{item.text}</p>
-              <p className="mt-0.5 text-[10px] font-medium text-amber-700/80">{item.time}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Upcoming Calendar ────────────────────────────────────────────────────────
-
-function UpcomingCalendar() {
-  const typeColor: Record<string, string> = {
-    call: "border-l-sky-400",
-    deadline: "border-l-rose-400",
-    handoff: "border-l-emerald-400",
-  };
-  return (
-    <div className="rounded-2xl border border-sky-200/70 bg-[linear-gradient(165deg,#eff6ff_0%,#ffffff_58%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(59,130,246,0.14)]">
-      <SectionHeading
-        title="Upcoming"
-        action={<button className="text-[11px] font-semibold text-sky-700 hover:text-sky-600">+ Add</button>}
-      />
-      <ul className="mt-3 space-y-1.5">
-        {MOCK_CALENDAR.map((c) => (
-          <li key={c.id} className={`rounded-lg border border-sky-200/70 border-l-4 bg-white/90 px-3 py-2 ${typeColor[c.type]}`}>
-            <p className="text-[11px] font-semibold text-neutral-800">{c.title}</p>
-            <p className="mt-0.5 text-[10px] text-sky-700/80">{c.time}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─── Proposal Tracker ────────────────────────────────────────────────────────
-
-function ProposalTracker({ inquiry, proposal, contracts }: { inquiry: Thread[]; proposal: Thread[]; contracts: NotificationItem[] }) {
-  const stages = [
-    { label: "Inquiry", count: inquiry.length, color: "bg-amber-400", items: inquiry, borderColor: "border-amber-200", bgColor: "bg-amber-50", textColor: "text-amber-900" },
-    { label: "Proposal", count: proposal.length, color: "bg-sky-400", items: proposal, borderColor: "border-sky-200", bgColor: "bg-sky-50", textColor: "text-sky-900" },
-    { label: "Contract", count: contracts.length, color: "bg-emerald-400", items: contracts, borderColor: "border-emerald-200", bgColor: "bg-emerald-50", textColor: "text-emerald-900" },
-  ];
-
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <h2 className="text-sm font-semibold text-neutral-900">Pipeline ops</h2>
-        <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-neutral-400">Live stages</span>
-      </div>
-      <div className="space-y-2">
-        {stages.map((stage) => (
-          <div key={stage.label} className={`rounded-xl border ${stage.borderColor} ${stage.bgColor} p-2.5`}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`h-2 w-2 rounded-full ${stage.color}`} />
-              <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${stage.textColor}`}>{stage.label}</h3>
-              <span className={`ml-auto rounded-md border ${stage.borderColor} bg-white px-1.5 py-0.5 text-[10px] font-bold ${stage.textColor}`}>{stage.count}</span>
-            </div>
-            <ul className="space-y-1">
-              {stage.items.length === 0 && (
-                <li className={`rounded-md border ${stage.borderColor} bg-white px-2 py-1.5 text-[11px] ${stage.textColor} opacity-70`}>No items yet.</li>
-              )}
-              {(stage.items as Array<{ id: string; preview?: string; updatedAt?: string; createdAt?: string; unreadCount?: number; isRead?: boolean }>).slice(0, 3).map((item) => (
-                <li key={item.id} className={`rounded-md border ${stage.borderColor} bg-white px-2 py-1.5`}>
-                  <p className={`text-[10px] font-semibold ${stage.textColor}`}>
-                    {item.preview ? `Thread ${item.id.slice(0, 6)}` : "Deal interest"}
-                  </p>
-                  <p className={`mt-0.5 line-clamp-1 text-[10px] ${stage.textColor} opacity-75`}>
-                    {item.preview ?? new Date(item.createdAt ?? "").toLocaleDateString()}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <span className={`text-[11px] ${item.done ? "text-slate-500 line-through" : "text-slate-600"}`}>{item.label}</span>
           </div>
         ))}
       </div>
@@ -401,187 +407,161 @@ function ProposalTracker({ inquiry, proposal, contracts }: { inquiry: Thread[]; 
   );
 }
 
-// ─── Quick Actions ────────────────────────────────────────────────────────────
+// ─── RIGHT: Discovery score ───────────────────────────────────────────────────
 
-function QuickActions({ onLogout, onLogoutEverywhere, pending }: { onLogout: () => void; onLogoutEverywhere: () => void; pending: boolean }) {
-  const actions = [
-    { label: "Browse projects", href: "/projects", style: "border border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-neutral-100" },
-    { label: "My profile", href: "/developer/settings", style: "border border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-neutral-100" },
-    { label: "New project", href: "/developer/projects/new", style: "border border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-neutral-100" },
-    { label: "Messages", href: "/developer/messages", style: "border border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-neutral-100" },
-    { label: "Client workspace", href: "/client/dashboard", style: "bg-teal-700 text-white hover:bg-teal-600" },
-    { label: "Admin panel", href: "/admin/dashboard", style: "border border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-neutral-100" },
+function DiscoveryScore() {
+  const score = 74;
+  return (
+    <div>
+      <PanelLabel>Discovery score</PanelLabel>
+      <div className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] text-slate-500">Ranking strength</span>
+          <span className="text-xs font-bold text-slate-800">{score}<span className="text-slate-500">/100</span></span>
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-slate-200">
+          <div
+            className="h-1.5 rounded-full"
+            style={{ width: `${score}%`, background: "linear-gradient(to right, #7c6fff, #818cf8)" }}
+          />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {[
+          "Add a profile video (+2× visibility)",
+          "Reply within 24h to all inquiries",
+          "Publish at least one live demo link",
+        ].map((tip) => (
+          <div key={tip} className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+            <span className="mt-0.5 text-amber-500 text-[10px] shrink-0">→</span>
+            <p className="text-[10px] text-slate-500 leading-relaxed">{tip}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── RIGHT: Skills ────────────────────────────────────────────────────────────
+
+function Skills() {
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <PanelLabel>Skill stack</PanelLabel>
+        <button className="text-[10px] text-violet-400 hover:text-violet-300">Edit</button>
+      </div>
+      <div className="space-y-2.5">
+        {MOCK_SKILLS.map((s) => (
+          <div key={s.label}>
+            <div className="flex justify-between text-[10px] mb-1">
+              <span className="text-slate-600 font-medium">{s.label}</span>
+              <span className="text-slate-400">{s.level}</span>
+            </div>
+            <div className="h-px w-full bg-slate-200 relative">
+              <div
+                className="h-px absolute top-0 left-0"
+                style={{ width: `${s.level}%`, background: "linear-gradient(to right, #7c6fff88, #7c6fff)" }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── RIGHT: Upcoming ─────────────────────────────────────────────────────────
+
+function Upcoming() {
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <PanelLabel>Upcoming</PanelLabel>
+        <button className="text-[10px] text-violet-400 hover:text-violet-300">+ Add</button>
+      </div>
+      <div className="space-y-1.5">
+        {MOCK_CALENDAR.map((c) => (
+          <div key={c.id} className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
+            <div className="mt-0.5 h-2 w-2 rounded-full shrink-0" style={{ background: c.accent }} />
+            <div>
+              <p className="text-[11px] font-medium text-slate-700">{c.title}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{c.when}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── RIGHT: Quick actions ─────────────────────────────────────────────────────
+
+function Actions({ onLogout, onLogoutEverywhere, pending }: { onLogout: () => void; onLogoutEverywhere: () => void; pending: boolean }) {
+  const links = [
+    { label: "Browse projects", href: "/projects" },
+    { label: "Edit profile", href: "/developers/settings" },
+    { label: "New project", href: "/developer/projects/new" },
+    { label: "Messages", href: "/developer/messages" },
+    { label: "Client workspace", href: "/client/dashboard" },
+    { label: "Admin panel", href: "/admin/dashboard" },
   ];
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur">
-      <SectionHeading title="Action hub" />
-      <div className="mt-3 grid grid-cols-2 gap-1.5">
-        {actions.map((a) => (
-          <Link key={a.href} href={a.href} className={`rounded-lg px-2.5 py-2 text-[11px] font-semibold transition-colors ${a.style}`}>
+    <div>
+      <PanelLabel>Quick nav</PanelLabel>
+      <div className="grid grid-cols-2 gap-1">
+        {links.map((a) => (
+          <Link
+            key={a.href}
+            href={a.href}
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+          >
             {a.label}
           </Link>
         ))}
         <button
           disabled={pending}
           onClick={onLogout}
-          className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50"
+          className="rounded-lg border border-red-900/60 bg-red-950/30 px-2.5 py-2 text-[11px] font-medium text-red-500 hover:bg-red-950/60 transition-colors disabled:opacity-40"
         >
           {pending ? "Signing out…" : "Sign out"}
         </button>
         <button
           disabled={pending}
           onClick={onLogoutEverywhere}
-          className="rounded-lg border border-rose-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 px-2.5 py-2 text-[11px] font-medium text-slate-500 hover:text-red-500 hover:border-red-900/60 transition-colors disabled:opacity-40"
         >
-          Sign out everywhere
+          All devices
         </button>
       </div>
     </div>
   );
 }
 
-// ─── Saved Projects ───────────────────────────────────────────────────────────
+// ─── TOP: Metric bar ─────────────────────────────────────────────────────────
 
-function SavedProjectsPanel({ projects, state }: { projects: Array<{ id: string; project: { slug: string; title: string } }>; state: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur">
-      <SectionHeading
-        title="Saved projects"
-        action={<Link href="/projects" className="text-[11px] font-semibold text-teal-700 hover:text-teal-600">Browse all</Link>}
-      />
-      {state && <p className="mt-1 text-[10px] text-neutral-400">{state}</p>}
-      {projects.length === 0 ? (
-        <div className="mt-3 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-3 text-[11px] text-neutral-500 text-center">
-          No saved projects yet. Browse listings and bookmark opportunities.
-        </div>
-      ) : (
-        <ul className="mt-3 space-y-1.5">
-          {projects.map((entry) => (
-            <li key={entry.id} className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2">
-              <a href={`/projects/${entry.project.slug}`} className="text-[11px] font-semibold text-teal-700 hover:text-teal-600">
-                {entry.project.title}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// ─── Visibility Score ─────────────────────────────────────────────────────────
-
-function VisibilityScore() {
-  const score = 74; // replace with real score later
-  const tips = [
-    "Add a profile video to boost visibility by 2×",
-    "Reply to all inquiries within 24 hours",
-    "Publish at least one live demo link",
-  ];
-  return (
-    <div className="rounded-2xl border border-teal-200/70 bg-[linear-gradient(165deg,#f0fdfa_0%,#ffffff_60%,#f8fafc_100%)] p-4 shadow-[0_14px_34px_rgba(13,148,136,0.14)]">
-      <SectionHeading title="Discovery score" />
-      <div className="mt-3 flex items-center gap-4 rounded-xl border border-teal-200 bg-white/90 px-3 py-2">
-        <div className="flex-1">
-          <div className="mb-1 flex justify-between text-[11px]">
-            <span className="text-neutral-600">Score</span>
-            <span className="font-bold text-neutral-800">{score}/100</span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-white">
-            <div className="h-2 rounded-full bg-linear-to-r from-teal-500 to-cyan-400" style={{ width: `${score}%` }} />
-          </div>
-        </div>
-      </div>
-      <ul className="mt-3 space-y-1.5">
-        {tips.map((tip) => (
-          <li key={tip} className="flex items-start gap-2 text-[11px] text-neutral-600">
-            <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-amber-100 text-[10px] font-bold text-amber-700">i</span>
-            {tip}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ProfileQuickFixes({ items }: { items: string[] }) {
-  return (
-    <div className="rounded-2xl border border-amber-200/80 bg-[linear-gradient(165deg,#fffbeb_0%,#ffffff_60%,#f8fafc_100%)] p-3 shadow-[0_10px_24px_rgba(245,158,11,0.12)]">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">Quick fixes</p>
-        <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">{items.length} pending</span>
-      </div>
-      <ul className="mt-2 space-y-1.5">
-        {items.map((label) => (
-          <li key={label} className="flex items-center gap-2 rounded-lg border border-amber-200/70 bg-white/90 px-2 py-1.5 text-[11px] text-neutral-700">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm bg-amber-100 text-[10px] font-bold text-amber-700">!</span>
-            <span>{label}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function CommandStrip({
-  mode,
-  onModeChange,
-}: {
-  mode: FocusMode;
-  onModeChange: (mode: FocusMode) => void;
-}) {
-  const today = new Date().toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    weekday: "short",
-  });
-
-  const modes: Array<{ key: FocusMode; label: string; style: string; activeStyle: string }> = [
-    {
-      key: "pipeline",
-      label: "Pipeline mode",
-      style: "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100",
-      activeStyle: "border-sky-500 bg-sky-600 text-white hover:bg-sky-600",
-    },
-    {
-      key: "delivery",
-      label: "Delivery mode",
-      style: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
-      activeStyle: "border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-600",
-    },
-    {
-      key: "profile",
-      label: "Optimize profile",
-      style: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100",
-      activeStyle: "border-amber-500 bg-amber-500 text-white hover:bg-amber-500",
-    },
+function MetricBar({
+  unread, threads, deals, conversion, saved,
+}: { unread: number; threads: number; deals: number; conversion: number; saved: number }) {
+  const metrics = [
+    { label: "Unread messages", val: unread, sub: `in ${threads} threads`, accent: "#7c6fff" },
+    { label: "Deal signals", val: deals, sub: "contract-interest", accent: "#34d399" },
+    { label: "Conversion", val: `${conversion}%`, sub: "deals per thread", accent: "#f59e0b" },
+    { label: "Saved projects", val: saved, sub: "shortlisted", accent: "#38bdf8" },
+    { label: "Profile views", val: "—", sub: "connect analytics", accent: "#a1a1aa" },
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-300/60 bg-white/85 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.10)] backdrop-blur">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Command strip</p>
-          <p className="text-sm font-semibold text-neutral-800">Daily focus • {today}</p>
-          <p className="mt-0.5 text-[10px] text-neutral-500">Select a mode to prioritize the matching dashboard lane.</p>
+    <div className="grid grid-cols-5 divide-x divide-slate-200 rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      {metrics.map((m) => (
+        <div key={m.label} className="px-4 py-3">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">{m.label}</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900 tracking-tight" style={{ color: typeof m.val === "number" && m.val > 0 ? m.accent : undefined }}>
+            {m.val}
+          </p>
+          <p className="text-[9px] text-slate-500 mt-0.5">{m.sub}</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
-          {modes.map((entry) => {
-            const active = mode === entry.key;
-            return (
-              <button
-                key={entry.key}
-                onClick={() => onModeChange(entry.key)}
-                className={`rounded-lg border px-2.5 py-1.5 transition-colors ${active ? entry.activeStyle : entry.style}`}
-                aria-pressed={active}
-              >
-                {entry.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
@@ -591,9 +571,7 @@ function CommandStrip({
 export default function DeveloperDashboardPage() {
   const router = useRouter();
   const [hasSession, setHasSession] = useState<boolean | undefined>(undefined);
-  const [animateIn, setAnimateIn] = useState(false);
   const [pendingLogout, setPendingLogout] = useState(false);
-  const [focusMode, setFocusMode] = useState<FocusMode>("pipeline");
   const [savedState, setSavedState] = useState("");
   const [analyticsState, setAnalyticsState] = useState("");
   const [threadCount, setThreadCount] = useState(0);
@@ -616,13 +594,11 @@ export default function DeveloperDashboardPage() {
     if (!hasSession) return;
     async function loadSaved() {
       try {
-        setSavedState("Loading saved projects…");
+        setSavedState("Loading…");
         const items = await getSavedProjects();
-        setSavedProjects(items.map((item) => ({ id: item.id, project: item.project })));
+        setSavedProjects(items.map((i) => ({ id: i.id, project: i.project })));
         setSavedState(items.length ? "" : "No saved projects yet.");
-      } catch (e) {
-        setSavedState(e instanceof Error ? e.message : "Failed to load.");
-      }
+      } catch (e) { setSavedState(e instanceof Error ? e.message : "Failed."); }
     }
     async function loadAnalytics() {
       try {
@@ -638,141 +614,114 @@ export default function DeveloperDashboardPage() {
         setProposalThreads(proposal);
         setContractNotifications(contracts);
         setAnalyticsState("");
-      } catch (e) {
-        setAnalyticsState(e instanceof Error ? e.message : "Failed to load analytics.");
-      }
+      } catch (e) { setAnalyticsState(e instanceof Error ? e.message : "Failed."); }
     }
     void loadSaved();
     void loadAnalytics();
   }, [hasSession]);
 
-  useEffect(() => {
-    const id = window.setTimeout(() => setAnimateIn(true), 40);
-    return () => window.clearTimeout(id);
-  }, []);
-
   async function onLogout() { setPendingLogout(true); await logout(); router.replace("/login"); }
   async function onLogoutEverywhere() { setPendingLogout(true); await logoutEverywhere(); router.replace("/login"); }
 
   const conversionRate = useMemo(() => (threadCount === 0 ? 0 : Math.round((dealInterestCount / threadCount) * 100)), [dealInterestCount, threadCount]);
-
   const spotlightThreads = useMemo(
     () => [...inquiryThreads, ...proposalThreads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5),
     [inquiryThreads, proposalThreads],
   );
 
-  const hottestLead = spotlightThreads[0];
-  const pendingProfileTasks = useMemo(
-    () => MOCK_PROFILE_COMPLETION.filter((item) => !item.done).map((item) => item.label).slice(0, 4),
-    [],
-  );
-
   if (!hasSession) return null;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_12%_8%,#dbeafe_0%,#eef2ff_20%,#f8fafc_42%,#f1f5f9_100%)]">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+
+      {/* Subtle noise overlay for texture */}
+      <div className="pointer-events-none fixed inset-0 opacity-[0.012]" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E\")", backgroundRepeat: "repeat", backgroundSize: "100px" }} />
+
       <DeveloperDashboardNavbar onSignOut={onLogout} onSignOutEverywhere={onLogoutEverywhere} pendingSignOut={pendingLogout} />
 
-      <section className="mx-auto w-full max-w-[1500px] space-y-4 p-4 md:p-6">
+      <div className="mx-auto w-full max-w-[1600px] px-4 pb-12 pt-4 md:px-6">
 
-        {/* ── Hero header card ── */}
-        <div className="overflow-hidden rounded-3xl border border-slate-300/60 bg-white/95 shadow-[0_20px_60px_rgba(15,23,42,0.16)] backdrop-blur">
-          <div className="relative border-b border-slate-200 bg-[linear-gradient(115deg,#0b1220_0%,#134e4a_36%,#0f766e_64%,#155e75_100%)] p-5 text-white md:p-6">
-            <div className="absolute -right-14 -top-14 h-48 w-48 rounded-full bg-white/20 blur-3xl" aria-hidden="true" />
-            <div className="absolute -left-8 bottom-0 h-24 w-40 rounded-full bg-cyan-300/20 blur-3xl" aria-hidden="true" />
-            <div className="relative flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100/90">Developer Control Center</p>
-                <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Command your pipeline, projects, and growth.</h1>
-                <p className="mt-2 max-w-2xl text-sm text-cyan-100/90">Daily operations dashboard for managing active leads, portfolio traction, and profile readiness in one place.</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-                <span className="rounded-full border border-white/40 bg-white/15 px-3 py-1">Role: Developer</span>
-                <span className="rounded-full border border-white/40 bg-white/15 px-3 py-1">Session: Active</span>
-                {analyticsState && <span className="rounded-full border border-white/40 bg-white/15 px-3 py-1 text-cyan-100">{analyticsState}</span>}
-              </div>
-            </div>
+        {/* ── Page header ── */}
+        <div className="mb-4 flex items-end justify-between gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Developer workspace</p>
+            <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">Command center</h1>
           </div>
-          <HeaderMetrics
-            unreadMessageCount={unreadMessageCount}
-            threadCount={threadCount}
-            dealInterestCount={dealInterestCount}
-            conversionRate={conversionRate}
-            savedProjects={savedProjects.length}
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-medium text-slate-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Session active
+            </span>
+            {analyticsState && (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] text-slate-500">{analyticsState}</span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Metric bar ── */}
+        <div className="mb-4">
+          <MetricBar
+            unread={unreadMessageCount}
+            threads={threadCount}
+            deals={dealInterestCount}
+            conversion={conversionRate}
+            saved={savedProjects.length}
           />
         </div>
 
-        <CommandStrip mode={focusMode} onModeChange={setFocusMode} />
+        {/* ── Three-column cockpit ── */}
+        <div className="grid gap-3 xl:grid-cols-[280px_1fr_260px] xl:items-start">
 
-        {/* ── Main content grid (Left / Center / Right) ── */}
-        <div className="grid gap-3 xl:grid-cols-[1fr_1.2fr_1fr] xl:items-start">
-
-          {/* Left column: pipeline + work assets */}
-          <div className={`space-y-3 rounded-2xl p-1 transition-all duration-500 ${animateIn ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"} ${focusMode === "pipeline" ? "ring-2 ring-indigo-300/70" : "opacity-70 saturate-[0.9]"}`}>
-            <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-700">
-              Workstream
+          {/* ─ LEFT: work stream ─ */}
+          <aside className="space-y-0 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Work stream</p>
             </div>
-            {focusMode === "pipeline" && (
-              <div className="rounded-xl border border-indigo-300/70 bg-white/90 px-3 py-2 shadow-[0_8px_20px_rgba(99,102,241,0.15)]">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-indigo-700">Lead spotlight</p>
-                  <span className="rounded-md bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">{inquiryThreads.length} active inquiries</span>
-                </div>
-                <p className="mt-1 text-[11px] text-neutral-700">{hottestLead?.preview || "No fresh inquiry yet. Keep profile active to attract new leads."}</p>
+            <div className="divide-y divide-slate-200">
+              <div className="p-4">
+                <Pipeline inquiry={inquiryThreads} proposal={proposalThreads} contracts={contractNotifications} />
               </div>
-            )}
-            <ProposalTracker inquiry={inquiryThreads} proposal={proposalThreads} contracts={contractNotifications} />
-            <QuickActions onLogout={onLogout} onLogoutEverywhere={onLogoutEverywhere} pending={pendingLogout} />
-            <ProjectShowcase />
-            <SavedProjectsPanel projects={savedProjects} state={savedState} />
-          </div>
-
-          {/* Center column: performance + momentum */}
-          <div className={`space-y-3 rounded-2xl p-1 transition-all delay-75 duration-500 ${animateIn ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"} ${focusMode === "delivery" ? "ring-2 ring-cyan-300/70" : "opacity-70 saturate-[0.9]"}`}>
-            <div className="rounded-xl border border-cyan-200/70 bg-cyan-50/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700">
-              Performance
-            </div>
-            {focusMode === "delivery" && (
-              <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-cyan-300/70 bg-white/90 p-2 shadow-[0_8px_20px_rgba(14,116,144,0.14)]">
-                <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-1.5 text-center">
-                  <p className="text-[10px] text-neutral-500">Unread</p>
-                  <p className="text-xs font-bold text-cyan-800">{unreadMessageCount}</p>
-                </div>
-                <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-1.5 text-center">
-                  <p className="text-[10px] text-neutral-500">Deals</p>
-                  <p className="text-xs font-bold text-cyan-800">{dealInterestCount}</p>
-                </div>
-                <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-1.5 text-center">
-                  <p className="text-[10px] text-neutral-500">Conversion</p>
-                  <p className="text-xs font-bold text-cyan-800">{conversionRate}%</p>
-                </div>
+              <div className="p-4">
+                <Projects saved={savedProjects} savedState={savedState} />
               </div>
-            )}
-            <EarningsChart />
-            <ActivityFeed threads={spotlightThreads} />
-            <ReviewsPanel />
-          </div>
-
-          {/* Right column: profile + readiness */}
-          <div className={`space-y-3 rounded-2xl p-1 transition-all delay-150 duration-500 ${animateIn ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"} ${focusMode === "profile" ? "ring-2 ring-emerald-300/70" : "opacity-70 saturate-[0.9]"}`}>
-            <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
-              Readiness
             </div>
+          </aside>
 
-            <div className="space-y-3 xl:sticky xl:top-24">
-              {focusMode === "profile" && <ProfileQuickFixes items={pendingProfileTasks} />}
-              <AvailabilityToggle />
-              <ProfileCompletion />
-              <VisibilityScore />
+          {/* ─ CENTER: performance ─ */}
+          <main className="space-y-0 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Performance</p>
             </div>
+            <div className="divide-y divide-slate-200">
+              <div className="p-4">
+                <Earnings />
+              </div>
+              <div className="p-4">
+                <Activity threads={spotlightThreads} />
+              </div>
+              <div className="p-4">
+                <Reviews />
+              </div>
+            </div>
+          </main>
 
-            <SkillBars />
-            <UpcomingCalendar />
-          </div>
+          {/* ─ RIGHT: profile + status ─ */}
+          <aside className="space-y-0 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden xl:sticky xl:top-6">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Profile &amp; status</p>
+            </div>
+            <div className="divide-y divide-slate-200">
+              <div className="p-4"><Availability /></div>
+              <div className="p-4"><ProfileReadiness /></div>
+              <div className="p-4"><DiscoveryScore /></div>
+              <div className="p-4"><Skills /></div>
+              <div className="p-4"><Upcoming /></div>
+              <div className="p-4"><Actions onLogout={onLogout} onLogoutEverywhere={onLogoutEverywhere} pending={pendingLogout} /></div>
+            </div>
+          </aside>
+
         </div>
-
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
-

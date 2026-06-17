@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { DragEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ClientDashboardNavbar from "@/features/client/client-dashboard-navbar";
+import BackButton from "@/components/ui/back-button";
 import {
   ProjectCategory,
   PricingType,
@@ -32,6 +32,71 @@ const PRICING_OPTIONS: Array<{ value: PricingType; label: string }> = [
 
 const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "NGN", "KES", "ZAR"];
 
+const TIMELINE_OPTIONS = ["1 to 2 weeks", "3 to 4 weeks", "5 to 8 weeks", "9 to 12 weeks", "3+ months"];
+const TIMEZONE_OPTIONS = ["UTC-8 (PST)", "UTC-5 (EST)", "UTC+0 (GMT)", "UTC+1 (WAT/CET)", "UTC+3 (EAT)"];
+const CADENCE_OPTIONS = [
+  "Daily async updates",
+  "Daily async + weekly call",
+  "Twice-weekly calls",
+  "Weekly sync only",
+  "Slack + milestone check-ins"
+];
+const TECH_STACK_OPTIONS = [
+  "Next.js",
+  "React",
+  "Node.js",
+  "NestJS",
+  "TypeScript",
+  "PostgreSQL",
+  "MongoDB",
+  "Firebase",
+  "Stripe",
+  "Tailwind CSS",
+  "Docker",
+  "AWS"
+];
+const INDUSTRY_OPTIONS = [
+  "Fintech",
+  "Healthcare",
+  "EdTech",
+  "Ecommerce",
+  "Real Estate",
+  "Logistics",
+  "SaaS",
+  "Legal",
+  "Travel",
+  "Media"
+];
+const INTEGRATION_OPTIONS = ["Stripe", "Paystack", "Twilio", "SendGrid", "Google Maps", "Salesforce", "HubSpot", "Zapier"];
+const SECURITY_OPTIONS = [
+  "Role-based access control (RBAC)",
+  "Two-factor authentication (2FA)",
+  "Audit logging",
+  "Data encryption at rest",
+  "Secure sessions and refresh tokens"
+];
+const QUALITY_OPTIONS = [
+  "Unit and integration tests",
+  "CI checks for lint and tests",
+  "API documentation",
+  "Performance baseline",
+  "Accessibility checks"
+];
+const FEATURE_OPTIONS = [
+  "Authentication and role-based access",
+  "Admin dashboard",
+  "Notifications and alerts",
+  "Search and filtering",
+  "Reporting and analytics"
+];
+const DELIVERABLE_OPTIONS = [
+  "Production-ready source code repository",
+  "Deployment guide and environment setup",
+  "Admin user handbook",
+  "API documentation",
+  "QA test report"
+];
+
 function parseCommaList(value: string): string[] {
   return value
     .split(",")
@@ -44,6 +109,36 @@ function mergeCommaLists(existing: string, incoming: string[]): string {
   return [...new Set(merged)].join(", ");
 }
 
+function toggleCommaValue(existing: string, value: string): string {
+  const list = parseCommaList(existing);
+  const hasValue = list.some((entry) => entry.toLowerCase() === value.toLowerCase());
+  if (hasValue) {
+    return list.filter((entry) => entry.toLowerCase() !== value.toLowerCase()).join(", ");
+  }
+  return [...list, value].join(", ");
+}
+
+function appendLineValue(existing: string, value: string): string {
+  if (!value.trim()) {
+    return existing;
+  }
+
+  if (!existing.trim()) {
+    return value;
+  }
+
+  const existingLines = existing
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (existingLines.some((line) => line.toLowerCase() === value.toLowerCase())) {
+    return existing;
+  }
+
+  return `${existing}\n${value}`;
+}
+
 function SectionCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border border-neutral-200 bg-white/95 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)] md:p-5">
@@ -53,6 +148,74 @@ function SectionCard({ title, subtitle, children }: { title: string; subtitle: s
       </div>
       <div className="grid gap-4">{children}</div>
     </section>
+  );
+}
+
+function CommaSelectionChips({
+  options,
+  value,
+  onChange
+}: {
+  options: string[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const selected = parseCommaList(value).map((entry) => entry.toLowerCase());
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((option) => {
+        const active = selected.includes(option.toLowerCase());
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(toggleCommaValue(value, option))}
+            className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+              active
+                ? "border-cyan-600 bg-cyan-100 text-cyan-900"
+                : "border-neutral-300 bg-white text-neutral-700 hover:border-cyan-400 hover:text-cyan-800"
+            }`}
+          >
+            {option}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TextareaQuickSelect({
+  options,
+  onAdd
+}: {
+  options: string[];
+  onAdd: (value: string) => void;
+}) {
+  const [selected, setSelected] = useState(options[0] ?? "");
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-2">
+      <span className="text-xs font-medium text-neutral-600">Quick add</span>
+      <select
+        value={selected}
+        onChange={(event) => setSelected(event.target.value)}
+        className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs outline-none transition focus:border-cyan-500"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => onAdd(selected)}
+        className="rounded-md border border-cyan-300 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-800 transition hover:border-cyan-500 hover:bg-cyan-100"
+      >
+        Add
+      </button>
+    </div>
   );
 }
 
@@ -461,9 +624,7 @@ export default function NewProjectPage() {
                 This form is intentionally detailed so developers can estimate accurately, deliver faster, and avoid scope confusion.
               </p>
             </div>
-            <Link href="/client/dashboard" className="rounded-full border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20">
-              Back to dashboard
-            </Link>
+            <BackButton fallbackHref="/client/dashboard" label="Back to dashboard" tone="light" />
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
@@ -548,13 +709,24 @@ export default function NewProjectPage() {
 
               <label className="grid gap-1 text-sm">
                 <span className="font-medium text-neutral-800">Expected timeline (weeks)</span>
-                <input
-                  required
+                <select
                   value={timelineWeeks}
                   onChange={(event) => setTimelineWeeks(event.target.value)}
                   onBlur={() => markTouched("timelineWeeks")}
                   className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="6 to 10 weeks"
+                >
+                  <option value="">Select timeline</option>
+                  {TIMELINE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={timelineWeeks}
+                  onChange={(event) => setTimelineWeeks(event.target.value)}
+                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  placeholder="Or type custom timeline"
                 />
                 {showFieldError("timelineWeeks") ? <span className="text-xs font-medium text-red-600">{showFieldError("timelineWeeks")}</span> : null}
               </label>
@@ -645,6 +817,10 @@ export default function NewProjectPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
                 <span className="font-medium text-neutral-800">Must-have features</span>
+                <TextareaQuickSelect
+                  options={FEATURE_OPTIONS}
+                  onAdd={(value) => setMustHaveFeatures((prev) => appendLineValue(prev, value))}
+                />
                 <textarea
                   required
                   value={mustHaveFeatures}
@@ -684,6 +860,10 @@ export default function NewProjectPage() {
           >
             <label className="grid gap-1 text-sm">
               <span className="font-medium text-neutral-800">Expected deliverables</span>
+              <TextareaQuickSelect
+                options={DELIVERABLE_OPTIONS}
+                onAdd={(value) => setDeliverables((prev) => appendLineValue(prev, value))}
+              />
               <textarea
                 required
                 value={deliverables}
@@ -708,21 +888,45 @@ export default function NewProjectPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
                 <span className="font-medium text-neutral-800">Timezone or overlap window</span>
+                <select
+                  value={timezone}
+                  onChange={(event) => setTimezone(event.target.value)}
+                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                >
+                  <option value="">Select timezone/overlap</option>
+                  {TIMEZONE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
                 <input
                   value={timezone}
                   onChange={(event) => setTimezone(event.target.value)}
                   className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="GMT+1 with 2h overlap"
+                  placeholder="Or type custom overlap"
                 />
               </label>
 
               <label className="grid gap-1 text-sm">
                 <span className="font-medium text-neutral-800">Communication cadence</span>
+                <select
+                  value={communicationCadence}
+                  onChange={(event) => setCommunicationCadence(event.target.value)}
+                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                >
+                  <option value="">Select communication cadence</option>
+                  {CADENCE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
                 <input
                   value={communicationCadence}
                   onChange={(event) => setCommunicationCadence(event.target.value)}
                   className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="Daily async updates + weekly call"
+                  placeholder="Or type custom cadence"
                 />
               </label>
             </div>
@@ -734,27 +938,37 @@ export default function NewProjectPage() {
           >
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Tech stack (comma-separated)</span>
+                <span className="font-medium text-neutral-800">Tech stack</span>
+                <CommaSelectionChips
+                  options={TECH_STACK_OPTIONS}
+                  value={techStackInput}
+                  onChange={setTechStackInput}
+                />
                 <input
                   required
                   value={techStackInput}
                   onChange={(event) => setTechStackInput(event.target.value)}
                   onBlur={() => markTouched("techStackInput")}
                   className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="Next.js, NestJS, PostgreSQL"
+                  placeholder="Optional custom stack values"
                 />
                 {showFieldError("techStackInput") ? <span className="text-xs font-medium text-red-600">{showFieldError("techStackInput")}</span> : null}
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Industry tags (comma-separated)</span>
+                <span className="font-medium text-neutral-800">Industry tags</span>
+                <CommaSelectionChips
+                  options={INDUSTRY_OPTIONS}
+                  value={industriesInput}
+                  onChange={setIndustriesInput}
+                />
                 <input
                   required
                   value={industriesInput}
                   onChange={(event) => setIndustriesInput(event.target.value)}
                   onBlur={() => markTouched("industriesInput")}
                   className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
-                  placeholder="Healthcare, Fintech"
+                  placeholder="Optional custom industry tags"
                 />
                 {showFieldError("industriesInput") ? <span className="text-xs font-medium text-red-600">{showFieldError("industriesInput")}</span> : null}
               </label>
@@ -762,6 +976,10 @@ export default function NewProjectPage() {
 
             <label className="grid gap-1 text-sm">
               <span className="font-medium text-neutral-800">Integration needs</span>
+              <TextareaQuickSelect
+                options={INTEGRATION_OPTIONS}
+                onAdd={(value) => setIntegrationNeeds((prev) => appendLineValue(prev, value))}
+              />
               <textarea
                 value={integrationNeeds}
                 onChange={(event) => setIntegrationNeeds(event.target.value)}
@@ -773,6 +991,10 @@ export default function NewProjectPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
                 <span className="font-medium text-neutral-800">Security requirements</span>
+                <TextareaQuickSelect
+                  options={SECURITY_OPTIONS}
+                  onAdd={(value) => setSecurityRequirements((prev) => appendLineValue(prev, value))}
+                />
                 <textarea
                   value={securityRequirements}
                   onChange={(event) => setSecurityRequirements(event.target.value)}
@@ -783,6 +1005,10 @@ export default function NewProjectPage() {
 
               <label className="grid gap-1 text-sm">
                 <span className="font-medium text-neutral-800">Quality bar</span>
+                <TextareaQuickSelect
+                  options={QUALITY_OPTIONS}
+                  onAdd={(value) => setQualityBar((prev) => appendLineValue(prev, value))}
+                />
                 <textarea
                   value={qualityBar}
                   onChange={(event) => setQualityBar(event.target.value)}
@@ -988,9 +1214,7 @@ export default function NewProjectPage() {
                 Your detailed sections are merged into the final project brief developers will read.
               </p>
               <div className="flex items-center gap-2">
-                <Link href="/client/dashboard" className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-100">
-                  Cancel
-                </Link>
+                <BackButton fallbackHref="/client/dashboard" label="Cancel" />
                 <button
                   type="submit"
                   disabled={pending}

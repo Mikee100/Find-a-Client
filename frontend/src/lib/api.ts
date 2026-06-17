@@ -3,6 +3,9 @@ const CSRF_COOKIE_NAME = process.env.NEXT_PUBLIC_AUTH_CSRF_COOKIE_NAME ?? "csrf_
 
 interface ApiErrorBody {
   message?: string | string[];
+  error?: {
+    message?: string | string[];
+  };
 }
 
 interface ApiEnvelope<T> {
@@ -12,6 +15,10 @@ interface ApiEnvelope<T> {
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 let inFlightRefresh: Promise<boolean> | null = null;
+let inFlightSession: Promise<AuthSession> | null = null;
+let cachedSession: AuthSession | null = null;
+let cachedSessionAt = 0;
+const SESSION_CACHE_TTL_MS = 10_000;
 
 function readCookie(name: string): string | null {
   if (typeof document === "undefined") {
@@ -69,6 +76,8 @@ export interface CurrentUserProfile {
   bio: string | null;
   skills: string[];
   location: string | null;
+  contactEmail: string | null;
+  phoneNumber: string | null;
   websiteUrl: string | null;
   githubUrl: string | null;
   linkedinUrl: string | null;
@@ -184,6 +193,8 @@ export interface UpdateProfilePayload {
   bio?: string;
   skills?: string[];
   location?: string;
+  contactEmail?: string;
+  phoneNumber?: string;
   websiteUrl?: string;
   githubUrl?: string;
   linkedinUrl?: string;
@@ -217,10 +228,10 @@ export interface UpdateProjectPayload {
   pricingType?: PricingType;
   price?: number;
   currency?: string;
-  demoUrl?: string;
-  backgroundUrl?: string;
-  thumbnailUrl?: string;
-  videoUrl?: string;
+  demoUrl?: string | null;
+  backgroundUrl?: string | null;
+  thumbnailUrl?: string | null;
+  videoUrl?: string | null;
   screenshots?: string[];
 }
 
@@ -228,6 +239,23 @@ export interface UploadMediaOptions {
   projectId?: string;
   mediaType?: "IMAGE" | "VIDEO" | "SCREENSHOT" | "THUMBNAIL";
   caption?: string;
+}
+
+function normalizeOptionalUrl(value?: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `https://${trimmed}`;
 }
 
 async function parseError(response: Response): Promise<string> {
@@ -239,6 +267,14 @@ async function parseError(response: Response): Promise<string> {
 
     if (typeof body.message === "string") {
       return body.message;
+    }
+
+    if (Array.isArray(body.error?.message)) {
+      return body.error.message.join(", ");
+    }
+
+    if (typeof body.error?.message === "string") {
+      return body.error.message;
     }
   } catch {
     // No-op: fallback message below.
@@ -316,10 +352,14 @@ async function postJson<TResponse, TBody>(
 }
 
 export async function register(payload: RegisterPayload): Promise<RegisterResponse> {
+  cachedSession = null;
+  cachedSessionAt = 0;
   return postJson<RegisterResponse, RegisterPayload>("/auth/register", payload);
 }
 
 export async function login(payload: LoginPayload): Promise<LoginResponse> {
+  cachedSession = null;
+  cachedSessionAt = 0;
   return postJson<LoginResponse, LoginPayload>("/auth/login", payload);
 }
 
@@ -347,18 +387,53 @@ export async function refreshSession(): Promise<boolean> {
 
 export async function logout(): Promise<void> {
   await postJson<{ loggedOut: true }, Record<string, never>>("/auth/logout", {});
+  cachedSession = null;
+  cachedSessionAt = 0;
 }
 
 export async function logoutEverywhere(): Promise<void> {
   await postJson<{ loggedOutAll: true }, Record<string, never>>("/auth/logout-all", {});
+  cachedSession = null;
+  cachedSessionAt = 0;
 }
 
 export async function getAuthSession(): Promise<AuthSession> {
-  return requestJson<AuthSession>("GET", "/auth/session");
+  const now = Date.now();
+  if (cachedSession && now - cachedSessionAt < SESSION_CACHE_TTL_MS) {
+    return cachedSession;
+  }
+
+  if (inFlightSession) {
+    return inFlightSession;
+  }
+
+  inFlightSession = requestJson<AuthSession>("GET", "/auth/session")
+    .then((session) => {
+      cachedSession = session;
+      cachedSessionAt = Date.now();
+      return session;
+    })
+    .catch((error) => {
+      cachedSession = null;
+      cachedSessionAt = 0;
+      throw error;
+    })
+    .finally(() => {
+      inFlightSession = null;
+    });
+
+  return inFlightSession;
 }
 
 export async function updateProfile(payload: UpdateProfilePayload): Promise<void> {
-  await requestJson<unknown, UpdateProfilePayload>("PUT", "/users/me", { body: payload });
+  const normalizedPayload: UpdateProfilePayload = {
+    ...payload,
+    websiteUrl: normalizeOptionalUrl(payload.websiteUrl),
+    githubUrl: normalizeOptionalUrl(payload.githubUrl),
+    linkedinUrl: normalizeOptionalUrl(payload.linkedinUrl)
+  };
+
+  await requestJson<unknown, UpdateProfilePayload>("PUT", "/users/me", { body: normalizedPayload });
 }
 
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile> {
