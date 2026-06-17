@@ -236,7 +236,7 @@ export default function ProjectDetailPage() {
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [hasHandledEditDeepLink, setHasHandledEditDeepLink] = useState(false);
+  const hasHandledEditDeepLinkRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -349,19 +349,27 @@ export default function ProjectDetailPage() {
   const hasEditQuery = editQuery === "1" || editQuery === "true" || editQuery === "yes";
 
   useEffect(() => {
-    if (!hasEditQuery || hasHandledEditDeepLink || !project || !authResolved) {
+    if (!hasEditQuery || hasHandledEditDeepLinkRef.current || !project || !authResolved) {
       return;
     }
 
-    if (canEdit) {
+    hasHandledEditDeepLinkRef.current = true;
+
+    if (!canEdit) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
       initializeEditForm(project);
       setIsEditing(true);
       setSaveError(null);
       setSaveSuccess(null);
-    }
+    }, 0);
 
-    setHasHandledEditDeepLink(true);
-  }, [authResolved, canEdit, hasEditQuery, hasHandledEditDeepLink, project]);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [authResolved, canEdit, hasEditQuery, project]);
 
   const editDiff = useMemo(() => {
     if (!project) {
