@@ -1,5 +1,1 @@
-import { redirect } from "next/navigation";
-
-export default function DevelopersSettingsRedirectPage() {
-  redirect("/developer/settings");
-}
+export { default } from "../../developer/settings/page";

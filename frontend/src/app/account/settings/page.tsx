@@ -23,7 +23,7 @@ export default function AccountSettingsRedirectPage() {
           return;
         }
 
-        router.replace(`/developer/settings${onboardingSuffix}`);
+        router.replace(`/developers/settings${onboardingSuffix}`);
       })
       .catch(() => {
         router.replace("/login");
