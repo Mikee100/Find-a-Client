@@ -169,6 +169,22 @@ interface SavedProjectEntry {
   };
 }
 
+export interface MyProjectListItem {
+  id: string;
+  slug: string;
+  title: string;
+  shortDescription: string;
+  category: ProjectCategory;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  techStack: string[];
+  likeCount: number;
+  viewCount: number;
+  thumbnailUrl: string | null;
+  backgroundUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ThreadSummary {
   id: string;
   projectId: string | null;
@@ -466,6 +482,10 @@ export async function getProjectBySlug(slug: string): Promise<ProjectDetail> {
 
 export async function getSavedProjects(): Promise<SavedProjectEntry[]> {
   return requestJson<SavedProjectEntry[]>("GET", "/users/me/saved");
+}
+
+export async function getMyProjects(): Promise<MyProjectListItem[]> {
+  return requestJson<MyProjectListItem[]>("GET", "/users/me/projects");
 }
 
 export async function getMessageThreads(): Promise<ThreadSummary[]> {
