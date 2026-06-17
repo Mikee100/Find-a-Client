@@ -23,7 +23,6 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import BrandLogo from "@/components/ui/brand-logo";
 import {
   getAuthSession,
   getMyProjects,
@@ -113,6 +112,17 @@ function formatProjectStatus(status: "DRAFT" | "PUBLISHED" | "ARCHIVED"): string
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
+function DashboardBrand() {
+  return (
+    <Link href="/" className="inline-flex items-center gap-2">
+      <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-xs font-bold text-white">
+        FC
+      </span>
+      <span className="text-lg font-semibold tracking-tight text-slate-900">Find a Client</span>
+    </Link>
+  );
+}
+
 function AnimatedCard({
   children,
   delay = 0,
@@ -145,7 +155,7 @@ function Sidebar({
     <>
       <aside className="hidden lg:flex lg:w-72 lg:flex-col lg:border-r lg:border-slate-200 lg:bg-white lg:px-4 lg:py-5">
         <div className="mb-5 px-2">
-          <BrandLogo />
+          <DashboardBrand />
         </div>
         <nav className="space-y-1">
           {navItems.map((item) => (
@@ -174,7 +184,7 @@ function Sidebar({
           />
           <aside className="relative h-full w-72 border-r border-slate-200 bg-white px-4 py-5">
             <div className="mb-5 flex items-center justify-between px-2">
-              <BrandLogo />
+              <DashboardBrand />
               <button
                 onClick={onClose}
                 className="rounded-md border border-slate-200 p-1.5 text-slate-600"
