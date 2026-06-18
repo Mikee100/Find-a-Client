@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function ClientsDashboardRedirectPage() {
-  redirect("/client/dashboard");
+  redirect("/client/feed");
 }

@@ -179,6 +179,19 @@ export interface SearchDevelopersParams {
   limit?: number;
 }
 
+export interface ListProjectsParams {
+  category?: ProjectCategory;
+  techStack?: string[];
+  industries?: string[];
+  pricingType?: PricingType;
+  search?: string;
+  sortBy?: "newest" | "popular" | "price_asc" | "price_desc";
+  minPrice?: string;
+  maxPrice?: string;
+  cursor?: string;
+  limit?: number;
+}
+
 export type ProjectCategory =
   | "WEB_APP"
   | "MOBILE_APP"
@@ -212,11 +225,13 @@ export interface ProjectListItem {
   title: string;
   shortDescription: string;
   category: ProjectCategory;
+  techStack: string[];
   pricingType: PricingType;
   price: number | string | null;
   currency: string;
   likeCount: number;
   viewCount: number;
+  inquiryCount: number;
   createdAt: string;
 }
 
@@ -239,6 +254,7 @@ export interface ProjectDetail {
   videoUrl: string | null;
   likeCount: number;
   viewCount: number;
+  inquiryCount: number;
   createdAt: string;
   updatedAt: string;
   author: {
@@ -624,8 +640,43 @@ export async function updateProject(slug: string, payload: UpdateProjectPayload)
   });
 }
 
-export async function listProjects(): Promise<ProjectListItem[]> {
-  return requestJson<ProjectListItem[]>("GET", "/projects");
+export async function listProjects(params: ListProjectsParams = {}): Promise<ProjectListItem[]> {
+  const searchParams = new URLSearchParams();
+
+  if (params.category) {
+    searchParams.set("category", params.category);
+  }
+  if (params.techStack?.length) {
+    params.techStack.forEach((value) => searchParams.append("techStack", value));
+  }
+  if (params.industries?.length) {
+    params.industries.forEach((value) => searchParams.append("industries", value));
+  }
+  if (params.pricingType) {
+    searchParams.set("pricingType", params.pricingType);
+  }
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (params.sortBy) {
+    searchParams.set("sortBy", params.sortBy);
+  }
+  if (params.minPrice?.trim()) {
+    searchParams.set("minPrice", params.minPrice.trim());
+  }
+  if (params.maxPrice?.trim()) {
+    searchParams.set("maxPrice", params.maxPrice.trim());
+  }
+  if (params.cursor) {
+    searchParams.set("cursor", params.cursor);
+  }
+  if (params.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString ? `/projects?${queryString}` : "/projects";
+  return requestJson<ProjectListItem[]>("GET", path);
 }
 
 export async function getProjectBySlug(slug: string): Promise<ProjectDetail> {

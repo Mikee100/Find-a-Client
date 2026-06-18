@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { AuthSession, getAuthSession } from "@/lib/api";
 
 interface AccountMenuProps {
@@ -11,6 +12,7 @@ interface AccountMenuProps {
   onSignOutEverywhere?: () => void;
   dashboardHref: string;
   settingsHref?: string;
+  compact?: boolean;
 }
 
 export default function AccountMenu({
@@ -19,7 +21,8 @@ export default function AccountMenu({
   onSignOut,
   onSignOutEverywhere,
   dashboardHref,
-  settingsHref = "/account/settings"
+  settingsHref = "/account/settings",
+  compact = false
 }: AccountMenuProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -56,23 +59,30 @@ export default function AccountMenu({
   }, []);
 
   let initials = roleLabel.slice(0, 1).toUpperCase();
+  let shortLabel = roleLabel;
   if (session?.email) {
     const [left] = session.email.split("@");
     initials = left.slice(0, 2).toUpperCase();
+    shortLabel = left.slice(0, 8);
   }
 
   return (
     <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+        className={
+          compact
+            ? "flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+            : "flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-1.5 pr-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+        }
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-bold text-white">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-bold text-white">
           {initials}
         </span>
-        <span className="hidden md:inline">Account</span>
+        {!compact ? <span className="hidden max-w-16 truncate text-[11px] text-neutral-600 lg:inline">{shortLabel}</span> : null}
+        {!compact ? <ChevronDown className="h-3 w-3 text-neutral-500" aria-hidden /> : null}
       </button>
 
       {open ? (
@@ -89,7 +99,7 @@ export default function AccountMenu({
               onClick={() => setOpen(false)}
               className="rounded-md px-3 py-2 font-medium text-neutral-700 hover:bg-neutral-100"
             >
-              My dashboard
+              My workspace
             </Link>
             <Link
               href={settingsHref}

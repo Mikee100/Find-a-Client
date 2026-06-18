@@ -14,7 +14,7 @@ function getRedirectPath(role: AppRole): string {
   }
 
   if (role === "CLIENT") {
-    return "/client/projects/new?onboarding=1";
+    return "/client/feed";
   }
 
   return "/developers/dashboard";

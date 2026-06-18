@@ -73,12 +73,12 @@ export function HeroSection() {
                   <div className="mt-12 flex items-center gap-2">
                     <div className="rounded-[14px] border border-white/20 bg-white/10 p-0.5">
                       <Button asChild size="lg" className="rounded-xl px-5 text-base bg-white text-black hover:bg-white/90">
-                        <Link href="/client/dashboard">
+                        <Link href="/client/feed">
                           <span className="text-nowrap">Start Building</span>
                         </Link>
                       </Button>
                     </div>
-                    <Button asChild size="lg" variant="ghost" className="h-[42px] rounded-xl px-5 text-base text-white hover:bg-white/10">
+                    <Button asChild size="lg" variant="ghost" className="h-10.5 rounded-xl px-5 text-base text-white hover:bg-white/10">
                       <Link href="/register">
                         <span className="text-nowrap">Request a demo</span>
                       </Link>
@@ -102,17 +102,17 @@ export function HeroSection() {
               }}
             >
               <div className="relative -mr-56 mt-8 overflow-hidden px-2 sm:mr-0 sm:mt-12 md:mt-20">
-                <div aria-hidden className="absolute inset-0 z-10 bg-gradient-to-b from-transparent from-35% to-[#0a0a0a]" />
+                <div aria-hidden className="absolute inset-0 z-10 bg-linear-to-b from-transparent from-35% to-[#0a0a0a]" />
                 <div className="relative mx-auto max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-black p-4 shadow-lg shadow-black/40 ring-1 ring-white/15">
                   <Image
-                    className="relative hidden aspect-[15/8] rounded-2xl object-cover dark:block"
+                    className="relative hidden aspect-15/8 rounded-2xl object-cover dark:block"
                     src="https://images.unsplash.com/photo-1518773553398-650c184e0bb3?auto=format&fit=crop&w=2400&q=80"
                     alt="app screen dark"
                     width={2700}
                     height={1440}
                   />
                   <Image
-                    className="relative aspect-[15/8] rounded-2xl border border-white/15 object-cover dark:hidden"
+                    className="relative aspect-15/8 rounded-2xl border border-white/15 object-cover dark:hidden"
                     src="https://images.unsplash.com/photo-1516116216624-53e697fedbea?auto=format&fit=crop&w=2400&q=80"
                     alt="app screen light"
                     width={2700}
@@ -127,7 +127,7 @@ export function HeroSection() {
         <section className="pb-16 pt-16 md:pb-32">
           <div className="group relative m-auto max-w-5xl px-6">
             <div className="absolute inset-0 z-10 flex scale-95 items-center justify-center opacity-0 duration-500 group-hover:scale-100 group-hover:opacity-100">
-              <Link href="/client/dashboard" className="block text-sm duration-150 hover:opacity-75">
+              <Link href="/client/feed" className="block text-sm duration-150 hover:opacity-75">
                 <span>Meet Our Customers</span>
                 <ChevronRight className="ml-1 inline-block size-3" />
               </Link>
@@ -148,7 +148,7 @@ export function HeroSection() {
 }
 
 const menuItems = [
-  { name: 'Features', href: '/client/dashboard' },
+  { name: 'Features', href: '/client/feed' },
   { name: 'Solution', href: '/developer/dashboard' },
   { name: 'Pricing', href: '/register' },
   { name: 'About', href: '/login' },

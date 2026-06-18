@@ -30,7 +30,7 @@ export class MediaService {
   ) {
     const mime = file.mimetype;
     const isImage = ["image/jpeg", "image/png", "image/webp"].includes(mime);
-    const isVideo = mime === "video/mp4";
+    const isVideo = ["video/mp4", "video/webm", "video/quicktime"].includes(mime);
 
     if (!isImage && !isVideo) {
       throw new BadRequestException("Unsupported file type");
@@ -45,7 +45,7 @@ export class MediaService {
     }
 
     if (mediaType === "VIDEO" && !isVideo) {
-      throw new BadRequestException("Media type VIDEO requires an mp4 file");
+      throw new BadRequestException("Media type VIDEO requires a supported video file");
     }
 
     if ((mediaType === "THUMBNAIL" || mediaType === "SCREENSHOT" || mediaType === "IMAGE") && !isImage) {
@@ -87,6 +87,13 @@ export class MediaService {
             order: 0
           }
         });
+
+        if (resolvedMediaType === "VIDEO") {
+          await this.prisma.project.update({
+            where: { id: projectId },
+            data: { videoUrl: upload.secure_url }
+          });
+        }
       }
     }
 
