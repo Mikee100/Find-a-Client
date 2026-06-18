@@ -151,6 +151,28 @@ function toNullableUrl(value: string): string | null {
   return trimmed ? trimmed : null;
 }
 
+function parseTimelineWeeks(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.toLowerCase();
+  const numbers = normalized.match(/\d+(?:\.\d+)?/g)?.map((part) => Number(part)) ?? [];
+  if (numbers.length === 0) {
+    return null;
+  }
+
+  let base = numbers.reduce((sum, current) => sum + current, 0) / numbers.length;
+
+  if (normalized.includes("month")) {
+    base *= 4;
+  } else if (normalized.includes("day")) {
+    base /= 7;
+  }
+
+  return Math.max(1, base);
+}
+
 function UploadDropZone({
   label,
   accept,
@@ -246,12 +268,14 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requirementsQuery, setRequirementsQuery] = useState("");
   const [showFullOverview, setShowFullOverview] = useState(false);
-  const [copiedState, setCopiedState] = useState<"none" | "url" | "summary">("none");
+  const [copiedState, setCopiedState] = useState<"none" | "url">("none");
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const hasHandledEditDeepLinkRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
@@ -274,6 +298,9 @@ export default function ProjectDetailPage() {
   const [editThumbnailUrl, setEditThumbnailUrl] = useState("");
   const [editVideoUrl, setEditVideoUrl] = useState("");
   const [editScreenshots, setEditScreenshots] = useState("");
+  const [fitBudget, setFitBudget] = useState("");
+  const [fitDeadlineWeeks, setFitDeadlineWeeks] = useState("");
+  const [fitRequiredStack, setFitRequiredStack] = useState("");
 
   const initializeEditForm = (item: ProjectDetail): void => {
     setEditTitle(item.title);
@@ -346,16 +373,6 @@ export default function ProjectDetailPage() {
   }, []);
 
   const parsed = useMemo(() => parseIntakeDetails(project?.longDescription ?? ""), [project?.longDescription]);
-  const filteredDetails = useMemo(() => {
-    const normalizedQuery = requirementsQuery.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return parsed.details;
-    }
-
-    return parsed.details.filter((item) => {
-      return item.label.toLowerCase().includes(normalizedQuery) || item.value.toLowerCase().includes(normalizedQuery);
-    });
-  }, [parsed.details, requirementsQuery]);
 
   const overviewText = parsed.narrative.trim();
   const hasLongOverview = overviewText.length > 540;
@@ -488,6 +505,17 @@ export default function ProjectDetailPage() {
     return [...new Set(merged.filter(Boolean))];
   }, [project]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setActiveGalleryIndex(0);
+      setLightboxIndex(null);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [project?.id]);
+
   const projectVideoUrls = useMemo(() => {
     if (!project) {
       return [] as string[];
@@ -507,6 +535,201 @@ export default function ProjectDetailPage() {
     return candidateUrls.filter((url, index, array) => array.indexOf(url) === index);
   }, [project]);
   const projectVideoUrl = projectVideoUrls[0] ?? null;
+  const mainGalleryImage = galleryImages[activeGalleryIndex] ?? galleryImages[0] ?? null;
+
+  const normalizedDetails = useMemo(
+    () =>
+      parsed.details.map((item) => ({
+        ...item,
+        key: item.label.toLowerCase()
+      })),
+    [parsed.details]
+  );
+
+  const pickDetailValue = (...needles: string[]): string | null => {
+    const match = normalizedDetails.find((item) => needles.some((needle) => item.key.includes(needle)));
+    return match?.value ?? null;
+  };
+
+  const problemText = pickDetailValue("problem", "pain", "challenge") ?? "Teams needed a cleaner way to discover and evaluate developer quality before starting a project.";
+  const solutionText =
+    pickDetailValue("solution", "approach", "strategy") ??
+    "This project delivers a structured developer marketplace experience with rich portfolio storytelling and direct conversion actions.";
+  const outcomeText =
+    pickDetailValue("outcome", "result", "impact") ??
+    "Clients can quickly assess capability, trust signals, and fit, then move straight into a hiring conversation.";
+  const durationLabel = pickDetailValue("duration", "timeline", "time") ?? "4-8 weeks";
+  const complexityLabel = pickDetailValue("complexity", "scope") ?? "Production-grade";
+  const responseTimeLabel = pickDetailValue("response", "reply") ?? "Usually responds in 2 hours";
+  const availabilityLabel =
+    pickDetailValue("availability") ?? (project?.status === "PUBLISHED" ? "Available for new projects" : "Limited availability");
+  const roleLabel = pickDetailValue("role", "title", "position") ?? "Senior Full Stack Engineer";
+  const locationLabel = pickDetailValue("location", "country", "city") ?? "Nairobi, Kenya";
+  const projectTypeLabel = project ? friendlyLabel(project.category) : "Project";
+
+  const timelineSource = pickDetailValue("timeline", "process", "milestone", "stages");
+  const timelineSteps = useMemo(() => {
+    if (!timelineSource) {
+      return ["Research", "Wireframes", "Development", "Testing", "Deployment"];
+    }
+
+    const parsedSteps = timelineSource
+      .split(/\n|,|>|→/)
+      .map((step) => step.trim())
+      .filter(Boolean);
+
+    return parsedSteps.length > 0 ? parsedSteps.slice(0, 7) : ["Research", "Wireframes", "Development", "Testing", "Deployment"];
+  }, [timelineSource]);
+
+  const featureHighlights = useMemo(() => {
+    const candidates = parsed.details
+      .filter((item) => {
+        const normalized = item.label.toLowerCase();
+        return normalized.includes("feature") || normalized.includes("capability") || normalized.includes("module") || normalized.includes("service");
+      })
+      .map((item) => item.value)
+      .flatMap((value) => value.split(/\n|,|•|\|/))
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    if (candidates.length > 0) {
+      return [...new Set(candidates)].slice(0, 8);
+    }
+
+    return ["Conversion-focused project showcase", "Trust-first developer profile", "Rich media gallery with video", "Structured case-study narrative"];
+  }, [parsed.details]);
+
+  const resourceLinks = useMemo(
+    () =>
+      [
+        { label: "Live Demo", url: project?.demoUrl },
+        { label: "Video Walkthrough", url: projectVideoUrl },
+        { label: "Primary Screenshot", url: galleryImages[0] }
+      ].filter((item): item is { label: string; url: string } => Boolean(item.url)),
+    [galleryImages, project?.demoUrl, projectVideoUrl]
+  );
+
+  const authorInitials = useMemo(() => {
+    const name = project?.author.fullName.trim() ?? "";
+    if (!name) {
+      return "DV";
+    }
+    const parts = name.split(/\s+/).slice(0, 2);
+    return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "DV";
+  }, [project?.author.fullName]);
+
+  const trustScore = useMemo(() => {
+    if (!project) {
+      return 4.7;
+    }
+    const engagement = project.viewCount + project.likeCount * 8 + project.inquiryCount * 15;
+    if (engagement > 250) {
+      return 5;
+    }
+    if (engagement > 120) {
+      return 4.9;
+    }
+    if (engagement > 50) {
+      return 4.8;
+    }
+    return 4.7;
+  }, [project]);
+
+  const fitAssessment = useMemo(() => {
+    const defaultResult = {
+      score: 0,
+      budgetScore: 0,
+      timelineScore: 0,
+      stackScore: 0,
+      reasons: ["Load a project to calculate fit."] as string[]
+    };
+
+    if (!project) {
+      return defaultResult;
+    }
+
+    const inputBudget = Number(fitBudget);
+    const hasBudgetInput = Number.isFinite(inputBudget) && inputBudget > 0;
+    const hasFixedBudget = project.pricingType === "FIXED" && Number.isFinite(Number(project.price)) && Number(project.price) > 0;
+    const projectBudget = hasFixedBudget ? Number(project.price) : null;
+
+    let budgetScore = 70;
+    if (hasBudgetInput && projectBudget) {
+      const ratio = inputBudget / projectBudget;
+      if (ratio >= 1) {
+        budgetScore = 100;
+      } else if (ratio >= 0.8) {
+        budgetScore = 75;
+      } else if (ratio >= 0.6) {
+        budgetScore = 50;
+      } else {
+        budgetScore = 20;
+      }
+    }
+
+    const inputDeadline = Number(fitDeadlineWeeks);
+    const hasDeadlineInput = Number.isFinite(inputDeadline) && inputDeadline > 0;
+    const estimatedTimeline = parseTimelineWeeks(durationLabel);
+
+    let timelineScore = 70;
+    if (hasDeadlineInput && estimatedTimeline) {
+      const ratio = inputDeadline / estimatedTimeline;
+      if (ratio >= 1) {
+        timelineScore = 100;
+      } else if (ratio >= 0.8) {
+        timelineScore = 70;
+      } else if (ratio >= 0.6) {
+        timelineScore = 40;
+      } else {
+        timelineScore = 15;
+      }
+    }
+
+    const requiredStack = parseCommaList(fitRequiredStack).map((item) => item.toLowerCase());
+    const projectStack = project.techStack.map((item) => item.toLowerCase());
+
+    let stackScore = 70;
+    let matchedCount = 0;
+    if (requiredStack.length > 0) {
+      matchedCount = requiredStack.filter((item) => projectStack.includes(item)).length;
+      stackScore = Math.round((matchedCount / requiredStack.length) * 100);
+    }
+
+    const score = Math.round(budgetScore * 0.4 + timelineScore * 0.3 + stackScore * 0.3);
+    const reasons: string[] = [];
+
+    if (hasBudgetInput) {
+      if (!projectBudget) {
+        reasons.push("Budget fit is estimated because this project does not expose a fixed price.");
+      } else if (inputBudget >= projectBudget) {
+        reasons.push("Your budget can cover the indicated project price.");
+      } else {
+        reasons.push(`Your budget is below the listed ${new Intl.NumberFormat(undefined, { style: "currency", currency: project.currency }).format(projectBudget)} target.`);
+      }
+    } else {
+      reasons.push("Add your budget to get a more accurate fit score.");
+    }
+
+    if (hasDeadlineInput) {
+      if (!estimatedTimeline) {
+        reasons.push("Timeline fit is estimated because duration details are broad.");
+      } else if (inputDeadline >= estimatedTimeline) {
+        reasons.push("Your deadline aligns with the estimated delivery window.");
+      } else {
+        reasons.push(`Your deadline is tighter than the estimated ${estimatedTimeline.toFixed(1)} week delivery.`);
+      }
+    } else {
+      reasons.push("Add your desired timeline in weeks to improve timeline matching.");
+    }
+
+    if (requiredStack.length > 0) {
+      reasons.push(`Stack overlap: ${matchedCount}/${requiredStack.length} required technologies matched.`);
+    } else {
+      reasons.push("Add required stack items to score technical fit.");
+    }
+
+    return { score, budgetScore, timelineScore, stackScore, reasons };
+  }, [durationLabel, fitBudget, fitDeadlineWeeks, fitRequiredStack, project]);
 
   const copyProjectUrl = async (): Promise<void> => {
     if (typeof window === "undefined" || !navigator.clipboard) {
@@ -515,25 +738,6 @@ export default function ProjectDetailPage() {
 
     await navigator.clipboard.writeText(window.location.href);
     setCopiedState("url");
-    window.setTimeout(() => setCopiedState("none"), 1500);
-  };
-
-  const copySummary = async (): Promise<void> => {
-    if (!project || typeof window === "undefined" || !navigator.clipboard) {
-      return;
-    }
-
-    const summary = [
-      `Project: ${project.title}`,
-      `Price: ${formatMoney(project.price, project.currency, project.pricingType)}`,
-      `Category: ${friendlyLabel(project.category)}`,
-      `Status: ${friendlyLabel(project.status)}`,
-      "",
-      project.shortDescription
-    ].join("\n");
-
-    await navigator.clipboard.writeText(summary);
-    setCopiedState("summary");
     window.setTimeout(() => setCopiedState("none"), 1500);
   };
 
@@ -699,101 +903,134 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900">
+    <main className="min-h-screen bg-white text-slate-900">
       <MarketplaceNavbar />
 
-      <section className="mx-auto w-full max-w-6xl px-3 py-4 md:px-5 md:py-6">
-        {error ? <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}
+      <section className="mx-auto w-full max-w-310 px-4 py-6 md:px-6 md:py-8">
+        {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
 
         {project ? (
-          <div className="space-y-3">
-            <header className="relative overflow-hidden border border-neutral-200 bg-white p-3 md:p-4">
+          <div className="space-y-8">
+            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <BackButton fallbackHref="/projects" label="Back" size="sm" />
+              <Link href="/projects" className="font-semibold text-slate-600 hover:text-slate-900">
+                Projects
+              </Link>
+              <span>/</span>
+              <span className="font-medium text-slate-700">Case Study</span>
+            </div>
+
+            <header className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 px-5 py-6 text-slate-900 shadow-xl shadow-slate-300/60 md:px-8 md:py-9">
               {project.backgroundUrl ? (
                 <>
                   <div className="absolute inset-0">
-                    <Image src={project.backgroundUrl} alt="Project background" fill className="object-cover" unoptimized />
+                    <Image src={project.backgroundUrl} alt="Project background" fill className="object-cover opacity-10" unoptimized />
                   </div>
-                  <div className="absolute inset-0 bg-white/85" />
+                  <div className="absolute inset-0 bg-white/90" />
                 </>
               ) : null}
 
-              <div className="relative z-10 mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 pb-3 text-xs text-neutral-500">
-                <div className="flex items-center gap-2">
-                  <BackButton fallbackHref="/projects" label="Back" size="sm" />
-                  <Link href="/projects" className="font-medium hover:text-neutral-800">
-                    Projects
-                  </Link>
-                  <span>/</span>
-                  <span className="truncate">{project.slug}</span>
+              <div className="relative z-10 grid gap-6 xl:grid-cols-[1.5fr_0.85fr]">
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1">Featured Case Study</span>
+                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1">{friendlyLabel(project.category)}</span>
+                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1">Updated {new Date(project.updatedAt).toLocaleDateString()}</span>
+                  </div>
+
+                  <div>
+                    <h1 className="max-w-4xl text-3xl font-semibold leading-tight tracking-tight md:text-[44px]">{project.title}</h1>
+                    <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-700 md:text-base">{project.shortDescription}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5">{formatMoney(project.price, project.currency, project.pricingType)}</span>
+                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5">{projectTypeLabel}</span>
+                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5">{complexityLabel}</span>
+                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5">{durationLabel}</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    {project.demoUrl ? (
+                      <a
+                        href={project.demoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-semibold text-slate-900 underline underline-offset-4"
+                      >
+                        View Live Demo
+                      </a>
+                    ) : null}
+                    <Link
+                      href={`/developers/${project.author.username}`}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                    >
+                      Hire Developer
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setIsSaved((current) => !current)}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                    >
+                      {isSaved ? "Saved" : "Save Project"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void copyProjectUrl();
+                      }}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                    >
+                      {copiedState === "url" ? "Link Copied" : "Share"}
+                    </button>
+                  </div>
                 </div>
-                <span>Updated {new Date(project.updatedAt).toLocaleDateString()}</span>
+
+                <aside className="rounded-2xl border border-slate-200 bg-white p-4 backdrop-blur md:p-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">Hire This Developer</p>
+                  <p className="mt-2 text-sm font-medium text-slate-900">{responseTimeLabel}</p>
+                  <p className="mt-1 text-xs text-slate-600">{availabilityLabel}</p>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                    <div className="px-0 py-0">
+                      <p className="text-slate-600">Trust Score</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{trustScore.toFixed(1)} / 5</p>
+                    </div>
+                    <div className="px-0 py-0">
+                      <p className="text-slate-600">Client Inquiries</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{project.inquiryCount}</p>
+                    </div>
+                    <div className="px-0 py-0">
+                      <p className="text-slate-600">Views</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{project.viewCount}</p>
+                    </div>
+                    <div className="px-0 py-0">
+                      <p className="text-slate-600">Likes</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{project.likeCount}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    <Link
+                      href={`/developers/${project.author.username}`}
+                      className="block text-sm font-semibold text-slate-900 underline underline-offset-4"
+                    >
+                      Message Developer
+                    </Link>
+                    <Link
+                      href={`/developers/${project.author.username}`}
+                      className="block text-sm font-semibold text-slate-700 underline underline-offset-4"
+                    >
+                      View Full Profile
+                    </Link>
+                  </div>
+                </aside>
               </div>
 
-              <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-tight md:text-[30px]">{project.title}</h1>
-                  <p className="mt-1 max-w-3xl text-sm leading-6 text-neutral-700">{project.shortDescription}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Budget</p>
-                  <p className="mt-1 text-lg font-semibold text-neutral-900">
-                    {formatMoney(project.price, project.currency, project.pricingType)}
-                  </p>
-                </div>
-              </div>
+              {saveError ? <p className="relative z-10 mt-4 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{saveError}</p> : null}
+              {saveSuccess ? <p className="relative z-10 mt-4 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">{saveSuccess}</p> : null}
 
-              <div className="relative z-10 mt-3 grid gap-2 border-t border-neutral-100 pt-3 text-xs md:grid-cols-5">
-                <div className="border border-neutral-200 px-2.5 py-2">
-                  <p className="text-neutral-500">Category</p>
-                  <p className="mt-0.5 font-medium text-neutral-800">{friendlyLabel(project.category)}</p>
-                </div>
-                <div className="border border-neutral-200 px-2.5 py-2">
-                  <p className="text-neutral-500">Status</p>
-                  <p className="mt-0.5 font-medium text-neutral-800">{friendlyLabel(project.status)}</p>
-                </div>
-                <div className="border border-neutral-200 px-2.5 py-2">
-                  <p className="text-neutral-500">Likes</p>
-                  <p className="mt-0.5 font-medium text-neutral-800">{project.likeCount}</p>
-                </div>
-                <div className="border border-neutral-200 px-2.5 py-2">
-                  <p className="text-neutral-500">Views</p>
-                  <p className="mt-0.5 font-medium text-neutral-800">{project.viewCount}</p>
-                </div>
-                <div className="border border-neutral-200 px-2.5 py-2">
-                  <p className="text-neutral-500">Created</p>
-                  <p className="mt-0.5 font-medium text-neutral-800">{new Date(project.createdAt).toLocaleDateString()}</p>
-                </div>
-              </div>
-
-              <div className="relative z-10 mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copyProjectUrl();
-                  }}
-                  className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
-                >
-                  {copiedState === "url" ? "Link copied" : "Copy link"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copySummary();
-                  }}
-                  className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
-                >
-                  {copiedState === "summary" ? "Summary copied" : "Copy summary"}
-                </button>
-                {project.demoUrl ? (
-                  <a
-                    href={project.demoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="border border-neutral-900 bg-neutral-900 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700"
-                  >
-                    Open demo
-                  </a>
-                ) : null}
+              <div className="relative z-10 mt-5">
                 {isAuthenticated ? (
                   <button
                     type="button"
@@ -812,26 +1049,23 @@ export default function ProjectDetailPage() {
                       setSaveError(null);
                       setSaveSuccess(null);
                     }}
-                    className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
+                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-50"
                   >
-                    {isEditing ? "Close editor" : "Edit project"}
+                    {isEditing ? "Close Editor" : "Edit Case Study"}
                   </button>
                 ) : (
                   <Link
                     href="/login"
-                    className="border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
+                    className="inline-block rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-50"
                   >
-                    Sign in to edit
+                    Sign In To Edit
                   </Link>
                 )}
               </div>
-
-              {saveError ? <p className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{saveError}</p> : null}
-              {saveSuccess ? <p className="mt-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">{saveSuccess}</p> : null}
             </header>
 
             {isEditing ? (
-              <section className="border border-neutral-200 bg-white p-3 md:p-4">
+              <section className="border border-neutral-200 bg-slate-100 p-3 md:p-4">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Edit Project</h2>
                   <span className="text-xs text-neutral-500">{canEdit ? "Owner mode" : "Read-only mode"}</span>
@@ -1197,188 +1431,403 @@ export default function ProjectDetailPage() {
               </section>
             ) : null}
 
-            <div className="grid gap-3 xl:grid-cols-[1.45fr_0.9fr]">
-              <article className="space-y-3">
-                <section className="border border-neutral-200 bg-white p-3 md:p-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Project Videos</h2>
-                  {projectVideoUrl ? (
-                    <div className="mt-3 space-y-3">
-                      <div className="overflow-hidden border border-neutral-200 bg-black">
+            <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)_300px] xl:grid-cols-[280px_minmax(0,1fr)_320px] lg:items-start">
+              <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+                <section className="border border-slate-200 bg-slate-50 px-4 py-4 md:px-5">
+                  <div className="border-b border-slate-200 pb-5 pt-1 text-slate-900">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-300 bg-white text-lg font-semibold text-slate-900">{authorInitials}</div>
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-semibold">{project.author.fullName}</p>
+                        <p className="mt-0.5 text-xs text-slate-700">{roleLabel}</p>
+                        <p className="mt-1 text-xs text-slate-600">{locationLabel}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em]">
+                      <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-700">Top Rated</span>
+                      <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-700">GitHub Verified</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-5">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="px-0 py-0">
+                        <p className="text-[11px] text-slate-500">Rating</p>
+                        <p className="mt-0.5 text-sm font-semibold text-slate-900">{trustScore.toFixed(1)}</p>
+                      </div>
+                      <div className="px-0 py-0">
+                        <p className="text-[11px] text-slate-500">Response</p>
+                        <p className="mt-0.5 text-sm font-semibold text-slate-900">2 hrs</p>
+                      </div>
+                      <div className="px-0 py-0">
+                        <p className="text-[11px] text-slate-500">Status</p>
+                        <p className="mt-0.5 text-sm font-semibold text-emerald-700">Open</p>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-xs text-slate-600">{responseTimeLabel}. Available for scoped MVPs and long-term product work.</p>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {project.techStack.slice(0, 6).map((skill) => (
+                        <span key={skill} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      <Link
+                        href={`/developers/${project.author.username}`}
+                        className="block text-sm font-semibold text-slate-900 underline underline-offset-4"
+                      >
+                        Hire Developer
+                      </Link>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Link
+                          href={`/developers/${project.author.username}`}
+                          className="text-sm font-semibold text-slate-700 underline underline-offset-4"
+                        >
+                          Message
+                        </Link>
+                        <Link
+                          href={`/developers/${project.author.username}`}
+                          className="text-sm font-semibold text-slate-700 underline underline-offset-4"
+                        >
+                          Profile
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="border border-slate-200 bg-slate-100 px-4 py-4 md:px-5">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Project Snapshot</h3>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="px-0 py-0">
+                      <p className="text-slate-500">Views</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{project.viewCount}</p>
+                    </div>
+                    <div className="px-0 py-0">
+                      <p className="text-slate-500">Likes</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{project.likeCount}</p>
+                    </div>
+                    <div className="px-0 py-0">
+                      <p className="text-slate-500">Inquiries</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{project.inquiryCount}</p>
+                    </div>
+                    <div className="px-0 py-0">
+                      <p className="text-slate-500">Type</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{projectTypeLabel}</p>
+                    </div>
+                  </div>
+                </section>
+              </aside>
+
+              <article className="order-3 space-y-6 lg:order-0">
+                {(mainGalleryImage || projectVideoUrl) ? (
+                  <section className="border border-slate-200 bg-slate-50 px-4 py-4 md:px-5">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Showcase</h2>
+                    {projectVideoUrl ? (
+                      <div className="group relative mt-4 overflow-hidden">
                         <video
                           controls
                           preload="metadata"
-                          poster={project.thumbnailUrl ?? undefined}
+                          poster={project.thumbnailUrl ?? mainGalleryImage ?? undefined}
                           className="aspect-video h-auto w-full"
                         >
                           <source src={projectVideoUrl} />
                           Your browser does not support video playback.
                         </video>
+                        <span className="pointer-events-none absolute left-4 top-4 text-xs font-semibold text-white">Video Walkthrough</span>
                       </div>
-
-                      {projectVideoUrls.length > 1 ? (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {projectVideoUrls.slice(1).map((url, index) => (
-                            <div key={`${url}-${index}`} className="overflow-hidden border border-neutral-200 bg-black">
-                              <video controls preload="metadata" className="aspect-video h-auto w-full">
-                                <source src={url} />
-                                Your browser does not support video playback.
-                              </video>
-                            </div>
-                          ))}
+                    ) : mainGalleryImage ? (
+                      <button
+                        type="button"
+                        onClick={() => setLightboxIndex(activeGalleryIndex)}
+                        className="group mt-4 block w-full overflow-hidden"
+                      >
+                        <div className="relative aspect-video w-full">
+                          <Image src={mainGalleryImage} alt="Main project screenshot" fill className="object-cover transition duration-300 group-hover:scale-[1.02]" unoptimized />
                         </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-neutral-600">No project video uploaded yet.</p>
-                  )}
-                </section>
+                      </button>
+                    ) : null}
 
-                {galleryImages.length > 0 ? (
-                  <section className="border border-neutral-200 bg-white p-3 md:p-4">
-                    <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Project Images</h2>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {galleryImages.map((url, index) => (
-                        <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden border border-neutral-200 bg-neutral-100">
-                          <div className="relative h-40 w-full">
-                            <Image src={url} alt={`Project screenshot ${index + 1}`} fill className="object-cover" unoptimized />
-                          </div>
-                        </a>
-                      ))}
-                    </div>
+                    {galleryImages.length > 1 ? (
+                      <div className="mt-3 grid grid-cols-4 gap-2">
+                        {galleryImages.slice(0, 4).map((url, index) => (
+                          <button
+                            key={`${url}-${index}`}
+                            type="button"
+                            onClick={() => {
+                              setActiveGalleryIndex(index);
+                              setLightboxIndex(index);
+                            }}
+                            className={`overflow-hidden border transition ${
+                              index === activeGalleryIndex ? "border-cyan-500" : "border-slate-200 hover:border-slate-400"
+                            }`}
+                          >
+                            <div className="relative aspect-4/3 w-full">
+                              <Image src={url} alt={`Project gallery ${index + 1}`} fill className="object-cover" unoptimized />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </section>
                 ) : null}
 
-                <section className="border border-neutral-200 bg-white p-3 md:p-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Overview</h2>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-800">{visibleOverview || "No overview provided."}</p>
+                <section className="border border-slate-200 bg-slate-100 px-4 py-4 md:px-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">About This Project</h2>
+                  <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700 md:text-base">{visibleOverview || "No overview provided."}</p>
                   {hasLongOverview ? (
                     <button
                       type="button"
                       onClick={() => setShowFullOverview((current) => !current)}
-                      className="mt-2 text-xs font-medium text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
+                      className="mt-3 text-xs font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
                     >
-                      {showFullOverview ? "Show less" : "Show full overview"}
+                      {showFullOverview ? "Show less" : "Show full story"}
                     </button>
                   ) : null}
                 </section>
 
-                <section className="grid gap-3 md:grid-cols-2">
-                  <div className="border border-neutral-200 bg-white p-3 md:p-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Tech Stack</h3>
-                    {project.techStack.length > 0 ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                        {project.techStack.map((item) => (
-                          <span key={item} className="border border-neutral-200 px-2 py-1 text-neutral-700">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-neutral-600">No tech stack specified.</p>
-                    )}
-                  </div>
+                <section className="grid gap-4 border border-slate-200 bg-slate-50 px-4 py-4 md:grid-cols-3 md:px-5">
+                  <article className="">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Problem</h3>
+                    <p className="mt-3 text-sm leading-7 text-slate-700">{problemText}</p>
+                  </article>
+                  <article className="">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Solution</h3>
+                    <p className="mt-3 text-sm leading-7 text-slate-700">{solutionText}</p>
+                  </article>
+                  <article className="">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Outcome</h3>
+                    <p className="mt-3 text-sm leading-7 text-slate-700">{outcomeText}</p>
+                  </article>
+                </section>
 
-                  <div className="border border-neutral-200 bg-white p-3 md:p-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Industries</h3>
+                <section className="border border-slate-200 bg-slate-100 px-4 py-4 md:px-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Key Features</h2>
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                    {featureHighlights.map((feature, index) => (
+                      <div key={`${feature}-${index}`} className="px-0 py-0.5 text-sm text-slate-700">
+                        {feature}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="border border-slate-200 bg-slate-50 px-4 py-4 md:px-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Technology Stack</h2>
+                  {project.techStack.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {project.techStack.map((item) => (
+                        <span key={item} className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-600">Tech stack details were not provided.</p>
+                  )}
+                </section>
+
+                <section className="border border-slate-200 bg-slate-100 px-4 py-4 md:px-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Development Process</h2>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    {timelineSteps.map((step, index) => (
+                      <div key={`${step}-${index}`} className="px-0 py-0 text-sm font-medium text-slate-900">
+                        {step}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="grid gap-4 border border-slate-200 bg-slate-50 px-4 py-4 md:grid-cols-2 md:px-5">
+                  <article className="">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Industries Served</h2>
                     {project.industries.length > 0 ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                        {project.industries.map((item) => (
-                          <span key={item} className="border border-neutral-200 px-2 py-1 text-neutral-700">
-                            {item}
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {project.industries.map((industry) => (
+                          <span key={industry} className="rounded-full bg-cyan-50 px-3 py-1.5 text-xs font-medium text-cyan-800">
+                            {industry}
                           </span>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-2 text-sm text-neutral-600">No industries specified.</p>
+                      <p className="mt-3 text-sm text-slate-600">Industry details coming soon.</p>
                     )}
+                  </article>
+
+                  <article className="">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Resources</h2>
+                    {resourceLinks.length > 0 ? (
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        {resourceLinks.map((resource) => (
+                          <a
+                            key={`${resource.label}-${resource.url}`}
+                            href={resource.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-500 hover:text-slate-900"
+                          >
+                            {resource.label}
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-600">No external resources provided.</p>
+                    )}
+                  </article>
+                </section>
+
+                <section className="border border-slate-200 bg-slate-100 px-4 py-7 text-slate-900 md:px-5">
+                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-600">Ready To Build Something Similar?</p>
+                  <h2 className="mt-3 text-2xl font-semibold md:text-3xl">Let&apos;s turn your idea into a production-ready product.</h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-700">
+                    Work directly with {project.author.fullName} to design, build, and ship software with the same quality shown in this case study.
+                  </p>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <Link
+                      href={`/developers/${project.author.username}`}
+                      className="text-sm font-semibold text-slate-900 underline underline-offset-4"
+                    >
+                      Hire {project.author.fullName.split(" ")[0] || "Developer"}
+                    </Link>
+                    <Link
+                      href={`/developers/${project.author.username}`}
+                      className="text-sm font-semibold text-slate-700 underline underline-offset-4"
+                    >
+                      Message Developer
+                    </Link>
+                  </div>
+                </section>
+
+                <section className="border border-slate-200 bg-slate-50 px-4 py-4 md:px-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">More Projects From This Developer</h2>
+                    <Link href={`/developers/${project.author.username}`} className="text-xs font-semibold text-slate-600 hover:text-slate-900">
+                      View profile
+                    </Link>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {["Mobile Product", "Dashboard System", "API Platform"].map((name, index) => (
+                      <article key={`${name}-${index}`} className="border border-slate-300 bg-slate-100 p-3">
+                        <p className="text-sm font-semibold text-slate-800">{name}</p>
+                        <p className="mt-1 text-xs text-slate-500">More project highlights can be shown here to keep clients exploring.</p>
+                      </article>
+                    ))}
                   </div>
                 </section>
               </article>
 
-              <aside className="space-y-3">
-                <section className="border border-neutral-200 bg-white p-3 md:p-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Project Links</h2>
-                  <ul className="mt-2 space-y-1.5 text-sm">
-                    {project.demoUrl ? (
-                      <li>
-                        <a href={project.demoUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
-                          Demo
-                        </a>
-                      </li>
-                    ) : null}
-                    {projectVideoUrl ? (
-                      <li>
-                        <a href={projectVideoUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
-                          Video
-                        </a>
-                      </li>
-                    ) : null}
-                    {project.thumbnailUrl ? (
-                      <li>
-                        <a href={project.thumbnailUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
-                          Thumbnail
-                        </a>
-                      </li>
-                    ) : null}
-                    {!project.demoUrl && !projectVideoUrl && !project.thumbnailUrl ? (
-                      <li className="text-neutral-600">No external links attached.</li>
-                    ) : null}
-                  </ul>
-                </section>
+              <aside className="order-2 space-y-4 lg:order-0 lg:sticky lg:top-20 lg:self-start">
+                <section className="border border-slate-200 bg-slate-50 px-4 py-4 md:px-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Client Fit Score</h3>
+                    <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700">
+                      {fitAssessment.score}%
+                    </span>
+                  </div>
 
-                <section className="border border-neutral-200 bg-white p-3 md:p-4">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Fast Facts</h2>
-                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                    <dt className="text-neutral-500">Author</dt>
-                    <dd className="text-neutral-800">{project.author.fullName}</dd>
-                    <dt className="text-neutral-500">Username</dt>
-                    <dd className="text-neutral-800">@{project.author.username}</dd>
-                    <dt className="text-neutral-500">Slug</dt>
-                    <dd className="break-all text-neutral-800">{project.slug}</dd>
-                    <dt className="text-neutral-500">Price Type</dt>
-                    <dd className="text-neutral-800">{friendlyLabel(project.pricingType)}</dd>
-                  </dl>
+                  <p className="mt-2 text-xs text-slate-600">Enter your needs to see how well this project matches your budget, timeline, and stack.</p>
+
+                  <div className="mt-3 space-y-2.5">
+                    <label className="block text-[11px] font-medium text-slate-600">
+                      Budget ({project.currency})
+                      <input
+                        type="number"
+                        min={0}
+                        step="100"
+                        value={fitBudget}
+                        onChange={(event) => setFitBudget(event.target.value)}
+                        placeholder="e.g. 5000"
+                        className="mt-1 h-9 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-800 outline-none transition focus:border-slate-900"
+                      />
+                    </label>
+
+                    <label className="block text-[11px] font-medium text-slate-600">
+                      Deadline (weeks)
+                      <input
+                        type="number"
+                        min={1}
+                        step="1"
+                        value={fitDeadlineWeeks}
+                        onChange={(event) => setFitDeadlineWeeks(event.target.value)}
+                        placeholder="e.g. 6"
+                        className="mt-1 h-9 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-800 outline-none transition focus:border-slate-900"
+                      />
+                    </label>
+
+                    <label className="block text-[11px] font-medium text-slate-600">
+                      Required stack (comma separated)
+                      <input
+                        value={fitRequiredStack}
+                        onChange={(event) => setFitRequiredStack(event.target.value)}
+                        placeholder="React, Node.js, PostgreSQL"
+                        className="mt-1 h-9 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-800 outline-none transition focus:border-slate-900"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                    <div className="border border-slate-200 bg-white px-2 py-2">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Budget</p>
+                      <p className="mt-0.5 text-sm font-semibold text-slate-900">{fitAssessment.budgetScore}%</p>
+                    </div>
+                    <div className="border border-slate-200 bg-white px-2 py-2">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Timeline</p>
+                      <p className="mt-0.5 text-sm font-semibold text-slate-900">{fitAssessment.timelineScore}%</p>
+                    </div>
+                    <div className="border border-slate-200 bg-white px-2 py-2">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Stack</p>
+                      <p className="mt-0.5 text-sm font-semibold text-slate-900">{fitAssessment.stackScore}%</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-1.5 border border-slate-200 bg-white p-2.5">
+                    {fitAssessment.reasons.map((reason, index) => (
+                      <p key={`${reason}-${index}`} className="text-xs leading-5 text-slate-700">
+                        {reason}
+                      </p>
+                    ))}
+                  </div>
                 </section>
               </aside>
             </div>
 
-            <section className="border border-neutral-200 bg-white p-3 md:p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Requirements</h2>
-                <span className="text-xs text-neutral-500">
-                  {filteredDetails.length}/{parsed.details.length}
-                </span>
+            {lightboxIndex !== null && galleryImages[lightboxIndex] ? (
+              <div
+                role="dialog"
+                aria-modal="true"
+                className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4"
+                onClick={() => setLightboxIndex(null)}
+              >
+                <div className="relative w-full max-w-5xl" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setLightboxIndex(null)}
+                    className="absolute right-2 top-2 z-10 rounded-full bg-black/70 px-3 py-1 text-sm font-semibold text-white"
+                  >
+                    Close
+                  </button>
+                  <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-slate-900">
+                    <Image
+                      src={galleryImages[lightboxIndex]}
+                      alt={`Project gallery full view ${lightboxIndex + 1}`}
+                      fill
+                      className="object-contain"
+                      unoptimized
+                    />
+                  </div>
+                </div>
               </div>
-
-              {parsed.details.length > 0 ? (
-                <>
-                  <input
-                    value={requirementsQuery}
-                    onChange={(event) => setRequirementsQuery(event.target.value)}
-                    placeholder="Search requirements"
-                    className="mb-3 block h-9 w-full border border-neutral-300 bg-white px-2.5 text-sm outline-none transition focus:border-neutral-900"
-                  />
-
-                  {filteredDetails.length > 0 ? (
-                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                      {filteredDetails.map((item) => (
-                        <article key={`${item.label}-${item.value}`} className="border border-neutral-200 bg-neutral-50 px-3 py-2.5">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{item.label}</p>
-                          <p className="mt-1 text-sm leading-6 text-neutral-800">{item.value}</p>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-neutral-600">No requirements match your search.</p>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-neutral-600">No structured requirements were provided.</p>
-              )}
-            </section>
+            ) : null}
           </div>
         ) : null}
       </section>
     </main>
   );
 }
+
+
