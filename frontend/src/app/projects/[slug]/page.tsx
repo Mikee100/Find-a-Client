@@ -51,6 +51,22 @@ function formatMoney(price: number | string | null, currency: string, pricingTyp
   }).format(numericPrice);
 }
 
+function looksLikeVideoUrl(value: string | null | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes("/video/") ||
+    normalized.endsWith(".mp4") ||
+    normalized.endsWith(".webm") ||
+    normalized.endsWith(".mov") ||
+    normalized.includes(".mp4?") ||
+    normalized.includes(".webm?") ||
+    normalized.includes(".mov?")
+  );
+}
+
 function friendlyLabel(value: string): string {
   return value
     .split("_")
@@ -239,6 +255,7 @@ export default function ProjectDetailPage() {
   const hasHandledEditDeepLinkRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [videoDeleting, setVideoDeleting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
@@ -471,6 +488,26 @@ export default function ProjectDetailPage() {
     return [...new Set(merged.filter(Boolean))];
   }, [project]);
 
+  const projectVideoUrls = useMemo(() => {
+    if (!project) {
+      return [] as string[];
+    }
+
+    const mediaVideos = [...(project.media ?? [])]
+      .filter((item) => item.type === "VIDEO" || looksLikeVideoUrl(item.url))
+      .sort((left, right) => left.order - right.order)
+      .map((item) => item.url);
+
+    const candidateUrls = [
+      ...(project.videoUrl ? [project.videoUrl] : []),
+      ...mediaVideos,
+      ...(looksLikeVideoUrl(project.demoUrl) ? [project.demoUrl] : [])
+    ].filter((url): url is string => Boolean(url));
+
+    return candidateUrls.filter((url, index, array) => array.indexOf(url) === index);
+  }, [project]);
+  const projectVideoUrl = projectVideoUrls[0] ?? null;
+
   const copyProjectUrl = async (): Promise<void> => {
     if (typeof window === "undefined" || !navigator.clipboard) {
       return;
@@ -545,7 +582,7 @@ export default function ProjectDetailPage() {
   };
 
   async function uploadThumbnailFile(file: File) {
-    if (!file) {
+    if (!file || !project) {
       return;
     }
 
@@ -553,8 +590,10 @@ export default function ProjectDetailPage() {
     setSaveError(null);
 
     try {
-      const upload = await uploadMediaFile(file, { mediaType: "THUMBNAIL" });
+      const upload = await uploadMediaFile(file, { mediaType: "THUMBNAIL", projectId: project.id });
       setEditThumbnailUrl(upload.url);
+      const refreshed = await getProjectBySlug(project.slug);
+      setProject(refreshed);
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Failed to upload thumbnail.";
       setSaveError(message);
@@ -564,7 +603,7 @@ export default function ProjectDetailPage() {
   }
 
   async function uploadBackgroundFile(file: File) {
-    if (!file) {
+    if (!file || !project) {
       return;
     }
 
@@ -572,8 +611,10 @@ export default function ProjectDetailPage() {
     setSaveError(null);
 
     try {
-      const upload = await uploadMediaFile(file, { mediaType: "IMAGE" });
+      const upload = await uploadMediaFile(file, { mediaType: "IMAGE", projectId: project.id });
       setEditBackgroundUrl(upload.url);
+      const refreshed = await getProjectBySlug(project.slug);
+      setProject(refreshed);
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Failed to upload background image.";
       setSaveError(message);
@@ -583,7 +624,7 @@ export default function ProjectDetailPage() {
   }
 
   async function uploadScreenshotFiles(files: File[]) {
-    if (files.length === 0) {
+    if (files.length === 0 || !project) {
       return;
     }
 
@@ -591,8 +632,10 @@ export default function ProjectDetailPage() {
     setSaveError(null);
 
     try {
-      const uploads = await Promise.all(files.map((file) => uploadMediaFile(file, { mediaType: "SCREENSHOT" })));
+      const uploads = await Promise.all(files.map((file) => uploadMediaFile(file, { mediaType: "SCREENSHOT", projectId: project.id })));
       setEditScreenshots((prev) => mergeCommaLists(prev, uploads.map((item) => item.url)));
+      const refreshed = await getProjectBySlug(project.slug);
+      setProject(refreshed);
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Failed to upload screenshots.";
       setSaveError(message);
@@ -602,7 +645,7 @@ export default function ProjectDetailPage() {
   }
 
   async function uploadVideoFile(file: File) {
-    if (!file) {
+    if (!file || !project) {
       return;
     }
 
@@ -610,13 +653,39 @@ export default function ProjectDetailPage() {
     setSaveError(null);
 
     try {
-      const upload = await uploadMediaFile(file, { mediaType: "VIDEO" });
+      const upload = await uploadMediaFile(file, { mediaType: "VIDEO", projectId: project.id });
       setEditVideoUrl(upload.url);
+      const refreshed = await getProjectBySlug(project.slug);
+      setProject(refreshed);
+      setSaveSuccess("Video uploaded.");
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Failed to upload video.";
       setSaveError(message);
     } finally {
       setMediaUploading(false);
+    }
+  }
+
+  async function deleteProjectVideo() {
+    if (!project) {
+      return;
+    }
+
+    setVideoDeleting(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    try {
+      await updateProject(project.slug, { videoUrl: null });
+      const refreshed = await getProjectBySlug(project.slug);
+      setProject(refreshed);
+      setEditVideoUrl("");
+      setSaveSuccess("Video deleted.");
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete video.";
+      setSaveError(message);
+    } finally {
+      setVideoDeleting(false);
     }
   }
 
@@ -1012,8 +1081,8 @@ export default function ProjectDetailPage() {
                       />
                       <div className="mt-2">
                         <UploadDropZone
-                          label="Upload MP4 video"
-                          accept="video/mp4"
+                          label="Upload video"
+                          accept="video/mp4,video/webm,video/quicktime"
                           currentUrl={editVideoUrl || undefined}
                           onFiles={(files) => {
                             if (files[0]) {
@@ -1028,10 +1097,13 @@ export default function ProjectDetailPage() {
                               <p className="text-[11px] font-medium text-neutral-700">Current video attached</p>
                               <button
                                 type="button"
-                                onClick={() => setEditVideoUrl("")}
+                                onClick={() => {
+                                  void deleteProjectVideo();
+                                }}
+                                disabled={videoDeleting || mediaUploading || saving}
                                 className="text-[11px] font-medium text-red-700 transition hover:text-red-800"
                               >
-                                Remove
+                                {videoDeleting ? "Deleting..." : "Delete video"}
                               </button>
                             </div>
                             <a href={editVideoUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-medium text-cyan-700 hover:underline">
@@ -1127,6 +1199,40 @@ export default function ProjectDetailPage() {
 
             <div className="grid gap-3 xl:grid-cols-[1.45fr_0.9fr]">
               <article className="space-y-3">
+                <section className="border border-neutral-200 bg-white p-3 md:p-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Project Videos</h2>
+                  {projectVideoUrl ? (
+                    <div className="mt-3 space-y-3">
+                      <div className="overflow-hidden border border-neutral-200 bg-black">
+                        <video
+                          controls
+                          preload="metadata"
+                          poster={project.thumbnailUrl ?? undefined}
+                          className="aspect-video h-auto w-full"
+                        >
+                          <source src={projectVideoUrl} />
+                          Your browser does not support video playback.
+                        </video>
+                      </div>
+
+                      {projectVideoUrls.length > 1 ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {projectVideoUrls.slice(1).map((url, index) => (
+                            <div key={`${url}-${index}`} className="overflow-hidden border border-neutral-200 bg-black">
+                              <video controls preload="metadata" className="aspect-video h-auto w-full">
+                                <source src={url} />
+                                Your browser does not support video playback.
+                              </video>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-neutral-600">No project video uploaded yet.</p>
+                  )}
+                </section>
+
                 {galleryImages.length > 0 ? (
                   <section className="border border-neutral-200 bg-white p-3 md:p-4">
                     <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Project Images</h2>
@@ -1200,9 +1306,9 @@ export default function ProjectDetailPage() {
                         </a>
                       </li>
                     ) : null}
-                    {project.videoUrl ? (
+                    {projectVideoUrl ? (
                       <li>
-                        <a href={project.videoUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+                        <a href={projectVideoUrl} className="text-neutral-800 underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
                           Video
                         </a>
                       </li>
@@ -1214,7 +1320,7 @@ export default function ProjectDetailPage() {
                         </a>
                       </li>
                     ) : null}
-                    {!project.demoUrl && !project.videoUrl && !project.thumbnailUrl ? (
+                    {!project.demoUrl && !projectVideoUrl && !project.thumbnailUrl ? (
                       <li className="text-neutral-600">No external links attached.</li>
                     ) : null}
                   </ul>

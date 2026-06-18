@@ -64,19 +64,19 @@ export class UpdateProjectDto {
 
 	@IsOptional()
 	@IsUrl({}, { message: "Demo URL is invalid." })
-	demoUrl?: string;
+	demoUrl?: string | null;
 
 	@IsOptional()
 	@IsUrl({}, { message: "Thumbnail URL is invalid." })
-	thumbnailUrl?: string;
+	thumbnailUrl?: string | null;
 
 	@IsOptional()
 	@IsUrl({}, { message: "Background image URL is invalid." })
-	backgroundUrl?: string;
+	backgroundUrl?: string | null;
 
 	@IsOptional()
 	@IsUrl({}, { message: "Video URL is invalid." })
-	videoUrl?: string;
+	videoUrl?: string | null;
 
 	@IsOptional()
 	@IsArray({ message: "Screenshots must be an array." })

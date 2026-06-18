@@ -111,7 +111,7 @@ export default function ClientSettingsPage() {
               <h1 className="text-2xl font-semibold text-neutral-900">Client Settings</h1>
               <p className="mt-1 text-sm text-neutral-600">Manage your account details used across your hiring workspace.</p>
             </div>
-            <BackButton fallbackHref="/client/dashboard" label="Back to dashboard" />
+            <BackButton fallbackHref="/client/feed" label="Back to feed" />
           </div>
 
           <div className="mb-5 flex items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3">

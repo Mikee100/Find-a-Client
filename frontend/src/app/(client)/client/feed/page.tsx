@@ -1,64 +1,53 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   Bell,
-  Bookmark,
-  Bot,
-  BriefcaseBusiness,
   Ellipsis,
   Eye,
   Heart,
   MapPin,
-  MessageSquareText,
   Search,
   Share2,
-  TrendingUp
+  SlidersHorizontal,
+  X
 } from "lucide-react";
 import {
-  DeveloperSearchItem,
-  getMessageThreads,
+  createMessageThread,
   getProjectBySlug,
   listProjects,
+  PricingType,
   ProjectCategory,
   ProjectDetail,
   ProjectListItem,
-  searchDevelopers,
-  ThreadSummary
+  trackProjectInquiry
 } from "@/lib/api";
 
-type FeedTab = "FEATURED" | "LATEST" | "TRENDING" | "MOST_VIEWED" | "SAVED";
-type BudgetFilter = "ALL" | "UNDER_2K" | "2K_TO_8K" | "8K_PLUS";
-type AvailabilityFilter = "ALL" | "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK";
-type ExperienceFilter = "ALL" | "JUNIOR" | "MID" | "SENIOR";
+type JobsListMode = "BEST_MATCHES" | "MOST_RECENT" | "SAVED";
+type FeedSortBy = "newest" | "popular" | "price_asc" | "price_desc";
 
-const FEED_TABS: Array<{ key: FeedTab; label: string }> = [
-  { key: "FEATURED", label: "Featured" },
-  { key: "LATEST", label: "Latest" },
-  { key: "TRENDING", label: "Trending" },
-  { key: "MOST_VIEWED", label: "Most Viewed" },
-  { key: "SAVED", label: "Saved" }
-];
+type FeedFilters = {
+  category: "ALL" | ProjectCategory;
+  pricingType: "ALL" | PricingType;
+  sortBy: FeedSortBy;
+  minPrice: string;
+  maxPrice: string;
+  techStack: string;
+  industries: string;
+};
 
-const SKILL_CHIPS = ["React", "Next.js", "Node", "Laravel", "Flutter", "AI", "Python"];
-const TRENDING_TECH = ["React", "Next.js", "AI", "Flutter", "Docker", "PostgreSQL", "Supabase", "Node"];
-const CATEGORY_CHIPS: Array<{ value: "ALL" | ProjectCategory; label: string }> = [
-  { value: "ALL", label: "All Categories" },
-  { value: "WEB_APP", label: "Web App" },
-  { value: "MOBILE_APP", label: "Mobile App" },
-  { value: "API", label: "API" },
-  { value: "AI_ML", label: "AI / ML" },
-  { value: "ECOMMERCE", label: "Ecommerce" }
-];
-
-function toTitleCase(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
+const DEFAULT_FEED_FILTERS: FeedFilters = {
+  category: "ALL",
+  pricingType: "ALL",
+  sortBy: "newest",
+  minPrice: "",
+  maxPrice: "",
+  techStack: "",
+  industries: ""
+};
 
 function initials(name: string): string {
   const parts = name.split(" ").filter(Boolean);
@@ -111,35 +100,11 @@ function formatMoney(price: number | string | null, currency: string, pricingTyp
   }).format(numericPrice);
 }
 
-function getPriceBucket(project: ProjectListItem): BudgetFilter {
-  if (project.pricingType === "FREE") {
-    return "UNDER_2K";
-  }
-  const numericPrice = typeof project.price === "string" ? Number(project.price) : project.price;
-  if (!Number.isFinite(numericPrice as number)) {
-    return "8K_PLUS";
-  }
-  const value = numericPrice as number;
-  if (value < 2000) {
-    return "UNDER_2K";
-  }
-  if (value <= 8000) {
-    return "2K_TO_8K";
-  }
-  return "8K_PLUS";
-}
-
-function estimateDuration(category: ProjectCategory): string {
-  if (category === "AI_ML") {
-    return "8-12 weeks";
-  }
-  if (category === "MOBILE_APP") {
-    return "6-10 weeks";
-  }
-  if (category === "API") {
-    return "3-6 weeks";
-  }
-  return "4-8 weeks";
+function parseCommaList(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 function PremiumNavbar() {
@@ -178,26 +143,36 @@ function PremiumNavbar() {
 }
 
 export default function ClientFeedPage() {
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectDetails, setProjectDetails] = useState<Record<string, ProjectDetail | null>>({});
-  const [recommendedDevelopers, setRecommendedDevelopers] = useState<DeveloperSearchItem[]>([]);
-  const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [loadingRecommendations, setLoadingRecommendations] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<FeedTab>("FEATURED");
   const [query, setQuery] = useState("");
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
-  const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("ALL");
-  const [categoryFilter, setCategoryFilter] = useState<"ALL" | ProjectCategory>("ALL");
-  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("ALL");
-  const [experienceFilter, setExperienceFilter] = useState<ExperienceFilter>("ALL");
-  const [remoteOnly, setRemoteOnly] = useState(false);
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [savedProjectIds, setSavedProjectIds] = useState<Set<string>>(new Set());
-  const [savedDeveloperIds, setSavedDeveloperIds] = useState<Set<string>>(new Set());
+  const [jobsListMode, setJobsListMode] = useState<JobsListMode>("BEST_MATCHES");
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
+  const [draftFilters, setDraftFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
+  const [savedProjectIds, setSavedProjectIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") {
+      return new Set();
+    }
+    const saved = window.localStorage.getItem("client-feed-saved-projects");
+    if (!saved) {
+      return new Set();
+    }
+    try {
+      const ids = JSON.parse(saved) as string[];
+      return Array.isArray(ids) ? new Set(ids) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [visibleCount, setVisibleCount] = useState(8);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [hiringProjectId, setHiringProjectId] = useState<string | null>(null);
+  const [openingDeveloperProjectId, setOpeningDeveloperProjectId] = useState<string | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -206,7 +181,15 @@ export default function ClientFeedPage() {
       try {
         setLoadingProjects(true);
         setError(null);
-        const items = await listProjects();
+        const items = await listProjects({
+          category: appliedFilters.category === "ALL" ? undefined : appliedFilters.category,
+          pricingType: appliedFilters.pricingType === "ALL" ? undefined : appliedFilters.pricingType,
+          sortBy: appliedFilters.sortBy,
+          minPrice: appliedFilters.minPrice.trim() || undefined,
+          maxPrice: appliedFilters.maxPrice.trim() || undefined,
+          techStack: parseCommaList(appliedFilters.techStack),
+          industries: parseCommaList(appliedFilters.industries)
+        });
         setProjects(items);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "Failed to load projects.");
@@ -214,39 +197,7 @@ export default function ClientFeedPage() {
         setLoadingProjects(false);
       }
     })();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const data = await getMessageThreads();
-        setThreads(data);
-      } catch {
-        setThreads([]);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        setLoadingRecommendations(true);
-        const developers = await searchDevelopers({
-          skills: selectedSkills.length ? selectedSkills : undefined,
-          availabilityStatus: availabilityFilter !== "ALL" ? availabilityFilter : undefined,
-          experienceLevel: experienceFilter !== "ALL" ? experienceFilter : undefined,
-          location: remoteOnly ? "remote" : undefined,
-          limit: 8
-        });
-        const filtered = verifiedOnly ? developers.filter((item) => item.profileCompleteness >= 80) : developers;
-        setRecommendedDevelopers(filtered);
-      } catch {
-        setRecommendedDevelopers([]);
-      } finally {
-        setLoadingRecommendations(false);
-      }
-    })();
-  }, [availabilityFilter, experienceFilter, remoteOnly, selectedSkills, verifiedOnly]);
+  }, [appliedFilters]);
 
   const filteredProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -259,54 +210,59 @@ export default function ClientFeedPage() {
       if (normalizedQuery && !searchable.includes(normalizedQuery)) {
         return false;
       }
-      if (categoryFilter !== "ALL" && project.category !== categoryFilter) {
-        return false;
-      }
-      if (budgetFilter !== "ALL" && getPriceBucket(project) !== budgetFilter) {
-        return false;
-      }
-      if (selectedSkills.length && !selectedSkills.some((skill) => searchable.includes(skill.toLowerCase()))) {
-        return false;
-      }
-      if (remoteOnly && !searchable.includes("remote")) {
-        return false;
-      }
       return true;
     });
-  }, [budgetFilter, categoryFilter, projectDetails, projects, query, remoteOnly, selectedSkills]);
+  }, [projectDetails, projects, query]);
 
   const rankedProjects = useMemo(() => {
+    if (jobsListMode === "SAVED") {
+      return filteredProjects.filter((project) => savedProjectIds.has(project.id));
+    }
+    if (jobsListMode === "MOST_RECENT") {
+      return [...filteredProjects].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+    }
+
     const ranked = [...filteredProjects];
-    const newestTimestamp = ranked.reduce((latest, item) => {
-      const created = new Date(item.createdAt).getTime();
-      return created > latest ? created : latest;
-    }, 0);
-
-    if (activeTab === "LATEST") {
-      return ranked.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
-    }
-    if (activeTab === "MOST_VIEWED") {
-      return ranked.sort((left, right) => right.viewCount - left.viewCount);
-    }
-    if (activeTab === "TRENDING") {
-      return ranked.sort((left, right) => {
-        const leftHours = Math.max(1, (newestTimestamp - new Date(left.createdAt).getTime()) / 36e5 + 1);
-        const rightHours = Math.max(1, (newestTimestamp - new Date(right.createdAt).getTime()) / 36e5 + 1);
-        const leftScore = (left.likeCount * 2 + left.viewCount * 0.5) / leftHours;
-        const rightScore = (right.likeCount * 2 + right.viewCount * 0.5) / rightHours;
-        return rightScore - leftScore;
-      });
-    }
-    if (activeTab === "SAVED") {
-      return ranked.filter((project) => savedProjectIds.has(project.id));
-    }
-
     return ranked.sort((left, right) => {
       const leftScore = left.likeCount * 2 + left.viewCount * 0.6;
       const rightScore = right.likeCount * 2 + right.viewCount * 0.6;
       return rightScore - leftScore;
     });
-  }, [activeTab, filteredProjects, savedProjectIds]);
+  }, [filteredProjects, jobsListMode, savedProjectIds]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("client-feed-saved-projects", JSON.stringify(Array.from(savedProjectIds)));
+  }, [savedProjectIds]);
+
+  useEffect(() => {
+    if (!isFilterModalOpen) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsFilterModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isFilterModalOpen]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (appliedFilters.category !== "ALL") count += 1;
+    if (appliedFilters.pricingType !== "ALL") count += 1;
+    if (appliedFilters.sortBy !== "newest") count += 1;
+    if (appliedFilters.minPrice.trim()) count += 1;
+    if (appliedFilters.maxPrice.trim()) count += 1;
+    if (parseCommaList(appliedFilters.techStack).length) count += 1;
+    if (parseCommaList(appliedFilters.industries).length) count += 1;
+    return count;
+  }, [appliedFilters]);
 
   const visibleProjects = useMemo(() => rankedProjects.slice(0, visibleCount), [rankedProjects, visibleCount]);
 
@@ -356,182 +312,103 @@ export default function ClientFeedPage() {
     })();
   }, [projectDetails, visibleProjects]);
 
-  const hiringMetrics = useMemo(() => {
-    const interested = Math.max(8, savedProjectIds.size + savedDeveloperIds.size + 6);
-    const contacted = Math.max(3, threads.length);
-    const interviewing = Math.max(1, Math.floor(contacted / 2));
-    const hired = Math.max(1, Math.floor(savedDeveloperIds.size / 3));
-    return { interested, contacted, interviewing, hired };
-  }, [savedDeveloperIds.size, savedProjectIds.size, threads.length]);
+  function toggleSavedProject(id: string) {
+    setSavedProjectIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function onShareProject(project: ProjectListItem) {
+    const absoluteUrl = typeof window !== "undefined" ? `${window.location.origin}/projects/${project.slug}` : `/projects/${project.slug}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title: project.title, url: absoluteUrl });
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(absoluteUrl);
+        setActionMessage("Project link copied.");
+        return;
+      }
+      window.open(
+        `mailto:?subject=${encodeURIComponent(`Check out ${project.title}`)}&body=${encodeURIComponent(absoluteUrl)}`,
+        "_self"
+      );
+    } catch (caughtError) {
+      setActionMessage(caughtError instanceof Error ? caughtError.message : "Unable to share right now.");
+    }
+  }
+
+  async function onViewDeveloper(project: ProjectListItem, detail: ProjectDetail | null | undefined) {
+    try {
+      setOpeningDeveloperProjectId(project.id);
+      let resolvedDetail = detail;
+
+      if (!resolvedDetail) {
+        resolvedDetail = await getProjectBySlug(project.slug);
+        setProjectDetails((previous) => ({
+          ...previous,
+          [project.slug]: resolvedDetail || null
+        }));
+      }
+
+      const username = resolvedDetail?.author?.username;
+      if (!username) {
+        setActionMessage("Developer profile is unavailable for this project.");
+        return;
+      }
+
+      router.push(`/developers/${username}`);
+    } catch (caughtError) {
+      setActionMessage(caughtError instanceof Error ? caughtError.message : "Unable to open developer profile.");
+    } finally {
+      setOpeningDeveloperProjectId(null);
+    }
+  }
+
+  async function onHireDeveloper(project: ProjectListItem, detail: ProjectDetail | null | undefined) {
+    if (!detail?.author?.id) {
+      setActionMessage("Developer profile is still loading.");
+      return;
+    }
+
+    try {
+      setHiringProjectId(project.id);
+      await trackProjectInquiry(project.slug, {
+        type: "OFFER_PROJECT",
+        message: `Interested in hiring for ${project.title}.`
+      });
+      const thread = await createMessageThread({
+        recipientId: detail.author.id,
+        projectId: project.id,
+        initialMessage: `Hi ${detail.author.fullName}, I would like to hire you for "${project.title}".`
+      });
+      setActionMessage("Hiring conversation started.");
+      router.push(`/client/feed?thread=${thread.id}`);
+    } catch (caughtError) {
+      setActionMessage(caughtError instanceof Error ? caughtError.message : "Unable to start hiring conversation.");
+    } finally {
+      setHiringProjectId(null);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#F8FAFA] font-[Inter] text-[#111827]">
       <PremiumNavbar />
 
-      <section className="mx-auto grid w-full max-w-[1460px] gap-5 px-4 py-8 md:px-6 xl:grid-cols-[280px_minmax(0,760px)_320px] xl:justify-center">
-        <aside className="space-y-4 xl:sticky xl:top-[96px] xl:h-fit">
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-            <h3 className="text-sm font-semibold text-[#0F172A]">Quick Actions</h3>
-            <div className="mt-4 grid gap-2">
-              <Link href="/client/projects/new" className="rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm font-medium hover:border-[#CBD5E1]">
-                + Post Project
-              </Link>
-              <button className="rounded-xl border border-[#E5E7EB] px-3 py-2 text-left text-sm font-medium hover:border-[#CBD5E1]">Find Developer</button>
-              <button className="rounded-xl border border-[#E5E7EB] px-3 py-2 text-left text-sm font-medium hover:border-[#CBD5E1]">Saved Projects</button>
-              <button className="rounded-xl border border-[#E5E7EB] px-3 py-2 text-left text-sm font-medium hover:border-[#CBD5E1]">Saved Developers</button>
-            </div>
-          </section>
-
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-[#2563EB]" aria-hidden />
-              <h3 className="text-sm font-semibold text-[#0F172A]">AI Hiring Assistant</h3>
-            </div>
-            <p className="mt-2 text-sm text-[#64748B]">
-              Describe your project and instantly discover the best developers.
-            </p>
-            <button className="mt-4 inline-flex h-10 items-center justify-center rounded-xl bg-[#2563EB] px-4 text-sm font-semibold text-white transition hover:bg-[#1d4ed8]">
-              Start AI Search
-            </button>
-          </section>
-
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-            <h3 className="text-sm font-semibold text-[#0F172A]">Filters</h3>
-
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-[#64748B]">Skills</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {SKILL_CHIPS.map((skill) => {
-                const active = selectedSkills.includes(skill);
-                return (
-                  <button
-                    key={skill}
-                    onClick={() =>
-                      setSelectedSkills((previous) =>
-                        previous.includes(skill) ? previous.filter((item) => item !== skill) : previous.concat(skill)
-                      )
-                    }
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      active
-                        ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                        : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
-                    }`}
-                  >
-                    {skill}
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-[#64748B]">Budget</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {[
-                { label: "Any", value: "ALL" },
-                { label: "Under $2k", value: "UNDER_2K" },
-                { label: "$2k-$8k", value: "2K_TO_8K" },
-                { label: "$8k+", value: "8K_PLUS" }
-              ].map((budget) => (
-                <button
-                  key={budget.value}
-                  onClick={() => setBudgetFilter(budget.value as BudgetFilter)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                    budgetFilter === budget.value
-                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                      : "border-[#E5E7EB] text-[#64748B] hover:border-[#CBD5E1]"
-                  }`}
-                >
-                  {budget.label}
-                </button>
-              ))}
-            </div>
-
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-[#64748B]">Experience</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {["ALL", "JUNIOR", "MID", "SENIOR"].map((level) => (
-                <button
-                  key={level}
-                  onClick={() => setExperienceFilter(level as ExperienceFilter)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                    experienceFilter === level
-                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                      : "border-[#E5E7EB] text-[#64748B] hover:border-[#CBD5E1]"
-                  }`}
-                >
-                  {toTitleCase(level)}
-                </button>
-              ))}
-            </div>
-
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-[#64748B]">Availability</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {["ALL", "AVAILABLE", "BUSY", "NOT_ACCEPTING_WORK"].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setAvailabilityFilter(status as AvailabilityFilter)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                    availabilityFilter === status
-                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                      : "border-[#E5E7EB] text-[#64748B] hover:border-[#CBD5E1]"
-                  }`}
-                >
-                  {toTitleCase(status)}
-                </button>
-              ))}
-            </div>
-
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-[#64748B]">Project Category</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {CATEGORY_CHIPS.map((chip) => (
-                <button
-                  key={chip.value}
-                  onClick={() => setCategoryFilter(chip.value)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                    categoryFilter === chip.value
-                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                      : "border-[#E5E7EB] text-[#64748B] hover:border-[#CBD5E1]"
-                  }`}
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                onClick={() => setRemoteOnly((value) => !value)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  remoteOnly ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]" : "border-[#E5E7EB] text-[#64748B] hover:border-[#CBD5E1]"
-                }`}
-              >
-                Remote Only
-              </button>
-              <button
-                onClick={() => setVerifiedOnly((value) => !value)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  verifiedOnly ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]" : "border-[#E5E7EB] text-[#64748B] hover:border-[#CBD5E1]"
-                }`}
-              >
-                Verified Only
-              </button>
-            </div>
-          </section>
-
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-            <h3 className="text-sm font-semibold text-[#0F172A]">Trending Technologies</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {TRENDING_TECH.map((tech) => (
-                <span key={tech} className="rounded-full border border-[#E5E7EB] bg-[#F8FAFA] px-3 py-1 text-xs text-[#64748B]">
-                  {tech}
-                </span>
-              ))}
-            </div>
-          </section>
-        </aside>
-
+      <section className="mx-auto w-full max-w-[920px] px-4 py-8 md:px-6">
         <section className="space-y-5">
           <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-[#0F172A]">Discover Projects</h1>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#64748B]">Search for projects</p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#0F172A]">Projects you might like</h1>
                 <p className="mt-1 text-sm text-[#64748B]">
                   Explore production-ready work from developers around the world.
                 </p>
@@ -540,36 +417,80 @@ export default function ClientFeedPage() {
                 <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#64748B]" aria-hidden />
                 <input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setVisibleCount(8);
+                  }}
                   placeholder="Search developers, projects, technologies..."
                   className="h-10 w-full rounded-full border border-[#E5E7EB] bg-[#F8FAFA] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#2563EB]"
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftFilters(appliedFilters);
+                  setIsFilterModalOpen(true);
+                }}
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] hover:border-[#CBD5E1]"
+              >
+                <SlidersHorizontal className="h-4 w-4" aria-hidden />
+                Filter
+                {activeFilterCount > 0 ? (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#2563EB] px-1.5 text-[11px] font-semibold text-white">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </button>
             </div>
 
-            <div className="relative mt-6 border-b border-[#E5E7EB]">
-              <div className="grid grid-cols-5">
-                {FEED_TABS.map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`pb-3 text-center text-sm font-medium transition ${
-                      activeTab === tab.key ? "text-[#0F172A]" : "text-[#64748B] hover:text-[#111827]"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              <span
-                className="absolute bottom-0 left-0 h-0.5 bg-[#2563EB] transition-transform duration-200"
-                style={{
-                  width: `${100 / FEED_TABS.length}%`,
-                  transform: `translateX(${FEED_TABS.findIndex((item) => item.key === activeTab) * 100}%)`
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                onClick={() => {
+                  setJobsListMode("BEST_MATCHES");
+                  setVisibleCount(8);
                 }}
-              />
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  jobsListMode === "BEST_MATCHES"
+                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                }`}
+              >
+                Best Matches
+              </button>
+              <button
+                onClick={() => {
+                  setJobsListMode("MOST_RECENT");
+                  setVisibleCount(8);
+                }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  jobsListMode === "MOST_RECENT"
+                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                }`}
+              >
+                Most Recent
+              </button>
+              <button
+                onClick={() => {
+                  setJobsListMode("SAVED");
+                  setVisibleCount(8);
+                }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  jobsListMode === "SAVED"
+                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                }`}
+              >
+                Saved Projects ({savedProjectIds.size})
+              </button>
             </div>
           </section>
+
+          {actionMessage ? (
+            <section className="rounded-[14px] border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-sm font-medium text-[#1E40AF]">
+              {actionMessage}
+            </section>
+          ) : null}
 
           {error ? (
             <section className="rounded-[20px] border border-red-200 bg-red-50 p-6 text-sm font-medium text-red-700">
@@ -613,16 +534,10 @@ export default function ClientFeedPage() {
                 const heroUrl = detail?.thumbnailUrl || detail?.backgroundUrl;
                 const techStack = (detail?.techStack && detail.techStack.length > 0
                   ? detail.techStack
-                  : selectedSkills.length > 0
-                  ? selectedSkills
-                  : ["React", "TypeScript", "PostgreSQL"]).slice(0, 6);
+                  : project.techStack || []).slice(0, 6);
                 const isSaved = savedProjectIds.has(project.id);
-                const estimatedInquiries = Math.max(2, Math.round(project.viewCount * 0.03));
-                const bookmarkCount = Math.max(4, Math.round(project.likeCount * 0.7));
+                const inquiryCount = detail?.inquiryCount ?? project.inquiryCount ?? 0;
                 const projectUrl = `/projects/${project.slug}`;
-                const shareMailLink = `mailto:?subject=${encodeURIComponent(
-                  `Check out ${project.title}`
-                )}&body=${encodeURIComponent(projectUrl)}`;
 
                 return (
                   <article
@@ -682,51 +597,40 @@ export default function ClientFeedPage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
-                      {techStack.map((tech) => (
+                      {techStack.length > 0 ? techStack.map((tech) => (
                         <span key={`${project.id}-${tech}`} className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-medium text-[#64748B]">
                           {tech}
                         </span>
-                      ))}
+                      )) : (
+                        <span className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-medium text-[#64748B]">
+                          No tech stack provided
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-4 grid gap-2 text-xs text-[#64748B] sm:grid-cols-2 lg:grid-cols-3">
                       <span className="inline-flex items-center gap-1.5"><Eye className="h-3.5 w-3.5" aria-hidden /> {project.viewCount} Views</span>
                       <span className="inline-flex items-center gap-1.5"><Heart className="h-3.5 w-3.5" aria-hidden /> {project.likeCount} Likes</span>
-                      <span className="inline-flex items-center gap-1.5"><Bookmark className="h-3.5 w-3.5" aria-hidden /> {bookmarkCount} Bookmarks</span>
-                      <span>Client Inquiries: {estimatedInquiries}</span>
+                      <span>Client Inquiries: {inquiryCount}</span>
                       <span>Estimated Budget: {formatMoney(project.price, project.currency, project.pricingType)}</span>
-                      <span>Project Duration: {estimateDuration(project.category)}</span>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[#E5E7EB] py-3 text-xs text-[#64748B]">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#F8FAFA] px-2.5 py-1"><BadgeCheck className="h-3.5 w-3.5 text-[#10B981]" aria-hidden /> GitHub Verified</span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#F8FAFA] px-2.5 py-1"><BriefcaseBusiness className="h-3.5 w-3.5 text-[#10B981]" aria-hidden /> Portfolio Complete</span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#F8FAFA] px-2.5 py-1"><MessageSquareText className="h-3.5 w-3.5 text-[#2563EB]" aria-hidden /> Usually replies in 2 hours</span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#F8FAFA] px-2.5 py-1"><TrendingUp className="h-3.5 w-3.5 text-[#10B981]" aria-hidden /> Availability: Open for Work</span>
+                      <span>Category: {project.category.replace(/_/g, " ")}</span>
                     </div>
 
                     <footer className="mt-4 flex flex-wrap items-center gap-2">
                       <Link href={projectUrl} className="inline-flex h-9 items-center rounded-lg bg-[#0F172A] px-4 text-xs font-semibold text-white transition hover:bg-[#020617]">
                         View Project
                       </Link>
-                      <Link
-                        href={detail?.author?.username ? `/developers/${detail.author.username}` : "/developers"}
-                        className="inline-flex h-9 items-center rounded-lg border border-[#E5E7EB] px-4 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1]"
-                      >
-                        View Developer
-                      </Link>
                       <button
-                        onClick={() =>
-                          setSavedProjectIds((previous) => {
-                            const next = new Set(previous);
-                            if (next.has(project.id)) {
-                              next.delete(project.id);
-                            } else {
-                              next.add(project.id);
-                            }
-                            return next;
-                          })
-                        }
+                        onClick={() => {
+                          void onViewDeveloper(project, detail);
+                        }}
+                        disabled={openingDeveloperProjectId === project.id}
+                        className="inline-flex h-9 items-center rounded-lg border border-[#E5E7EB] px-4 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1] disabled:opacity-60"
+                      >
+                        {openingDeveloperProjectId === project.id ? "Opening..." : "View Developer"}
+                      </button>
+                      <button
+                        onClick={() => toggleSavedProject(project.id)}
                         className={`inline-flex h-9 items-center rounded-lg border px-4 text-xs font-semibold transition ${
                           isSaved
                             ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
@@ -735,16 +639,20 @@ export default function ClientFeedPage() {
                       >
                         Save
                       </button>
-                      <a
-                        href={shareMailLink}
+                      <button
+                        onClick={() => onShareProject(project)}
                         className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E5E7EB] px-4 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1]"
                       >
                         <Share2 className="h-3.5 w-3.5" aria-hidden />
                         Share
-                      </a>
-                      <Link href="/client/feed#messages" className="inline-flex h-9 items-center rounded-lg bg-[#2563EB] px-4 text-xs font-semibold text-white transition hover:bg-[#1d4ed8]">
-                        Hire Developer
-                      </Link>
+                      </button>
+                      <button
+                        onClick={() => onHireDeveloper(project, detail)}
+                        disabled={hiringProjectId === project.id}
+                        className="inline-flex h-9 items-center rounded-lg bg-[#2563EB] px-4 text-xs font-semibold text-white transition hover:bg-[#1d4ed8] disabled:opacity-60"
+                      >
+                        {hiringProjectId === project.id ? "Starting..." : "Hire Developer"}
+                      </button>
                     </footer>
                   </article>
                 );
@@ -754,57 +662,144 @@ export default function ClientFeedPage() {
             </div>
           ) : null}
         </section>
-
-        <aside className="space-y-4 xl:sticky xl:top-[96px] xl:h-fit">
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-            <h3 className="text-sm font-semibold text-[#0F172A]">Recommended Developers</h3>
-            <div className="mt-3 space-y-2">
-              {loadingRecommendations ? <p className="text-xs text-[#64748B]">Loading recommendations...</p> : null}
-              {!loadingRecommendations && recommendedDevelopers.length === 0 ? (
-                <p className="text-xs text-[#64748B]">No recommendations for current filters.</p>
-              ) : null}
-              {recommendedDevelopers.slice(0, 5).map((developer) => (
-                <div key={developer.id} className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#F8FAFA] px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold text-[#111827]">{developer.fullName}</p>
-                    <p className="truncate text-[11px] text-[#64748B]">{Math.min(99, Math.round(developer.score))}% match</p>
-                  </div>
-                  <button
-                    onClick={() =>
-                      setSavedDeveloperIds((previous) => {
-                        const next = new Set(previous);
-                        if (next.has(developer.id)) {
-                          next.delete(developer.id);
-                        } else {
-                          next.add(developer.id);
-                        }
-                        return next;
-                      })
-                    }
-                    className="rounded-lg border border-[#E5E7EB] px-2 py-1 text-[11px] font-semibold text-[#111827] hover:border-[#CBD5E1]"
-                  >
-                    Quick View
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-            <h3 className="text-sm font-semibold text-[#0F172A]">Hiring Pipeline</h3>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex items-center justify-between"><span className="text-[#64748B]">Interested</span><span className="font-semibold text-[#111827]">{hiringMetrics.interested}</span></div>
-              <div className="h-1 rounded-full bg-[#E5E7EB]" />
-              <div className="flex items-center justify-between"><span className="text-[#64748B]">Contacted</span><span className="font-semibold text-[#111827]">{hiringMetrics.contacted}</span></div>
-              <div className="h-1 rounded-full bg-[#E5E7EB]" />
-              <div className="flex items-center justify-between"><span className="text-[#64748B]">Interviewing</span><span className="font-semibold text-[#111827]">{hiringMetrics.interviewing}</span></div>
-              <div className="h-1 rounded-full bg-[#E5E7EB]" />
-              <div className="flex items-center justify-between"><span className="text-[#64748B]">Hired</span><span className="font-semibold text-[#111827]">{hiringMetrics.hired}</span></div>
-            </div>
-          </section>
-
-        </aside>
       </section>
+
+      {isFilterModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/55 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+              <h2 className="text-base font-semibold text-[#0F172A]">Project Filters</h2>
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#F8FAFA]"
+                aria-label="Close filters"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="text-xs font-medium text-[#64748B]">
+                Category
+                <select
+                  value={draftFilters.category}
+                  onChange={(event) => setDraftFilters((prev) => ({ ...prev, category: event.target.value as FeedFilters["category"] }))}
+                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                >
+                  <option value="ALL">All</option>
+                  <option value="WEB_APP">Web App</option>
+                  <option value="MOBILE_APP">Mobile App</option>
+                  <option value="API">API</option>
+                  <option value="DESKTOP">Desktop</option>
+                  <option value="AI_ML">AI / ML</option>
+                  <option value="ECOMMERCE">Ecommerce</option>
+                  <option value="MANAGEMENT_SYSTEM">Management System</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-[#64748B]">
+                Pricing
+                <select
+                  value={draftFilters.pricingType}
+                  onChange={(event) => setDraftFilters((prev) => ({ ...prev, pricingType: event.target.value as FeedFilters["pricingType"] }))}
+                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                >
+                  <option value="ALL">All</option>
+                  <option value="FIXED">Fixed</option>
+                  <option value="NEGOTIABLE">Negotiable</option>
+                  <option value="FREE">Free</option>
+                  <option value="CONTACT">Contact</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-[#64748B]">
+                Sort by
+                <select
+                  value={draftFilters.sortBy}
+                  onChange={(event) => setDraftFilters((prev) => ({ ...prev, sortBy: event.target.value as FeedSortBy }))}
+                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="popular">Popular</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-[#64748B]">
+                Tech Stack (comma-separated)
+                <input
+                  value={draftFilters.techStack}
+                  onChange={(event) => setDraftFilters((prev) => ({ ...prev, techStack: event.target.value }))}
+                  placeholder="React, Next.js, Node.js"
+                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                />
+              </label>
+
+              <label className="text-xs font-medium text-[#64748B]">
+                Industries (comma-separated)
+                <input
+                  value={draftFilters.industries}
+                  onChange={(event) => setDraftFilters((prev) => ({ ...prev, industries: event.target.value }))}
+                  placeholder="Fintech, Healthcare"
+                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                />
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-[#64748B]">
+                  Min Price
+                  <input
+                    value={draftFilters.minPrice}
+                    onChange={(event) => setDraftFilters((prev) => ({ ...prev, minPrice: event.target.value }))}
+                    inputMode="numeric"
+                    placeholder="0"
+                    className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                  />
+                </label>
+                <label className="text-xs font-medium text-[#64748B]">
+                  Max Price
+                  <input
+                    value={draftFilters.maxPrice}
+                    onChange={(event) => setDraftFilters((prev) => ({ ...prev, maxPrice: event.target.value }))}
+                    inputMode="numeric"
+                    placeholder="10000"
+                    className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2 border-t border-[#E5E7EB] pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftFilters(DEFAULT_FEED_FILTERS);
+                  setAppliedFilters(DEFAULT_FEED_FILTERS);
+                  setVisibleCount(8);
+                  setIsFilterModalOpen(false);
+                }}
+                className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-xs font-semibold text-[#64748B] hover:border-[#CBD5E1]"
+              >
+                Clear all
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAppliedFilters(draftFilters);
+                  setVisibleCount(8);
+                  setIsFilterModalOpen(false);
+                }}
+                className="rounded-lg bg-[#2563EB] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1d4ed8]"
+              >
+                Apply filters
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

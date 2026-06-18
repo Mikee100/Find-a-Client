@@ -32,35 +32,28 @@ export default function ClientDashboardNavbar() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur">
-      <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-        <div className="flex items-center gap-3">
-          <Link href="/" aria-label="Find a Client" className="inline-flex items-center">
-            <BrandLogo />
-          </Link>
-          <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">
-            Client
-          </span>
-        </div>
+    <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white/90 backdrop-blur">
+      <nav className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4 md:px-6">
+        <Link href="/" aria-label="Find a Client" className="inline-flex items-center">
+          <BrandLogo imageClassName="h-7 w-7 rounded-md" textClassName="text-[15px] font-semibold" />
+        </Link>
 
-        <div className="flex items-center gap-2 text-sm">
-          <Link href="/client/dashboard" className="rounded-md bg-neutral-100 px-2 py-1 font-semibold text-neutral-900">
-            Overview
-          </Link>
-          <Link href="/client/projects/new" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
-            Create Project
-          </Link>
-          <Link href="/developers" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
-            Find Developers
-          </Link>
-          <AccountMenu
-            roleLabel="Client"
-            pendingSignOut={pendingSignOut}
-            onSignOut={onSignOut}
-            onSignOutEverywhere={onSignOutEverywhere}
-            dashboardHref="/client/dashboard"
-            settingsHref="/client/settings"
-          />
+        <div className="flex items-center gap-2">
+            <Link
+              href="/client/feed#messages"
+              className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-2.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+            >
+              Messages
+            </Link>
+            <AccountMenu
+              roleLabel="Client"
+              pendingSignOut={pendingSignOut}
+              onSignOut={onSignOut}
+              onSignOutEverywhere={onSignOutEverywhere}
+              dashboardHref="/client/feed"
+              settingsHref="/client/settings"
+              compact
+            />
         </div>
       </nav>
     </header>

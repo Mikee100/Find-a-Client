@@ -624,7 +624,7 @@ export default function NewProjectPage() {
                 This form is intentionally detailed so developers can estimate accurately, deliver faster, and avoid scope confusion.
               </p>
             </div>
-            <BackButton fallbackHref="/client/dashboard" label="Back to dashboard" tone="light" />
+            <BackButton fallbackHref="/client/feed" label="Back to feed" tone="light" />
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
@@ -1214,7 +1214,7 @@ export default function NewProjectPage() {
                 Your detailed sections are merged into the final project brief developers will read.
               </p>
               <div className="flex items-center gap-2">
-                <BackButton fallbackHref="/client/dashboard" label="Cancel" />
+                <BackButton fallbackHref="/client/feed" label="Cancel" />
                 <button
                   type="submit"
                   disabled={pending}

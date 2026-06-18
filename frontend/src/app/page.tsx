@@ -222,7 +222,7 @@ export default function Home() {
           <nav className="hidden items-center gap-5 text-sm font-medium text-slate-600 lg:flex">
             <Link href="/">Home</Link>
             <Link href="/developers/profile">Developers</Link>
-            <Link href="/client/dashboard">Find Talent</Link>
+            <Link href="/client/feed">Find Talent</Link>
             <Link href="/projects">Projects</Link>
             <Link href="#pricing">Pricing</Link>
             <Link href="#about">About</Link>
@@ -387,7 +387,7 @@ export default function Home() {
             </div>
 
             <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[740px] border-collapse text-left text-sm">
+              <table className="w-full min-w-185 border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
                     <th className="py-3">Developer</th>

@@ -132,6 +132,7 @@ export class ProjectsService {
     }
 
     const { screenshots, ...rest } = dto;
+    const clearProjectVideo = Object.prototype.hasOwnProperty.call(dto, "videoUrl") && dto.videoUrl === null;
 
     const data: Prisma.ProjectUpdateInput = {
       ...rest,
@@ -165,6 +166,15 @@ export class ProjectsService {
             }))
           });
         }
+      }
+
+      if (clearProjectVideo) {
+        await tx.projectMedia.deleteMany({
+          where: {
+            projectId: existing.id,
+            type: "VIDEO"
+          }
+        });
       }
 
       return updated;

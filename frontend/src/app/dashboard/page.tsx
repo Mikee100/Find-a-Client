@@ -11,7 +11,7 @@ export default function DashboardPage() {
     void getAuthSession()
       .then((session) => {
         if (session.role === "CLIENT") {
-          router.replace("/client/dashboard");
+          router.replace("/client/feed");
           return;
         }
 
