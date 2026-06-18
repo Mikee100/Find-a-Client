@@ -107,10 +107,39 @@ function parseCommaList(value: string): string[] {
     .filter(Boolean);
 }
 
+function estimateDeliveryWeeks(project: ProjectListItem, detail: ProjectDetail | null | undefined): number {
+  const text = `${detail?.longDescription ?? ""} ${project.shortDescription}`;
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(week|weeks|month|months|day|days)/i);
+  if (match) {
+    const amount = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    if (unit.startsWith("month")) {
+      return Math.max(1, amount * 4);
+    }
+    if (unit.startsWith("day")) {
+      return Math.max(1, amount / 7);
+    }
+    return Math.max(1, amount);
+  }
+
+  const defaults: Record<ProjectCategory, number> = {
+    WEB_APP: 6,
+    MOBILE_APP: 8,
+    API: 5,
+    DESKTOP: 7,
+    AI_ML: 10,
+    ECOMMERCE: 8,
+    MANAGEMENT_SYSTEM: 9,
+    OTHER: 7
+  };
+
+  return defaults[project.category] ?? 7;
+}
+
 function PremiumNavbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white">
-      <nav className="mx-auto flex h-[72px] w-full max-w-[1460px] items-center gap-4 px-4 md:px-6">
+      <nav className="mx-auto flex h-18 w-full max-w-365 items-center gap-4 px-4 md:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-2 text-[#0F172A]">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F172A] text-xs font-bold text-white">
             FC
@@ -173,6 +202,9 @@ export default function ClientFeedPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [hiringProjectId, setHiringProjectId] = useState<string | null>(null);
   const [openingDeveloperProjectId, setOpeningDeveloperProjectId] = useState<string | null>(null);
+  const [fitBudget, setFitBudget] = useState("");
+  const [fitDeadlineWeeks, setFitDeadlineWeeks] = useState("");
+  const [fitRequiredStack, setFitRequiredStack] = useState("");
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -265,6 +297,74 @@ export default function ClientFeedPage() {
   }, [appliedFilters]);
 
   const visibleProjects = useMemo(() => rankedProjects.slice(0, visibleCount), [rankedProjects, visibleCount]);
+
+  const fitRankedProjects = useMemo(() => {
+    const requiredStack = parseCommaList(fitRequiredStack).map((item) => item.toLowerCase());
+    const inputBudget = Number(fitBudget);
+    const hasBudgetInput = Number.isFinite(inputBudget) && inputBudget > 0;
+    const inputDeadline = Number(fitDeadlineWeeks);
+    const hasDeadlineInput = Number.isFinite(inputDeadline) && inputDeadline > 0;
+
+    return rankedProjects
+      .map((project) => {
+        const detail = projectDetails[project.slug];
+
+        const projectStack = (detail?.techStack ?? project.techStack ?? []).map((item) => item.toLowerCase());
+        const matchedStackCount = requiredStack.filter((item) => projectStack.includes(item)).length;
+        const stackScore = requiredStack.length > 0 ? Math.round((matchedStackCount / requiredStack.length) * 100) : 70;
+
+        const numericPrice = typeof project.price === "string" ? Number(project.price) : project.price;
+        const hasFixedPrice = project.pricingType === "FIXED" && Number.isFinite(numericPrice) && (numericPrice ?? 0) > 0;
+
+        let budgetScore = 70;
+        if (hasBudgetInput && hasFixedPrice) {
+          const ratio = inputBudget / Number(numericPrice);
+          if (ratio >= 1) {
+            budgetScore = 100;
+          } else if (ratio >= 0.8) {
+            budgetScore = 75;
+          } else if (ratio >= 0.6) {
+            budgetScore = 50;
+          } else {
+            budgetScore = 20;
+          }
+        } else if (hasBudgetInput && !hasFixedPrice) {
+          budgetScore = 65;
+        }
+
+        const estimatedWeeks = estimateDeliveryWeeks(project, detail);
+        let timelineScore = 70;
+        if (hasDeadlineInput) {
+          const ratio = inputDeadline / estimatedWeeks;
+          if (ratio >= 1) {
+            timelineScore = 100;
+          } else if (ratio >= 0.8) {
+            timelineScore = 70;
+          } else if (ratio >= 0.6) {
+            timelineScore = 40;
+          } else {
+            timelineScore = 15;
+          }
+        }
+
+        const score = Math.round(budgetScore * 0.4 + timelineScore * 0.3 + stackScore * 0.3);
+
+        return {
+          project,
+          score,
+          budgetScore,
+          timelineScore,
+          stackScore,
+          matchedStackCount,
+          requiredStackCount: requiredStack.length,
+          estimatedWeeks
+        };
+      })
+      .sort((left, right) => right.score - left.score);
+  }, [fitBudget, fitDeadlineWeeks, fitRequiredStack, projectDetails, rankedProjects]);
+
+  const topFitMatches = useMemo(() => fitRankedProjects.slice(0, 2), [fitRankedProjects]);
+  const topFit = topFitMatches[0] ?? null;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -402,7 +502,7 @@ export default function ClientFeedPage() {
     <main className="min-h-screen bg-[#F8FAFA] font-[Inter] text-[#111827]">
       <PremiumNavbar />
 
-      <section className="mx-auto w-full max-w-[920px] px-4 py-8 md:px-6">
+      <section className="mx-auto w-full max-w-340 px-4 py-8 md:px-6">
         <section className="space-y-5">
           <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -498,52 +598,54 @@ export default function ClientFeedPage() {
             </section>
           ) : null}
 
-          {loadingProjects ? (
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px] xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="space-y-5">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="animate-pulse rounded-[20px] border border-[#E5E7EB] bg-white p-6">
-                  <div className="h-4 w-2/5 rounded bg-[#E5E7EB]" />
-                  <div className="mt-3 h-6 w-4/5 rounded bg-[#E5E7EB]" />
-                  <div className="mt-2 h-4 w-3/4 rounded bg-[#E5E7EB]" />
-                  <div className="mt-4 aspect-video rounded-xl bg-[#E5E7EB]" />
+              {loadingProjects ? (
+                <div className="space-y-5">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <div key={index} className="animate-pulse rounded-[20px] border border-[#E5E7EB] bg-white p-6">
+                      <div className="h-4 w-2/5 rounded bg-[#E5E7EB]" />
+                      <div className="mt-3 h-6 w-4/5 rounded bg-[#E5E7EB]" />
+                      <div className="mt-2 h-4 w-3/4 rounded bg-[#E5E7EB]" />
+                      <div className="mt-4 aspect-video rounded-xl bg-[#E5E7EB]" />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : null}
+              ) : null}
 
-          {!loadingProjects && rankedProjects.length === 0 ? (
-            <section className="space-y-4">
-              <p className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 text-center text-sm text-[#64748B]">
-                No projects match these filters yet.
-              </p>
-              {Array.from({ length: 2 }).map((_, index) => (
-                <div key={index} className="animate-pulse rounded-[20px] border border-[#E5E7EB] bg-white p-6">
-                  <div className="h-5 w-1/2 rounded bg-[#E5E7EB]" />
-                  <div className="mt-3 h-4 w-2/3 rounded bg-[#E5E7EB]" />
-                  <div className="mt-4 aspect-video rounded-xl bg-[#E5E7EB]" />
-                </div>
-              ))}
-            </section>
-          ) : null}
+              {!loadingProjects && rankedProjects.length === 0 ? (
+                <section className="space-y-4">
+                  <p className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 text-center text-sm text-[#64748B]">
+                    No projects match these filters yet.
+                  </p>
+                  {Array.from({ length: 2 }).map((_, index) => (
+                    <div key={index} className="animate-pulse rounded-[20px] border border-[#E5E7EB] bg-white p-6">
+                      <div className="h-5 w-1/2 rounded bg-[#E5E7EB]" />
+                      <div className="mt-3 h-4 w-2/3 rounded bg-[#E5E7EB]" />
+                      <div className="mt-4 aspect-video rounded-xl bg-[#E5E7EB]" />
+                    </div>
+                  ))}
+                </section>
+              ) : null}
 
-          {!loadingProjects && rankedProjects.length > 0 ? (
-            <div className="space-y-5">
-              {visibleProjects.map((project) => {
-                const detail = projectDetails[project.slug];
-                const avatarLabel = detail?.author.fullName || "Developer";
-                const heroUrl = detail?.thumbnailUrl || detail?.backgroundUrl;
-                const techStack = (detail?.techStack && detail.techStack.length > 0
-                  ? detail.techStack
-                  : project.techStack || []).slice(0, 6);
-                const isSaved = savedProjectIds.has(project.id);
-                const inquiryCount = detail?.inquiryCount ?? project.inquiryCount ?? 0;
-                const projectUrl = `/projects/${project.slug}`;
+              {!loadingProjects && rankedProjects.length > 0 ? (
+                <div className="space-y-5">
+                  {visibleProjects.map((project) => {
+                    const detail = projectDetails[project.slug];
+                    const avatarLabel = detail?.author.fullName || "Developer";
+                    const heroUrl = detail?.thumbnailUrl || detail?.backgroundUrl;
+                    const techStack = (detail?.techStack && detail.techStack.length > 0
+                      ? detail.techStack
+                      : project.techStack || []).slice(0, 6);
+                    const isSaved = savedProjectIds.has(project.id);
+                    const inquiryCount = detail?.inquiryCount ?? project.inquiryCount ?? 0;
+                    const projectUrl = `/projects/${project.slug}`;
 
-                return (
-                  <article
-                    key={project.id}
-                    className="group rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-[3px] hover:border-[#CBD5E1] hover:shadow-[0_14px_32px_rgba(15,23,42,0.08)]"
-                  >
+                    return (
+                      <article
+                        key={project.id}
+                        className="group rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.75 hover:border-[#CBD5E1] hover:shadow-[0_14px_32px_rgba(15,23,42,0.08)]"
+                      >
                     <header className="flex items-start justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#0F172A] text-sm font-semibold text-white">
@@ -654,13 +756,94 @@ export default function ClientFeedPage() {
                         {hiringProjectId === project.id ? "Starting..." : "Hire Developer"}
                       </button>
                     </footer>
-                  </article>
-                );
-              })}
+                      </article>
+                    );
+                  })}
 
-              <div ref={sentinelRef} className="h-8 w-full" />
+                  <div ref={sentinelRef} className="h-8 w-full" />
+                </div>
+              ) : null}
             </div>
-          ) : null}
+
+            <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
+              <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-[#0F172A]">Fit Score</h2>
+                  <span className="rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-1 text-xs font-semibold text-[#1D4ED8]">
+                    {topFit ? `${topFit.score}%` : "-"}
+                  </span>
+                </div>
+
+                <p className="mt-1 text-[11px] text-[#64748B]">Set budget, timeline, and stack.</p>
+
+                <div className="mt-2.5 space-y-2">
+                  <label className="block text-[11px] font-medium text-[#64748B]">
+                    Budget (USD)
+                    <input
+                      type="number"
+                      min={0}
+                      step="100"
+                      value={fitBudget}
+                      onChange={(event) => setFitBudget(event.target.value)}
+                      placeholder="e.g. 5000"
+                      className="mt-1 h-8 w-full rounded-lg border border-[#E5E7EB] px-2.5 text-xs text-[#111827] outline-none focus:border-[#2563EB]"
+                    />
+                  </label>
+
+                  <label className="block text-[11px] font-medium text-[#64748B]">
+                    Deadline (weeks)
+                    <input
+                      type="number"
+                      min={1}
+                      step="1"
+                      value={fitDeadlineWeeks}
+                      onChange={(event) => setFitDeadlineWeeks(event.target.value)}
+                      placeholder="e.g. 6"
+                      className="mt-1 h-8 w-full rounded-lg border border-[#E5E7EB] px-2.5 text-xs text-[#111827] outline-none focus:border-[#2563EB]"
+                    />
+                  </label>
+
+                  <label className="block text-[11px] font-medium text-[#64748B]">
+                    Required stack
+                    <input
+                      value={fitRequiredStack}
+                      onChange={(event) => setFitRequiredStack(event.target.value)}
+                      placeholder="React, Node.js, PostgreSQL"
+                      className="mt-1 h-8 w-full rounded-lg border border-[#E5E7EB] px-2.5 text-xs text-[#111827] outline-none focus:border-[#2563EB]"
+                    />
+                  </label>
+                </div>
+
+                {topFit ? (
+                  <div className="mt-3 rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-2">
+                    <p className="text-xs font-semibold text-[#0F172A]">Top: {topFit.project.title}</p>
+                    <p className="mt-0.5 text-[11px] text-[#64748B]">
+                      B {topFit.budgetScore}% | T {topFit.timelineScore}% | S {topFit.stackScore}%
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-[#64748B]">~{topFit.estimatedWeeks.toFixed(1)}w, stack {topFit.matchedStackCount}/{topFit.requiredStackCount || 0}</p>
+                  </div>
+                ) : null}
+
+                <div className="mt-3 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Best matches</p>
+                  {topFitMatches.length > 0 ? (
+                    topFitMatches.map((item) => (
+                      <Link
+                        key={item.project.id}
+                        href={`/projects/${item.project.slug}`}
+                        className="flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-1.5 text-xs text-[#111827] hover:border-[#CBD5E1]"
+                      >
+                        <span className="line-clamp-1 pr-2">{item.project.title}</span>
+                        <span className="font-semibold text-[#1D4ED8]">{item.score}%</span>
+                      </Link>
+                    ))
+                  ) : (
+                    <p className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-2 text-xs text-[#64748B]">No ranked projects yet.</p>
+                  )}
+                </div>
+              </section>
+            </aside>
+          </div>
         </section>
       </section>
 
