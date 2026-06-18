@@ -1,6 +1,6 @@
 import { AuthTokens, clearTokens, readTokens, saveTokens } from "@/lib/auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4311";
 
 interface ApiErrorBody {
   message?: string | string[];
@@ -57,14 +57,61 @@ interface ProjectResponse {
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
 }
 
-interface SavedProjectEntry {
+export interface ProjectSummary {
   id: string;
-  project: {
+  slug: string;
+  title: string;
+  shortDescription: string;
+  longDescription?: string;
+  category: ProjectCategory;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  techStack: string[];
+  industries: string[];
+  pricingType: PricingType;
+  price: string | number | null;
+  currency: string;
+  authorId: string;
+  thumbnailUrl?: string | null;
+  demoUrl?: string | null;
+  videoUrl?: string | null;
+  averageRating?: number;
+  viewCount?: number;
+  likeCount?: number;
+  isFeatured?: boolean;
+  createdAt?: string;
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  longDescription: string;
+  author?: PublicProfile;
+  media?: Array<{
     id: string;
-    slug: string;
-    title: string;
-    status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
-  };
+    type: "IMAGE" | "VIDEO" | "SCREENSHOT";
+    url: string;
+    caption?: string | null;
+  }>;
+}
+
+export interface PublicProfile {
+  id: string;
+  email?: string;
+  username: string;
+  fullName: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  role: "DEVELOPER" | "CLIENT" | "ADMIN";
+  skills: string[];
+  location?: string | null;
+  websiteUrl?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  isVerified?: boolean;
+  projects?: ProjectSummary[];
+}
+
+export interface SavedProjectEntry {
+  id: string;
+  project: ProjectSummary;
 }
 
 export interface ThreadSummary {
@@ -77,6 +124,21 @@ export interface ThreadSummary {
     content: string;
     createdAt: string;
   }>;
+}
+
+export interface CreateThreadPayload {
+  recipientId: string;
+  projectId?: string;
+  initialMessage?: string;
+}
+
+export interface CreatedThread {
+  id: string;
+  participantAId: string;
+  participantBId: string;
+  projectId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface NotificationItem {
@@ -106,6 +168,16 @@ export interface CreateProjectPayload {
   pricingType: PricingType;
   price?: number;
   demoUrl?: string;
+}
+
+export interface ListProjectsParams {
+  search?: string;
+  category?: ProjectCategory;
+  pricingType?: PricingType;
+  minPrice?: string;
+  maxPrice?: string;
+  sortBy?: "newest" | "popular" | "price_asc" | "price_desc";
+  limit?: string;
 }
 
 async function parseError(response: Response): Promise<string> {
@@ -245,6 +317,38 @@ export async function publishProject(slug: string): Promise<void> {
   });
 }
 
+export async function listProjects(params: ListProjectsParams = {}): Promise<ProjectSummary[]> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      query.set(key, value);
+    }
+  });
+
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<ProjectSummary[]>("GET", `/projects${suffix}`);
+}
+
+export async function getProject(slug: string): Promise<ProjectDetail> {
+  return requestJson<ProjectDetail>("GET", `/projects/${slug}`);
+}
+
+export async function searchProjects(params: { q?: string; category?: string; tech?: string } = {}): Promise<ProjectSummary[]> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      query.set(key, value);
+    }
+  });
+
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<ProjectSummary[]>("GET", `/search${suffix}`);
+}
+
+export async function getPublicProfile(username: string): Promise<PublicProfile> {
+  return requestJson<PublicProfile>("GET", `/users/${username}`);
+}
+
 export async function getSavedProjects(): Promise<SavedProjectEntry[]> {
   const tokens = readTokens();
   if (!tokens?.accessToken) {
@@ -263,6 +367,18 @@ export async function getMessageThreads(): Promise<ThreadSummary[]> {
   }
 
   return requestJson<ThreadSummary[]>("GET", "/messages/threads", {
+    token: tokens.accessToken
+  });
+}
+
+export async function createMessageThread(payload: CreateThreadPayload): Promise<CreatedThread> {
+  const tokens = readTokens();
+  if (!tokens?.accessToken) {
+    throw new Error("You must be signed in.");
+  }
+
+  return requestJson<CreatedThread, CreateThreadPayload>("POST", "/messages/threads", {
+    body: payload,
     token: tokens.accessToken
   });
 }

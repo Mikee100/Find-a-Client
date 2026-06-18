@@ -15,7 +15,7 @@ export default function DashboardNavbar({
 }: DashboardNavbarProps) {
   return (
     <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur">
-      <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 md:px-6">
+      <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-6">
         <div className="flex items-center gap-3">
           <Link href="/" className="text-lg font-bold tracking-tight text-neutral-900">
             Find a Client
@@ -25,7 +25,7 @@ export default function DashboardNavbar({
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex w-full flex-wrap items-center gap-2 text-sm sm:w-auto sm:justify-end">
           <Link href="/developer/dashboard" className="rounded-md px-2 py-1 text-neutral-700 hover:bg-neutral-100">
             Developer
           </Link>
@@ -38,7 +38,7 @@ export default function DashboardNavbar({
           <button
             onClick={onSignOut}
             disabled={pendingSignOut}
-            className="rounded-md bg-teal-700 px-3 py-1.5 font-semibold text-white disabled:opacity-70"
+            className="ml-auto rounded-md bg-teal-700 px-3 py-1.5 font-semibold text-white disabled:opacity-70 sm:ml-0"
           >
             {pendingSignOut ? "Signing out..." : "Sign out"}
           </button>

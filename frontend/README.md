@@ -28,14 +28,27 @@ npm run dev
 - Register page: `/register`
 - Login page: `/login`
 - Guarded dashboard page: `/dashboard`
+- Client workspace: `/client/dashboard`
+- Client discovery: `/client/discover`
+- Client project/developer detail: `/client/discover/[slug]`
 - Wired backend endpoints:
 	- `POST /auth/register`
 	- `POST /auth/login`
 	- `POST /auth/refresh`
 	- `POST /auth/logout`
+	- `GET /projects`
+	- `GET /projects/:slug`
+	- `GET /search`
+	- `GET /users/:username`
+	- `GET /users/me/saved`
+	- `GET /messages/threads`
+	- `POST /messages/threads`
 
 ## Notes
 
 - Tokens are stored in localStorage for MVP bootstrap.
-- Role selection UI is included, but backend currently stores new users as `DEVELOPER`.
+- Role selection UI is not included in registration because the backend register payload does not support role assignment.
 - `GET /users/me` is listed in requirements docs but is not present in backend controller yet.
+- Hire request UI is currently a placeholder because no hire request endpoint exists yet.
+
+More detail: `../docs/CLIENT_MARKETPLACE_FLOW.md`.
