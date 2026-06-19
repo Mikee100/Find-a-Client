@@ -1,15 +1,17 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
 import {
   CurrentUserProfile,
   getCurrentUserProfile,
+  logout,
+  logoutEverywhere,
   updateProfile
 } from "@/lib/api";
 import FullPageLoader from "@/components/ui/full-page-loader";
 import BackButton from "@/components/ui/back-button";
+import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
 
 const LOCATION_OPTIONS = [
   "Lagos, Nigeria",
@@ -189,10 +191,12 @@ function validateLinkedInUrl(value: string): string | null {
 }
 
 export default function DeveloperSettingsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const isOnboardingFlow = searchParams.get("onboarding") === "1";
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [pending, setPending] = useState(false);
+  const [pendingSignOut, setPendingSignOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -390,10 +394,30 @@ export default function DeveloperSettingsPage() {
     }
   }
 
+  async function onSignOut() {
+    setPendingSignOut(true);
+    await logout();
+    router.replace("/login");
+  }
+
+  async function onSignOutEverywhere() {
+    setPendingSignOut(true);
+    await logoutEverywhere();
+    router.replace("/login");
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-neutral-50 p-6">
-        <MarketplaceNavbar />
+        <DeveloperDashboardNavbar
+          onSignOut={() => {
+            void onSignOut();
+          }}
+          onSignOutEverywhere={() => {
+            void onSignOutEverywhere();
+          }}
+          pendingSignOut={pendingSignOut}
+        />
         <FullPageLoader label="Loading account settings" fullScreen={false} />
       </main>
     );
@@ -401,7 +425,15 @@ export default function DeveloperSettingsPage() {
 
   return (
     <main className="min-h-screen bg-neutral-50">
-      <MarketplaceNavbar />
+      <DeveloperDashboardNavbar
+        onSignOut={() => {
+          void onSignOut();
+        }}
+        onSignOutEverywhere={() => {
+          void onSignOutEverywhere();
+        }}
+        pendingSignOut={pendingSignOut}
+      />
       <section className="w-full px-4 py-4 md:px-8 md:py-6">
         <div className="w-full">
           {isOnboardingFlow ? (

@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Briefcase, GraduationCap, Languages, LinkIcon, MapPin, Star, Wallet } from "lucide-react";
-import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
 import BackButton from "@/components/ui/back-button";
 import FullPageLoader from "@/components/ui/full-page-loader";
-import { CurrentUserProfile, getCurrentUserProfile } from "@/lib/api";
+import { CurrentUserProfile, getCurrentUserProfile, logout, logoutEverywhere } from "@/lib/api";
+import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
 
 type ExperienceItem = {
   id: string;
@@ -157,8 +158,10 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 export default function DeveloperProfilePage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingSignOut, setPendingSignOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -182,10 +185,30 @@ export default function DeveloperProfilePage() {
   const certificationItems = useMemo(() => parseCertificationEntries(profile?.certificationEntries), [profile?.certificationEntries]);
   const languageItems = useMemo(() => parseLanguageEntries(profile?.languageEntries), [profile?.languageEntries]);
 
+  async function onSignOut() {
+    setPendingSignOut(true);
+    await logout();
+    router.replace("/login");
+  }
+
+  async function onSignOutEverywhere() {
+    setPendingSignOut(true);
+    await logoutEverywhere();
+    router.replace("/login");
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50">
-        <MarketplaceNavbar />
+        <DeveloperDashboardNavbar
+          onSignOut={() => {
+            void onSignOut();
+          }}
+          onSignOutEverywhere={() => {
+            void onSignOutEverywhere();
+          }}
+          pendingSignOut={pendingSignOut}
+        />
         <FullPageLoader label="Loading profile" fullScreen={false} />
       </main>
     );
@@ -193,7 +216,15 @@ export default function DeveloperProfilePage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <MarketplaceNavbar />
+      <DeveloperDashboardNavbar
+        onSignOut={() => {
+          void onSignOut();
+        }}
+        onSignOutEverywhere={() => {
+          void onSignOutEverywhere();
+        }}
+        pendingSignOut={pendingSignOut}
+      />
 
       <section className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
