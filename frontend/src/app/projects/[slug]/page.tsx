@@ -379,6 +379,21 @@ export default function ProjectDetailPage() {
   const visibleOverview = hasLongOverview && !showFullOverview ? `${overviewText.slice(0, 540).trimEnd()}...` : overviewText;
   const isAuthenticated = Boolean(viewerId);
   const canEdit = Boolean(project && viewerId && project.author.id === viewerId);
+  const messageDeveloperHref = useMemo(() => {
+    if (!project) {
+      return "/client/messages";
+    }
+
+    const params = new URLSearchParams({
+      recipientId: project.author.id,
+      projectId: project.id,
+      thread: "",
+      username: project.author.username,
+      name: project.author.fullName
+    });
+    params.delete("thread");
+    return `/client/messages?${params.toString()}`;
+  }, [project]);
   const editQuery = (searchParams.get("edit") ?? "").trim().toLowerCase();
   const hasEditQuery = editQuery === "1" || editQuery === "true" || editQuery === "yes";
 
@@ -1012,7 +1027,7 @@ export default function ProjectDetailPage() {
 
                   <div className="mt-4 space-y-2">
                     <Link
-                      href={`/developers/${project.author.username}`}
+                      href={messageDeveloperHref}
                       className="block text-sm font-semibold text-slate-900 underline underline-offset-4"
                     >
                       Message Developer
@@ -1485,7 +1500,7 @@ export default function ProjectDetailPage() {
                       </Link>
                       <div className="grid grid-cols-2 gap-2">
                         <Link
-                          href={`/developers/${project.author.username}`}
+                          href={messageDeveloperHref}
                           className="text-sm font-semibold text-slate-700 underline underline-offset-4"
                         >
                           Message
@@ -1695,7 +1710,7 @@ export default function ProjectDetailPage() {
                       Hire {project.author.fullName.split(" ")[0] || "Developer"}
                     </Link>
                     <Link
-                      href={`/developers/${project.author.username}`}
+                      href={messageDeveloperHref}
                       className="text-sm font-semibold text-slate-700 underline underline-offset-4"
                     >
                       Message Developer

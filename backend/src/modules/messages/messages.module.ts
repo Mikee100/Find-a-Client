@@ -2,9 +2,10 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { MessagesController } from "src/modules/messages/messages.controller";
 import { MessagesService } from "src/modules/messages/messages.service";
+import { NotificationsModule } from "src/modules/notifications/notifications.module";
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, NotificationsModule],
   controllers: [MessagesController],
   providers: [MessagesService]
 })

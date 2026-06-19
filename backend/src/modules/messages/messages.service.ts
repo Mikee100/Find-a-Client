@@ -4,9 +4,11 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { WebSocket } from "ws";
 import { PrismaService } from "src/prisma/prisma.service";
 import { buildPagination } from "src/common/utils/pagination.util";
+import { NOTIFICATION_TYPE } from "src/common/constants/domain-enums.constant";
 import { sanitizeInput } from "src/common/utils/sanitize.util";
 import { CreateThreadDto } from "src/modules/messages/dto/create-thread.dto";
 import { SendMessageDto } from "src/modules/messages/dto/send-message.dto";
+import { NotificationsService } from "src/modules/notifications/notifications.service";
 
 const wsTransport = WebSocket as unknown as never;
 
@@ -16,7 +18,8 @@ export class MessagesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly notificationsService: NotificationsService
   ) {
     this.supabase = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
@@ -59,6 +62,29 @@ export class MessagesService {
     const threads = await this.prisma.thread.findMany({
       where: { OR: [{ participantAId: userId }, { participantBId: userId }] },
       include: {
+        participantA: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatarUrl: true
+          }
+        },
+        participantB: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatarUrl: true
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            slug: true,
+            title: true
+          }
+        },
         messages: {
           orderBy: { createdAt: "desc" },
           take: 1
@@ -101,7 +127,7 @@ export class MessagesService {
    * Sends a message and emits Supabase Realtime event.
    */
   async sendMessage(userId: string, threadId: string, dto: SendMessageDto) {
-    await this.assertThreadParticipant(userId, threadId);
+    const thread = await this.assertThreadParticipant(userId, threadId);
     const message = await this.prisma.message.create({
       data: {
         threadId,
@@ -117,6 +143,19 @@ export class MessagesService {
       event: "new_message",
       payload: message
     });
+
+    const recipientId = thread.participantAId === userId ? thread.participantBId : thread.participantAId;
+    try {
+      await this.notificationsService.dispatch(recipientId, NOTIFICATION_TYPE.NEW_MESSAGE, {
+        threadId,
+        projectId: thread.projectId,
+        senderId: userId,
+        messageId: message.id,
+        preview: message.content.slice(0, 160)
+      });
+    } catch {
+      // Do not block chat delivery if notification dispatch fails.
+    }
 
     return message;
   }
@@ -135,10 +174,25 @@ export class MessagesService {
       data: { isRead: true }
     });
 
+    await this.prisma.notification.updateMany({
+      where: {
+        userId,
+        type: NOTIFICATION_TYPE.NEW_MESSAGE,
+        isRead: false,
+        payload: {
+          path: ["threadId"],
+          equals: threadId
+        }
+      },
+      data: {
+        isRead: true
+      }
+    });
+
     return { updated: result.count };
   }
 
-  private async assertThreadParticipant(userId: string, threadId: string): Promise<void> {
+  private async assertThreadParticipant(userId: string, threadId: string) {
     const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
     if (!thread) {
       throw new NotFoundException("Thread not found");
@@ -146,5 +200,7 @@ export class MessagesService {
     if (thread.participantAId !== userId && thread.participantBId !== userId) {
       throw new ForbiddenException("You are not a participant in this thread");
     }
+
+    return thread;
   }
 }
