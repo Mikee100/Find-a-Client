@@ -3,11 +3,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Circle, Search, SendHorizontal } from "lucide-react";
 import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
 import { getRealtimeClient } from "@/lib/realtime";
 import {
   createMessageThread,
   getAuthSession,
+  getMessageQuickReplies,
   getMessageThreads,
   getNotifications,
   getThreadMessages,
@@ -25,6 +27,18 @@ function formatTime(value: string): string {
     return "";
   }
   return date.toLocaleString();
+}
+
+function formatThreadTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric"
+  });
 }
 
 function initials(name: string): string {
@@ -50,7 +64,13 @@ export default function DeveloperMessagesPage() {
   const [sending, setSending] = useState(false);
   const [pendingSignOut, setPendingSignOut] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [quickReplies, setQuickReplies] = useState<string[]>([]);
+  const [threadSearch, setThreadSearch] = useState("");
   const selectedThreadIdRef = useRef<string | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const hasRedirectedOnAuthErrorRef = useRef(false);
 
   const threadQuery = searchParams.get("thread")?.trim() || "";
   const recipientIdQuery = searchParams.get("recipientId")?.trim() || "";
@@ -69,6 +89,48 @@ export default function DeveloperMessagesPage() {
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? null,
     [selectedThreadId, threads]
+  );
+
+  const visibleThreads = useMemo(() => {
+    const needle = threadSearch.trim().toLowerCase();
+    if (!needle) {
+      return threads;
+    }
+
+    return threads.filter((thread) => {
+      const participant = viewerId
+        ? thread.participantAId === viewerId
+          ? thread.participantB
+          : thread.participantA
+        : thread.participantA;
+      const label = participant?.fullName || participant?.username || "conversation";
+      const preview = thread.messages[0]?.content ?? "";
+      return `${label} ${preview}`.toLowerCase().includes(needle);
+    });
+  }, [threadSearch, threads, viewerId]);
+
+  const isUnauthorizedError = useCallback((caughtError: unknown) => {
+    if (!(caughtError instanceof Error)) {
+      return false;
+    }
+
+    return caughtError.message.toLowerCase().includes("unauthorized");
+  }, []);
+
+  const handleRequestError = useCallback(
+    (caughtError: unknown, fallbackMessage: string) => {
+      if (isUnauthorizedError(caughtError)) {
+        setError("Your session expired. Please sign in again.");
+        if (!hasRedirectedOnAuthErrorRef.current) {
+          hasRedirectedOnAuthErrorRef.current = true;
+          router.replace("/login");
+        }
+        return;
+      }
+
+      setError(caughtError instanceof Error ? caughtError.message : fallbackMessage);
+    },
+    [isUnauthorizedError, router]
   );
 
   const refreshNotifications = useCallback(async () => {
@@ -113,6 +175,16 @@ export default function DeveloperMessagesPage() {
     [refreshNotifications]
   );
 
+  const onMessagesScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 60;
+  }, []);
+
   const recipientLabel = useMemo(() => {
     if (!selectedThread || !viewerId) {
       return "Conversation";
@@ -123,17 +195,19 @@ export default function DeveloperMessagesPage() {
 
     return participant?.fullName || participant?.username || "Conversation";
   }, [selectedThread, viewerId]);
+  const visibleQuickReplies = selectedThreadId ? quickReplies : [];
 
   useEffect(() => {
     void (async () => {
       try {
         const session = await getAuthSession();
         setViewerId(session.sub);
-      } catch {
+      } catch (caughtError) {
         setViewerId(null);
+        handleRequestError(caughtError, "Please sign in to view messages.");
       }
     })();
-  }, []);
+  }, [handleRequestError]);
 
   useEffect(() => {
     void (async () => {
@@ -159,29 +233,35 @@ export default function DeveloperMessagesPage() {
 
         await Promise.all([refreshThreads(), refreshNotifications()]);
       } catch (caughtError) {
-        setError(caughtError instanceof Error ? caughtError.message : "Unable to load conversations.");
+        handleRequestError(caughtError, "Unable to load conversations.");
       } finally {
         setLoadingThreads(false);
       }
     })();
-  }, [projectIdQuery, recipientIdQuery, refreshNotifications, refreshThreads, router, searchParams]);
+  }, [handleRequestError, projectIdQuery, recipientIdQuery, refreshNotifications, refreshThreads, router, searchParams]);
 
   useEffect(() => {
     if (!selectedThreadId) {
       return;
     }
 
+    shouldStickToBottomRef.current = true;
+
     void (async () => {
       try {
         setLoadingMessages(true);
-        await refreshMessages(selectedThreadId, true);
+        const [, templates] = await Promise.all([
+          refreshMessages(selectedThreadId, true),
+          getMessageQuickReplies(selectedThreadId)
+        ]);
+        setQuickReplies(templates);
       } catch (caughtError) {
-        setError(caughtError instanceof Error ? caughtError.message : "Unable to load messages.");
+        handleRequestError(caughtError, "Unable to load messages.");
       } finally {
         setLoadingMessages(false);
       }
     })();
-  }, [refreshMessages, selectedThreadId]);
+  }, [handleRequestError, refreshMessages, selectedThreadId]);
 
   useEffect(() => {
     const supabase = getRealtimeClient();
@@ -197,9 +277,13 @@ export default function DeveloperMessagesPage() {
           const payload = (event.payload ?? {}) as { threadId?: string };
           const payloadThreadId = payload.threadId || threadId;
 
-          void Promise.all([refreshThreads(), refreshNotifications()]);
+          void Promise.all([refreshThreads(), refreshNotifications()]).catch((caughtError) => {
+            handleRequestError(caughtError, "Unable to refresh conversations.");
+          });
           if (selectedThreadIdRef.current === payloadThreadId) {
-            void refreshMessages(payloadThreadId, false);
+            void refreshMessages(payloadThreadId, false).catch((caughtError) => {
+              handleRequestError(caughtError, "Unable to refresh messages.");
+            });
           }
         })
         .subscribe()
@@ -210,7 +294,7 @@ export default function DeveloperMessagesPage() {
         void supabase.removeChannel(channel);
       });
     };
-  }, [refreshMessages, refreshNotifications, refreshThreads, threads]);
+  }, [handleRequestError, refreshMessages, refreshNotifications, refreshThreads, threads]);
 
   useEffect(() => {
     const sync = () => {
@@ -218,10 +302,13 @@ export default function DeveloperMessagesPage() {
         return;
       }
 
-      void refreshThreads();
-      void refreshNotifications();
+      void Promise.all([refreshThreads(), refreshNotifications()]).catch((caughtError) => {
+        handleRequestError(caughtError, "Unable to refresh conversations.");
+      });
       if (selectedThreadId) {
-        void refreshMessages(selectedThreadId, false);
+        void refreshMessages(selectedThreadId, false).catch((caughtError) => {
+          handleRequestError(caughtError, "Unable to refresh messages.");
+        });
       }
     };
 
@@ -234,7 +321,15 @@ export default function DeveloperMessagesPage() {
       window.removeEventListener("focus", sync);
       document.removeEventListener("visibilitychange", sync);
     };
-  }, [realtimeEnabled, refreshMessages, refreshNotifications, refreshThreads, selectedThreadId]);
+  }, [handleRequestError, realtimeEnabled, refreshMessages, refreshNotifications, refreshThreads, selectedThreadId]);
+
+  useEffect(() => {
+    if (!shouldStickToBottomRef.current) {
+      return;
+    }
+
+    messageEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+  }, [messages]);
 
   async function onSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -249,6 +344,7 @@ export default function DeveloperMessagesPage() {
 
     try {
       setSending(true);
+      shouldStickToBottomRef.current = true;
       const sent = await sendThreadMessage(selectedThreadId, trimmed);
       setMessages((previous) => [...previous, sent]);
       setMessageInput("");
@@ -271,7 +367,7 @@ export default function DeveloperMessagesPage() {
         )
       );
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to send message.");
+      handleRequestError(caughtError, "Unable to send message.");
     } finally {
       setSending(false);
     }
@@ -305,7 +401,7 @@ export default function DeveloperMessagesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900">
+    <main className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] text-neutral-900">
       <DeveloperDashboardNavbar
         onSignOut={() => {
           void onSignOut();
@@ -318,112 +414,143 @@ export default function DeveloperMessagesPage() {
         unreadNotifications={unreadNotifications}
       />
 
-      <section className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-5 md:grid-cols-[300px_minmax(0,1fr)] md:px-6">
-        <aside className="rounded-xl border border-neutral-200 bg-white p-3">
-          <div className="mb-3 flex items-center justify-between">
-            <h1 className="text-sm font-semibold uppercase tracking-[0.12em] text-neutral-500">Client Messages</h1>
-            <span className="text-xs text-neutral-500">{threads.length}</span>
-          </div>
-
-          {loadingThreads ? <p className="text-sm text-neutral-500">Loading conversations...</p> : null}
-          {!loadingThreads && threads.length === 0 ? (
-            <p className="text-sm text-neutral-500">No conversations yet. Clients will appear here when they message you.</p>
-          ) : null}
-
-          <div className="space-y-2">
-            {threads.map((thread) => {
-              const participant = viewerId
-                ? thread.participantAId === viewerId
-                  ? thread.participantB
-                  : thread.participantA
-                : thread.participantA;
-              const label = participant?.fullName || participant?.username || "Conversation";
-              const lastMessage = thread.messages[0]?.content ?? "No messages yet";
-
-              return (
-                <button
-                  key={thread.id}
-                  type="button"
-                  onClick={() => onSelectThread(thread.id)}
-                  className={`w-full rounded-lg border p-2 text-left transition ${
-                    selectedThreadId === thread.id
-                      ? "border-neutral-900 bg-neutral-100"
-                      : "border-neutral-200 bg-white hover:bg-neutral-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-white">
-                      {initials(label)}
-                    </span>
-                    <p className="truncate text-sm font-semibold">{label}</p>
-                    {thread.unreadCount > 0 ? (
-                      <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
-                        {thread.unreadCount}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 truncate text-xs text-neutral-600">{lastMessage}</p>
-                  <p className="mt-1 text-[11px] text-neutral-500">{formatTime(thread.updatedAt)}</p>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-
-        <section className="flex min-h-[70vh] flex-col rounded-xl border border-neutral-200 bg-white">
-          <header className="border-b border-neutral-200 px-4 py-3">
-            <p className="text-sm font-semibold">{recipientLabel}</p>
-            {selectedThread?.project ? (
-              <Link href={`/projects/${selectedThread.project.slug}`} className="text-xs text-blue-700 underline">
-                Regarding: {selectedThread.project.title}
-              </Link>
-            ) : null}
-          </header>
-
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            {loadingMessages ? <p className="text-sm text-neutral-500">Loading messages...</p> : null}
-            {!loadingMessages && messages.length === 0 ? (
-              <p className="text-sm text-neutral-500">No messages yet. Start the conversation below.</p>
-            ) : null}
-
-            {messages.map((message) => {
-              const isMine = message.senderId === viewerId;
-              return (
-                <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                      isMine ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-900"
-                    }`}
-                  >
-                    <p>{message.content}</p>
-                    <p className={`mt-1 text-[11px] ${isMine ? "text-neutral-300" : "text-neutral-500"}`}>
-                      {formatTime(message.createdAt)}
-                    </p>
-                  </div>
+      <section className="mx-auto w-full max-w-7xl px-4 py-3 md:px-6 md:py-4">
+        <div className="grid min-h-[72vh] border-y border-slate-200 md:grid-cols-[290px_minmax(0,1fr)]">
+          <aside className="border-b border-slate-200 bg-slate-50/50 p-3 md:border-b-0 md:border-r">
+              <div className="mb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Developer Inbox</p>
+                <div className="mt-1 flex items-center justify-between">
+                  <h1 className="text-base font-semibold tracking-tight text-slate-900">Client Conversations</h1>
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600">{threads.length}</span>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          <form onSubmit={onSend} className="border-t border-neutral-200 p-3">
-            <div className="flex items-center gap-2">
-              <input
-                value={messageInput}
-                onChange={(event) => setMessageInput(event.target.value)}
-                placeholder={selectedThreadId ? "Type your reply..." : "Select a conversation to begin"}
-                disabled={!selectedThreadId || sending}
-                className="h-10 flex-1 rounded-lg border border-neutral-300 px-3 text-sm outline-none focus:border-neutral-900 disabled:bg-neutral-100"
-              />
-              <button
-                type="submit"
-                disabled={!selectedThreadId || sending || !messageInput.trim()}
-                className="inline-flex h-10 items-center rounded-lg bg-neutral-900 px-4 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {sending ? "Sending..." : "Send"}
-              </button>
-            </div>
-          </form>
-        </section>
+              <label className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  value={threadSearch}
+                  onChange={(event) => setThreadSearch(event.target.value)}
+                  placeholder="Search conversations"
+                  className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                />
+              </label>
+
+              {loadingThreads ? <p className="text-sm text-slate-500">Loading conversations...</p> : null}
+              {!loadingThreads && visibleThreads.length === 0 ? (
+                <p className="text-sm text-slate-500">No conversations found.</p>
+              ) : null}
+
+              <div className="max-h-[54vh] overflow-y-auto pr-1">
+                {visibleThreads.map((thread) => {
+                  const participant = viewerId
+                    ? thread.participantAId === viewerId
+                      ? thread.participantB
+                      : thread.participantA
+                    : thread.participantA;
+                  const label = participant?.fullName || participant?.username || "Conversation";
+                  const lastMessage = thread.messages[0]?.content ?? "No messages yet";
+
+                  return (
+                    <button
+                      key={thread.id}
+                      type="button"
+                      onClick={() => onSelectThread(thread.id)}
+                      className={`w-full border-b px-1 py-2 text-left transition ${
+                        selectedThreadId === thread.id
+                          ? "border-slate-900 bg-transparent"
+                          : "border-slate-200 bg-transparent hover:bg-slate-100/60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-white">
+                          {initials(label)}
+                        </span>
+                        <p className="truncate text-sm font-semibold text-slate-900">{label}</p>
+                        {thread.unreadCount > 0 ? (
+                          <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
+                            {thread.unreadCount}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-600">{lastMessage}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{formatThreadTime(thread.updatedAt)}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
+
+            <section className="flex min-h-[72vh] flex-col bg-transparent">
+              <header className="border-b border-slate-200 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Circle className={`h-2.5 w-2.5 ${realtimeEnabled ? "fill-emerald-500 text-emerald-500" : "fill-amber-500 text-amber-500"}`} />
+                  <p className="text-sm font-semibold text-slate-900">{recipientLabel}</p>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-500">{realtimeEnabled ? "Live updates active" : "Syncing every few seconds"}</p>
+                {selectedThread?.project ? (
+                  <Link href={`/projects/${selectedThread.project.slug}`} className="mt-1 inline-flex text-xs font-medium text-blue-700 hover:underline">
+                    Regarding: {selectedThread.project.title}
+                  </Link>
+                ) : null}
+              </header>
+
+              <div ref={messagesContainerRef} onScroll={onMessagesScroll} className="flex-1 space-y-2 overflow-y-auto bg-transparent px-4 py-3">
+                {loadingMessages ? <p className="text-sm text-slate-500">Loading messages...</p> : null}
+                {!loadingMessages && messages.length === 0 ? (
+                  <p className="text-sm text-slate-500">No messages yet. Start the conversation below.</p>
+                ) : null}
+
+                {messages.map((message) => {
+                  const isMine = message.senderId === viewerId;
+                  return (
+                    <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[82%] px-0 py-0 text-sm ${isMine ? "text-slate-900" : "text-slate-700"}`}>
+                        <p className="leading-6">{message.content}</p>
+                        <p className={`mt-1 text-[11px] ${isMine ? "text-slate-400" : "text-slate-500"}`}>
+                          {formatTime(message.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={messageEndRef} />
+              </div>
+
+              <form onSubmit={onSend} className="border-t border-slate-200 bg-transparent p-3">
+                {visibleQuickReplies.length > 0 ? (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {visibleQuickReplies.slice(0, 5).map((template) => (
+                      <button
+                        key={template}
+                        type="button"
+                        onClick={() => setMessageInput(template)}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-700 hover:bg-slate-100"
+                      >
+                        {template.length > 52 ? `${template.slice(0, 52)}...` : template}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={messageInput}
+                    onChange={(event) => setMessageInput(event.target.value)}
+                    placeholder={selectedThreadId ? "Type your reply..." : "Select a conversation to begin"}
+                    disabled={!selectedThreadId || sending}
+                    className="h-9 flex-1 border-b border-slate-300 bg-transparent px-1 text-sm outline-none placeholder:text-slate-400 disabled:bg-transparent"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!selectedThreadId || sending || !messageInput.trim()}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    <SendHorizontal className="h-4 w-4" />
+                    {sending ? "Sending" : "Send"}
+                  </button>
+                </div>
+              </form>
+            </section>
+        </div>
       </section>
 
       {error ? (

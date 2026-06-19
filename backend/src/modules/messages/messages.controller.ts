@@ -18,6 +18,11 @@ export class MessagesController {
     return this.messagesService.listThreads(user.sub);
   }
 
+  @Get("quick-replies")
+  quickReplies(@CurrentUser() user: CurrentUserPayload, @Query("threadId") threadId?: string) {
+    return this.messagesService.getQuickReplies(user.sub, threadId);
+  }
+
   @Get("threads/:id")
   getMessages(
     @CurrentUser() user: CurrentUserPayload,
