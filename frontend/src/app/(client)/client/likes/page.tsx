@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Heart } from "lucide-react";
-import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
+import ClientDashboardNavbar from "@/features/client/client-dashboard-navbar";
 import ClientSidebar from "@/features/shared/client-sidebar";
 import { getLikedProjects, LikedProjectEntry, toggleProjectLike } from "@/lib/api";
 
@@ -166,7 +166,7 @@ export default function ClientLikedProjectsPage() {
 
   return (
     <main className="min-h-screen bg-neutral-50 text-neutral-900">
-      <MarketplaceNavbar />
+      <ClientDashboardNavbar />
       <section className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6">
         <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]">
           <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
