@@ -8,14 +8,14 @@ import { motion } from "framer-motion";
 import {
   Bell,
   Briefcase,
+  ChevronLeft,
   ChevronRight,
   CircleHelp,
+  Eye,
   FolderKanban,
+  Heart,
   LayoutGrid,
-  LogOut,
-  Menu,
   MessageSquare,
-  Search,
   Settings,
   Sparkles,
   UserCircle2,
@@ -24,19 +24,24 @@ import {
   Zap,
 } from "lucide-react";
 import {
+  CurrentUserProfile,
   getAuthSession,
+  getCurrentUserProfile,
   getProfileCompleteness,
   getMyProjects,
   getMessageThreads,
   getNotifications,
   getSavedProjects,
+  listProjectsPaginated,
   logout,
   logoutEverywhere,
   MyProjectListItem,
   NotificationItem,
+  ProjectListItem,
   ProfileCompleteness,
   ThreadSummary,
 } from "@/lib/api";
+import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
 
 type ActivityItem = {
   id: string;
@@ -47,12 +52,9 @@ type ActivityItem = {
 };
 
 type RecommendationItem = {
-  id: string;
-  title: string;
-  budget: string;
-  timeline: string;
-  skills: string[];
+  project: ProjectListItem;
   match: number;
+  matchedSkills: string[];
 };
 
 type NavItem = {
@@ -65,7 +67,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutGrid, href: "/developer/dashboard", active: true },
   { label: "My Profile", icon: UserCircle2, href: "/developers/profile" },
-  { label: "Portfolio", icon: FolderKanban, href: "/developer/projects/new" },
+  { label: "Portfolio", icon: FolderKanban, href: "/developer/projects" },
   { label: "Projects", icon: Briefcase, href: "/projects" },
   { label: "Messages", icon: MessageSquare, href: "/developer/messages" },
   { label: "Analytics", icon: Zap, href: "/developer/dashboard#analytics" },
@@ -74,33 +76,6 @@ const navItems: NavItem[] = [
   { label: "Notifications", icon: Bell, href: "/developer/dashboard#notifications" },
   { label: "Settings", icon: Settings, href: "/developers/settings" },
   { label: "Help", icon: CircleHelp, href: "/developer/dashboard#help" },
-];
-
-const recommendationItems: RecommendationItem[] = [
-  {
-    id: "r1",
-    title: "B2B SaaS Billing Portal",
-    budget: "$8k - $12k",
-    timeline: "4 - 6 weeks",
-    skills: ["React", "Node", "Stripe"],
-    match: 93,
-  },
-  {
-    id: "r2",
-    title: "Healthcare Scheduling Revamp",
-    budget: "$5k - $9k",
-    timeline: "3 - 5 weeks",
-    skills: ["TypeScript", "PostgreSQL", "UX"],
-    match: 88,
-  },
-  {
-    id: "r3",
-    title: "Marketplace Messaging Layer",
-    budget: "$6k - $10k",
-    timeline: "5 - 7 weeks",
-    skills: ["WebSockets", "Redis", "Backend"],
-    match: 85,
-  },
 ];
 
 function formatTime(iso: string): string {
@@ -112,6 +87,33 @@ function formatTime(iso: string): string {
 
 function formatProjectStatus(status: "DRAFT" | "PUBLISHED" | "ARCHIVED"): string {
   return status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
+function formatPrice(project: ProjectListItem): string {
+  if (project.pricingType === "FREE") {
+    return "Free";
+  }
+  if (project.pricingType === "NEGOTIABLE") {
+    return "Negotiable";
+  }
+  if (project.pricingType === "CONTACT") {
+    return "Contact";
+  }
+
+  const numeric = typeof project.price === "string" ? Number(project.price) : project.price;
+  if (!Number.isFinite(numeric)) {
+    return "Fixed";
+  }
+
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: project.currency,
+    maximumFractionDigits: 0,
+  }).format(Number(numeric));
 }
 
 function DashboardBrand() {
@@ -148,30 +150,56 @@ function AnimatedCard({
 
 function Sidebar({
   open,
+  collapsed,
   onClose,
+  onToggleCollapsed,
 }: {
   open: boolean;
+  collapsed: boolean;
   onClose: () => void;
+  onToggleCollapsed: () => void;
 }) {
   return (
     <>
-      <aside className="hidden lg:flex lg:w-72 lg:flex-col lg:border-r lg:border-slate-200 lg:bg-white lg:px-4 lg:py-5">
-        <div className="mb-5 px-2">
-          <DashboardBrand />
+      <aside
+        className={`relative hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-slate-200 lg:bg-white lg:py-5 ${
+          collapsed ? "lg:w-20 lg:px-2" : "lg:w-56 lg:px-3"
+        }`}
+      >
+        <div className={`mb-5 ${collapsed ? "flex justify-center" : "px-2"}`}>
+          {collapsed ? (
+            <Link href="/" className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-xs font-bold text-white" aria-label="Go to home">
+              FC
+            </Link>
+          ) : (
+            <DashboardBrand />
+          )}
         </div>
+
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          className="absolute right-0 top-18 z-20 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
+
         <nav className="space-y-1">
           {navItems.map((item) => (
             <Link
               key={item.label}
               href={item.href}
+              title={item.label}
               className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                 item.active
                   ? "bg-blue-50 text-blue-700"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
+              } ${collapsed ? "justify-center px-2" : ""}`}
             >
               <item.icon className="h-4 w-4" />
-              <span>{item.label}</span>
+              {!collapsed ? <span>{item.label}</span> : null}
             </Link>
           ))}
         </nav>
@@ -184,7 +212,7 @@ function Sidebar({
             className="absolute inset-0 bg-slate-950/40"
             onClick={onClose}
           />
-          <aside className="relative h-full w-72 border-r border-slate-200 bg-white px-4 py-5">
+          <aside className="relative h-full w-64 border-r border-slate-200 bg-white px-4 py-5">
             <div className="mb-5 flex items-center justify-between px-2">
               <DashboardBrand />
               <button
@@ -219,68 +247,6 @@ function Sidebar({
   );
 }
 
-function Topbar({
-  onOpenSidebar,
-  unreadMessages,
-  unreadNotifications,
-}: {
-  onOpenSidebar: () => void;
-  unreadMessages: number;
-  unreadNotifications: number;
-}) {
-  return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
-        <button
-          onClick={onOpenSidebar}
-          className="rounded-lg border border-slate-200 p-2 text-slate-600 lg:hidden"
-          aria-label="Open sidebar"
-        >
-          <Menu className="h-4 w-4" />
-        </button>
-
-        <div className="hidden min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:flex">
-          <Search className="h-4 w-4 text-slate-500" />
-          <input
-            aria-label="Search"
-            placeholder="Search developers, projects, companies, messages..."
-            className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-          />
-          <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">⌘K</span>
-        </div>
-
-        <button className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-          <Sparkles className="h-4 w-4" />
-          <span className="hidden sm:inline">AI Search</span>
-        </button>
-
-        <button className="relative rounded-lg border border-slate-200 p-2 text-slate-600">
-          <MessageSquare className="h-4 w-4" />
-          {unreadMessages > 0 ? (
-            <span className="absolute -right-1 -top-1 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
-              {unreadMessages}
-            </span>
-          ) : null}
-        </button>
-
-        <button className="relative rounded-lg border border-slate-200 p-2 text-slate-600">
-          <Bell className="h-4 w-4" />
-          {unreadNotifications > 0 ? (
-            <span className="absolute -right-1 -top-1 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
-              {unreadNotifications}
-            </span>
-          ) : null}
-        </button>
-
-        <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm">
-          <div className="h-7 w-7 rounded-full bg-slate-200" />
-          <span className="hidden text-slate-700 sm:inline">Michael</span>
-        </button>
-      </div>
-    </header>
-  );
-}
-
 function StatCard({
   title,
   value,
@@ -296,32 +262,26 @@ function StatCard({
 }) {
   return (
     <AnimatedCard delay={delay}>
-      <article className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-medium text-slate-600">{title}</p>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{trend}</span>
+      <article className="group min-w-[170px] rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <p className="truncate text-xs font-medium text-slate-600">{title}</p>
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">{trend}</span>
         </div>
-        <p className="text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
-        <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
-        <div className="mt-4 h-10 overflow-hidden rounded-md bg-slate-100">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: "76%" }}
-            transition={{ duration: 0.7, delay: delay + 0.1 }}
-            className="h-full bg-blue-500/20"
-          />
-        </div>
+        <p className="text-xl font-semibold leading-tight tracking-tight text-slate-900">{value}</p>
+        <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{subtitle}</p>
       </article>
     </AnimatedCard>
   );
 }
 
 function Hero({
+  name,
   unread,
   profileViews,
   messages,
   completeness,
 }: {
+  name: string;
   unread: number;
   profileViews: number;
   messages: number;
@@ -329,13 +289,18 @@ function Hero({
 }) {
   const completion = Math.max(0, Math.min(100, completeness.percentage));
   const dash = `${(completion / 100) * 87.96} ${87.96 - (completion / 100) * 87.96}`;
-  const guidance = completeness.nextAction ?? "Your profile is fully optimized";
+  const guidance = completeness.nextAction ?? (completeness.missingFields[0] ? `Complete ${completeness.missingFields[0]}` : "Your profile is fully optimized");
+  const completionSummary = `${completeness.completedFields}/${completeness.totalFields} fields completed`;
+  const missingSummary =
+    completeness.missingFields.length > 0
+      ? `Missing: ${completeness.missingFields.slice(0, 2).join(" • ")}`
+      : "No missing profile fields";
 
   return (
     <AnimatedCard className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" delay={0.05}>
       <div className="grid gap-6 lg:grid-cols-[1fr_210px]">
         <div>
-          <p className="text-sm font-medium text-slate-500">Good Morning, Michael</p>
+          <p className="text-sm font-medium text-slate-500">Good Morning, {name}</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Welcome back.</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
             Your profile received more attention today. You have {unread} new inquiries, {profileViews} profile views, and {messages} client messages.
@@ -364,10 +329,9 @@ function Hero({
               </span>
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-800">
-                {completion >= 90 ? "Strong profile" : "Profile can improve"}
-              </p>
+              <p className="text-sm font-medium text-slate-800">{completionSummary}</p>
               <p className="text-xs text-slate-500">{guidance}</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">{missingSummary}</p>
             </div>
           </div>
         </div>
@@ -452,6 +416,11 @@ function ActivityFeed({
             </article>
           </AnimatedCard>
         ))}
+        {activities.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+            No activity yet. Client messages and notifications will show up here.
+          </p>
+        ) : null}
       </div>
     </section>
   );
@@ -498,45 +467,66 @@ function MessagesPreview({ threads }: { threads: ThreadSummary[] }) {
   );
 }
 
-function RecommendedProjects() {
+function RecommendedProjects({ recommendations }: { recommendations: RecommendationItem[] }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="saved-clients">
       <h2 className="mb-4 text-lg font-semibold text-slate-900">Recommended projects</h2>
       <div className="space-y-3">
-        {recommendationItems.map((item, index) => (
-          <AnimatedCard key={item.id} delay={0.06 + index * 0.05}>
+        {recommendations.map((item, index) => (
+          <AnimatedCard key={item.project.id} delay={0.06 + index * 0.05}>
             <article className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-600">
-                    {item.budget} · {item.timeline}
-                  </p>
+                  <p className="text-sm font-semibold text-slate-900">{item.project.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-600">{formatPrice(item.project)} · {item.project.category.replace(/_/g, " ")}</p>
                 </div>
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
                   {item.match}% match
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {item.skills.map((skill) => (
+                {item.matchedSkills.slice(0, 4).map((skill) => (
                   <span key={skill} className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600">
                     {skill}
                   </span>
                 ))}
+                {item.matchedSkills.length === 0 ? (
+                  <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600">
+                    Match by project popularity
+                  </span>
+                ) : null}
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">Apply</button>
-                <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">Bookmark</button>
+                <Link href={`/projects/${item.project.slug}`} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+                  View project
+                </Link>
+                <span className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600">
+                  {item.project.likeCount} likes
+                </span>
               </div>
             </article>
           </AnimatedCard>
         ))}
+        {recommendations.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+            No recommended projects yet. Add more skills to improve matching.
+          </p>
+        ) : null}
       </div>
     </section>
   );
 }
 
-function AiMatchWidget() {
+function AiMatchWidget({
+  recommendations,
+  completeness,
+}: {
+  recommendations: RecommendationItem[];
+  completeness: ProfileCompleteness;
+}) {
+  const topMatch = recommendations[0]?.match ?? 0;
+  const suggestion = completeness.nextAction ?? "Keep your portfolio updated for stronger matching signals.";
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="ai-match">
       <div className="mb-3 flex items-center gap-2">
@@ -544,18 +534,18 @@ function AiMatchWidget() {
         <h2 className="text-lg font-semibold text-slate-900">AI Match</h2>
       </div>
       <p className="text-sm text-slate-600">
-        Based on your portfolio, we found <span className="font-semibold text-slate-900">18 businesses</span> looking for React + Node developers.
+        Based on your portfolio and profile skills, we found <span className="font-semibold text-slate-900">{recommendations.length}</span> relevant projects.
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Match score</p>
-          <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">91/100</p>
-          <p className="mt-1 text-xs text-slate-500">Excellent fit in SaaS and healthcare projects</p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">{topMatch}/100</p>
+          <p className="mt-1 text-xs text-slate-500">Top recommendation score from current project feed</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Suggested action</p>
-          <p className="mt-1 text-sm font-medium text-slate-900">Publish one more case study this week</p>
-          <p className="mt-1 text-xs text-slate-500">This can improve project match confidence by up to 11%</p>
+          <p className="mt-1 text-sm font-medium text-slate-900">{suggestion}</p>
+          <p className="mt-1 text-xs text-slate-500">Profile completeness: {completeness.percentage}%</p>
         </article>
       </div>
     </section>
@@ -566,74 +556,131 @@ function AnalyticsCard({
   label,
   value,
   change,
+  progress,
+  icon: Icon,
+  tone,
 }: {
   label: string;
   value: string;
   change: string;
+  progress: number;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "blue" | "rose" | "violet" | "amber" | "indigo" | "emerald";
 }) {
+  const toneStyles: Record<"blue" | "rose" | "violet" | "amber" | "indigo" | "emerald", string> = {
+    blue: "bg-blue-50 text-blue-700 border-blue-200",
+    rose: "bg-rose-50 text-rose-700 border-rose-200",
+    violet: "bg-violet-50 text-violet-700 border-violet-200",
+    amber: "bg-amber-50 text-amber-700 border-amber-200",
+    indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  };
+
+  const barStyles: Record<"blue" | "rose" | "violet" | "amber" | "indigo" | "emerald", string> = {
+    blue: "bg-blue-500/70",
+    rose: "bg-rose-500/70",
+    violet: "bg-violet-500/70",
+    amber: "bg-amber-500/70",
+    indigo: "bg-indigo-500/70",
+    emerald: "bg-emerald-500/70",
+  };
+
   return (
     <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{change}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
+          <p className="mt-1 text-xs text-slate-500">{change}</p>
+        </div>
+        <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${toneStyles[tone]}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200">
+        <div className={`h-full rounded-full ${barStyles[tone]}`} style={{ width: `${Math.max(8, progress)}%` }} />
+      </div>
     </article>
   );
 }
 
-function AnalyticsSection() {
+function AnalyticsSection({
+  totalProjectViews,
+  totalProjectLikes,
+  threadCount,
+  unreadMessages,
+  unreadNotifications,
+  publishedProjectCount,
+}: {
+  totalProjectViews: number;
+  totalProjectLikes: number;
+  threadCount: number;
+  unreadMessages: number;
+  unreadNotifications: number;
+  publishedProjectCount: number;
+}) {
+  const maxValue = Math.max(
+    totalProjectViews,
+    totalProjectLikes,
+    threadCount,
+    unreadMessages,
+    unreadNotifications,
+    publishedProjectCount,
+    1,
+  );
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="analytics">
       <h2 className="mb-4 text-lg font-semibold text-slate-900">Analytics</h2>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <AnalyticsCard label="Profile views" value="2,480" change="+14% this month" />
-        <AnalyticsCard label="Portfolio visits" value="1,940" change="+11% this month" />
-        <AnalyticsCard label="Messages" value="312" change="+9% this month" />
-        <AnalyticsCard label="Applications" value="76" change="+6% this month" />
-        <AnalyticsCard label="Client saves" value="124" change="+18% this month" />
-        <AnalyticsCard label="Referral sources" value="Top: Search" change="57% of traffic" />
-      </div>
-    </section>
-  );
-}
-
-function UtilityActions({
-  pending,
-  onLogout,
-  onLogoutEverywhere,
-}: {
-  pending: boolean;
-  onLogout: () => Promise<void>;
-  onLogoutEverywhere: () => Promise<void>;
-}) {
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="help">
-      <h2 className="mb-4 text-lg font-semibold text-slate-900">Quick actions</h2>
-      <div className="flex flex-wrap gap-2">
-        <Link href="/developers/settings" className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-          Edit profile
-        </Link>
-        <Link href="/projects" className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-          Browse projects
-        </Link>
-        <button
-          disabled={pending}
-          onClick={() => {
-            void onLogout();
-          }}
-          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-50"
-        >
-          <LogOut className="h-4 w-4" />
-          {pending ? "Signing out..." : "Sign out"}
-        </button>
-        <button
-          disabled={pending}
-          onClick={() => {
-            void onLogoutEverywhere();
-          }}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          Sign out all devices
-        </button>
+        <AnalyticsCard
+          label="Project views"
+          value={formatCompactNumber(totalProjectViews)}
+          change="Across all your projects"
+          progress={(totalProjectViews / maxValue) * 100}
+          icon={Eye}
+          tone="blue"
+        />
+        <AnalyticsCard
+          label="Project likes"
+          value={formatCompactNumber(totalProjectLikes)}
+          change="Total engagement signals"
+          progress={(totalProjectLikes / maxValue) * 100}
+          icon={Heart}
+          tone="rose"
+        />
+        <AnalyticsCard
+          label="Threads"
+          value={String(threadCount)}
+          change="Active client conversations"
+          progress={(threadCount / maxValue) * 100}
+          icon={MessageSquare}
+          tone="violet"
+        />
+        <AnalyticsCard
+          label="Unread messages"
+          value={String(unreadMessages)}
+          change="Needs response"
+          progress={(unreadMessages / maxValue) * 100}
+          icon={MessageSquare}
+          tone="amber"
+        />
+        <AnalyticsCard
+          label="Unread notifications"
+          value={String(unreadNotifications)}
+          change="Recent platform updates"
+          progress={(unreadNotifications / maxValue) * 100}
+          icon={Bell}
+          tone="indigo"
+        />
+        <AnalyticsCard
+          label="Published projects"
+          value={String(publishedProjectCount)}
+          change="Visible to clients"
+          progress={(publishedProjectCount / maxValue) * 100}
+          icon={FolderKanban}
+          tone="emerald"
+        />
       </div>
     </section>
   );
@@ -644,10 +691,13 @@ export default function DeveloperDashboardPage() {
   const [hasSession, setHasSession] = useState<boolean | undefined>(undefined);
   const [pendingLogout, setPendingLogout] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
+  const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [savedProjectsCount, setSavedProjectsCount] = useState(0);
   const [myProjects, setMyProjects] = useState<MyProjectListItem[]>([]);
+  const [recommendedProjects, setRecommendedProjects] = useState<ProjectListItem[]>([]);
   const [completeness, setCompleteness] = useState<ProfileCompleteness>({
     percentage: 0,
     completedFields: 0,
@@ -674,22 +724,28 @@ export default function DeveloperDashboardPage() {
 
     async function loadDashboardData() {
       try {
-        const [threadData, notificationData, savedData, myProjectData, completenessData] = await Promise.all([
+        const [profileData, threadData, notificationData, savedData, myProjectData, completenessData, recommendedData] = await Promise.all([
+          getCurrentUserProfile(),
           getMessageThreads(),
           getNotifications(20),
           getSavedProjects(),
           getMyProjects(),
-          getProfileCompleteness()
+          getProfileCompleteness(),
+          listProjectsPaginated({ sortBy: "popular", limit: 8 })
         ]);
+        setProfile(profileData);
         setThreads(threadData);
         setNotifications(notificationData);
         setSavedProjectsCount(savedData.length);
         setMyProjects(myProjectData);
         setCompleteness(completenessData);
+        setRecommendedProjects(recommendedData.items);
       } catch {
+        setProfile(null);
         setThreads([]);
         setNotifications([]);
         setMyProjects([]);
+        setRecommendedProjects([]);
         setCompleteness({
           percentage: 0,
           completedFields: 0,
@@ -725,24 +781,64 @@ export default function DeveloperDashboardPage() {
     [notifications],
   );
 
-  const activities: ActivityItem[] = useMemo(() => {
-    if (threads.length > 0) {
-      return threads.slice(0, 5).map((thread) => ({
-        id: thread.id,
-        title: "Client sent a message",
-        detail: thread.messages[0]?.content ?? "New thread activity",
-        time: formatTime(thread.updatedAt),
-        unread: thread.unreadCount > 0,
-      }));
-    }
+  const totalProjectViews = useMemo(
+    () => myProjects.reduce((sum, project) => sum + project.viewCount, 0),
+    [myProjects],
+  );
 
-    return [
-      { id: "a1", title: "John viewed your profile", detail: "Your profile was viewed from a FinTech company", time: "5m ago", unread: true },
-      { id: "a2", title: "Sarah bookmarked your portfolio", detail: "Project card got bookmarked", time: "22m ago" },
-      { id: "a3", title: "New AI recommendation", detail: "You matched with 3 new projects", time: "1h ago" },
-      { id: "a4", title: "Proposal accepted", detail: "Client approved your proposal terms", time: "Yesterday" },
-    ];
-  }, [threads]);
+  const totalProjectLikes = useMemo(
+    () => myProjects.reduce((sum, project) => sum + project.likeCount, 0),
+    [myProjects],
+  );
+
+  const publishedProjectCount = useMemo(
+    () => myProjects.filter((project) => project.status === "PUBLISHED").length,
+    [myProjects],
+  );
+
+  const draftProjectCount = useMemo(
+    () => myProjects.filter((project) => project.status === "DRAFT").length,
+    [myProjects],
+  );
+
+  const recommendationItems = useMemo<RecommendationItem[]>(() => {
+    const profileSkills = new Set((profile?.skills ?? []).map((skill) => skill.toLowerCase()));
+
+    return recommendedProjects
+      .map((project) => {
+        const matchedSkills = project.techStack.filter((skill) => profileSkills.has(skill.toLowerCase()));
+        const skillMatchScore = profileSkills.size > 0 ? Math.round((matchedSkills.length / profileSkills.size) * 70) : 40;
+        const engagementScore = Math.min(30, Math.round((project.likeCount + project.viewCount / 10) / 5));
+
+        return {
+          project,
+          matchedSkills,
+          match: Math.max(35, Math.min(99, skillMatchScore + engagementScore)),
+        };
+      })
+      .sort((left, right) => right.match - left.match)
+      .slice(0, 4);
+  }, [profile?.skills, recommendedProjects]);
+
+  const activities: ActivityItem[] = useMemo(() => {
+    const fromThreads = threads.slice(0, 3).map((thread) => ({
+      id: `thread-${thread.id}`,
+      title: "Client message",
+      detail: thread.messages[0]?.content ?? "New thread activity",
+      time: formatTime(thread.updatedAt),
+      unread: thread.unreadCount > 0,
+    }));
+
+    const fromNotifications = notifications.slice(0, 3).map((notification) => ({
+      id: `notification-${notification.id}`,
+      title: notification.type.replace(/_/g, " "),
+      detail: "Notification from your account activity",
+      time: formatTime(notification.createdAt),
+      unread: !notification.isRead,
+    }));
+
+    return [...fromThreads, ...fromNotifications].slice(0, 6);
+  }, [notifications, threads]);
 
   if (!hasSession) {
     return null;
@@ -751,25 +847,43 @@ export default function DeveloperDashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="flex min-h-screen">
-        <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
+        <Sidebar
+          open={mobileSidebarOpen}
+          collapsed={desktopSidebarCollapsed}
+          onClose={() => setMobileSidebarOpen(false)}
+          onToggleCollapsed={() => setDesktopSidebarCollapsed((current) => !current)}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar
+          <DeveloperDashboardNavbar
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             unreadMessages={unreadMessages}
             unreadNotifications={unreadNotifications}
+            onSignOut={() => {
+              void onLogout();
+            }}
+            onSignOutEverywhere={() => {
+              void onLogoutEverywhere();
+            }}
+            pendingSignOut={pendingLogout}
           />
 
           <main className="space-y-6 p-4 sm:p-6">
-            <Hero unread={Math.max(unreadMessages, 4)} profileViews={12} messages={3} completeness={completeness} />
+            <Hero
+              name={profile?.fullName ?? "Developer"}
+              unread={unreadNotifications}
+              profileViews={totalProjectViews}
+              messages={unreadMessages}
+              completeness={completeness}
+            />
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-              <StatCard title="Profile views" value="2,480" trend="+14%" subtitle="Last 30 days" delay={0.05} />
-              <StatCard title="Messages" value={String(unreadMessages)} trend="+9%" subtitle="Unread now" delay={0.09} />
-              <StatCard title="Saved by clients" value={String(savedProjectsCount)} trend="+6%" subtitle="This week" delay={0.13} />
-              <StatCard title="Projects" value={String(myProjects.length)} trend="Live" subtitle="Your portfolio" delay={0.17} />
-              <StatCard title="Applications" value="76" trend="+5%" subtitle="Conversion" delay={0.21} />
-              <StatCard title="Revenue" value="$12.4k" trend="future" subtitle="Planning metric" delay={0.25} />
+            <section className="flex gap-2 overflow-x-auto pb-1">
+              <StatCard title="Project views" value={String(totalProjectViews)} trend="Live" subtitle="Across your portfolio" delay={0.05} />
+              <StatCard title="Messages" value={String(unreadMessages)} trend="Live" subtitle="Unread now" delay={0.09} />
+              <StatCard title="Saved projects" value={String(savedProjectsCount)} trend="Live" subtitle="In your shortlist" delay={0.13} />
+              <StatCard title="Published" value={String(publishedProjectCount)} trend="Live" subtitle="Visible to clients" delay={0.17} />
+              <StatCard title="Drafts" value={String(draftProjectCount)} trend="Live" subtitle="Not yet published" delay={0.21} />
+              <StatCard title="Project likes" value={String(totalProjectLikes)} trend="Live" subtitle="Engagement signal" delay={0.25} />
             </section>
 
             <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -781,19 +895,21 @@ export default function DeveloperDashboardPage() {
               <div className="xl:col-span-2">
                 <ActivityFeed activities={activities} />
               </div>
-              <AiMatchWidget />
+              <AiMatchWidget recommendations={recommendationItems} completeness={completeness} />
             </div>
 
             <div className="grid gap-6 xl:grid-cols-2">
-              <RecommendedProjects />
-              <AnalyticsSection />
+              <RecommendedProjects recommendations={recommendationItems} />
+              <AnalyticsSection
+                totalProjectViews={totalProjectViews}
+                totalProjectLikes={totalProjectLikes}
+                threadCount={threads.length}
+                unreadMessages={unreadMessages}
+                unreadNotifications={unreadNotifications}
+                publishedProjectCount={publishedProjectCount}
+              />
             </div>
 
-            <UtilityActions
-              pending={pendingLogout}
-              onLogout={onLogout}
-              onLogoutEverywhere={onLogoutEverywhere}
-            />
           </main>
         </div>
       </div>

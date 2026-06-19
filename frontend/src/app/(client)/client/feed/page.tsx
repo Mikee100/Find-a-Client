@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   Bell,
@@ -150,14 +150,6 @@ function PremiumNavbar() {
           <span className="text-sm font-semibold">Find a Client</span>
         </Link>
 
-        <div className="mx-auto hidden w-full max-w-xl items-center rounded-full border border-[#E5E7EB] bg-[#F8FAFA] px-4 md:flex">
-          <Search className="h-4 w-4 text-[#64748B]" aria-hidden />
-          <input
-            placeholder="Search developers, projects, technologies..."
-            className="h-10 w-full bg-transparent px-2 text-sm text-[#111827] outline-none placeholder:text-[#64748B]"
-          />
-        </div>
-
         <div className="ml-auto flex items-center gap-2 text-sm text-[#64748B]">
           <button className="rounded-lg px-3 py-2 font-medium text-[#111827] hover:bg-[#F8FAFA]">Discover</button>
           <button className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">Saved</button>
@@ -178,6 +170,8 @@ export default function ClientFeedPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const urlQuery = useMemo(() => searchParams.get("q")?.trim() ?? "", [searchParams]);
+  const queryDebounceRef = useRef<number | null>(null);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectDetails, setProjectDetails] = useState<Record<string, ProjectDetail | null>>({});
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -185,7 +179,6 @@ export default function ClientFeedPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const [query, setQuery] = useState("");
   const [jobsListMode, setJobsListMode] = useState<JobsListMode>("BEST_MATCHES");
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
@@ -237,6 +230,46 @@ export default function ClientFeedPage() {
     [pathname, router, searchParams]
   );
 
+  const debouncedQuery = urlQuery;
+
+  const updateQueryInUrl = useCallback(
+    (nextQueryRaw: string) => {
+      const nextQuery = nextQueryRaw.trim();
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextQuery) {
+        params.set("q", nextQuery);
+      } else {
+        params.delete("q");
+      }
+      params.delete("page");
+
+      const next = params.toString();
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  const updateQueryInUrlDebounced = useCallback(
+    (nextQueryRaw: string) => {
+      if (queryDebounceRef.current !== null) {
+        window.clearTimeout(queryDebounceRef.current);
+      }
+
+      queryDebounceRef.current = window.setTimeout(() => {
+        updateQueryInUrl(nextQueryRaw);
+      }, 250);
+    },
+    [updateQueryInUrl]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (queryDebounceRef.current !== null) {
+        window.clearTimeout(queryDebounceRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -246,7 +279,7 @@ export default function ClientFeedPage() {
           category: appliedFilters.category === "ALL" ? undefined : appliedFilters.category,
           pricingType: appliedFilters.pricingType === "ALL" ? undefined : appliedFilters.pricingType,
           sortBy: appliedFilters.sortBy,
-          search: query.trim() || undefined,
+          search: debouncedQuery.trim() || undefined,
           minPrice: appliedFilters.minPrice.trim() || undefined,
           maxPrice: appliedFilters.maxPrice.trim() || undefined,
           techStack: parseCommaList(appliedFilters.techStack),
@@ -270,7 +303,7 @@ export default function ClientFeedPage() {
         setLoadingProjects(false);
       }
     })();
-  }, [appliedFilters, currentPage, query, updatePageInUrl]);
+  }, [appliedFilters, currentPage, debouncedQuery, updatePageInUrl]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -281,19 +314,8 @@ export default function ClientFeedPage() {
   }, [currentPage]);
 
   const filteredProjects = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return projects.filter((project) => {
-      const detail = projectDetails[project.slug];
-      const stack = detail?.techStack ?? [];
-      const searchable = `${project.title} ${project.shortDescription} ${stack.join(" ")}`.toLowerCase();
-
-      if (normalizedQuery && !searchable.includes(normalizedQuery)) {
-        return false;
-      }
-      return true;
-    });
-  }, [projectDetails, projects, query]);
+    return projects;
+  }, [projects]);
 
   const rankedProjects = useMemo(() => {
     if (jobsListMode === "SAVED") {
@@ -554,10 +576,10 @@ export default function ClientFeedPage() {
               <div className="relative w-full max-w-sm">
                 <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#64748B]" aria-hidden />
                 <input
-                  value={query}
+                  key={urlQuery}
+                  defaultValue={urlQuery}
                   onChange={(event) => {
-                    setQuery(event.target.value);
-                    updatePageInUrl(1);
+                    updateQueryInUrlDebounced(event.target.value);
                   }}
                   placeholder="Search developers, projects, technologies..."
                   className="h-10 w-full rounded-full border border-[#E5E7EB] bg-[#F8FAFA] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#2563EB]"

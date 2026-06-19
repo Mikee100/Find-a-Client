@@ -19,6 +19,24 @@ export class ProjectsService {
     return [...new Set(values.map((value) => sanitizeInput(value).trim()).filter(Boolean))];
   }
 
+  private buildCaseVariants(values: string[]): string[] {
+    const variants = new Set<string>();
+
+    for (const raw of values) {
+      const value = raw.trim();
+      if (!value) {
+        continue;
+      }
+
+      variants.add(value);
+      variants.add(value.toLowerCase());
+      variants.add(value.toUpperCase());
+      variants.add(value.charAt(0).toUpperCase() + value.slice(1).toLowerCase());
+    }
+
+    return [...variants];
+  }
+
   /**
    * Creates a new project for the authenticated developer.
    */
@@ -69,14 +87,78 @@ export class ProjectsService {
   async list(query: ListProjectsDto) {
     const limit = Number(query.limit ?? 20);
     const page = query.page ? Math.max(1, Number(query.page)) : null;
+    const searchText = query.search?.trim();
+    const searchTerms = searchText
+      ? [
+          ...new Set(
+            searchText
+              .split(/\s+/)
+              .map((part) => part.replace(/^[^\w]+|[^\w]+$/g, "").trim())
+              .filter(Boolean)
+          )
+        ]
+      : [];
+    const searchTermVariants = this.buildCaseVariants(searchTerms);
+    const techStackFilterVariants = this.buildCaseVariants(query.techStack ?? []);
+    const industryFilterVariants = this.buildCaseVariants(query.industries ?? []);
+
+    const tokenSearchClauses: Prisma.ProjectWhereInput[] = searchTerms.map((term) => {
+      const tokenVariants = this.buildCaseVariants([term]);
+
+      return {
+        OR: [
+          { title: { contains: term, mode: "insensitive" } },
+          { shortDescription: { contains: term, mode: "insensitive" } },
+          { longDescription: { contains: term, mode: "insensitive" } },
+          { slug: { contains: term, mode: "insensitive" } },
+          {
+            author: {
+              OR: [
+                { fullName: { contains: term, mode: "insensitive" } },
+                { username: { contains: term, mode: "insensitive" } }
+              ]
+            }
+          },
+          { techStack: { hasSome: tokenVariants } },
+          { industries: { hasSome: tokenVariants } }
+        ]
+      };
+    });
+
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
       status: PROJECT_STATUS.PUBLISHED,
       category: query.category,
       pricingType: query.pricingType,
-      techStack: query.techStack?.length ? { hasSome: query.techStack } : undefined,
-      industries: query.industries?.length ? { hasSome: query.industries } : undefined,
-      title: query.search ? { contains: query.search, mode: "insensitive" } : undefined,
+      techStack: techStackFilterVariants.length ? { hasSome: techStackFilterVariants } : undefined,
+      industries: industryFilterVariants.length ? { hasSome: industryFilterVariants } : undefined,
+      AND: searchText
+        ? [
+            {
+              OR: [
+                { title: { contains: searchText, mode: "insensitive" } },
+                { shortDescription: { contains: searchText, mode: "insensitive" } },
+                { longDescription: { contains: searchText, mode: "insensitive" } },
+                { slug: { contains: searchText, mode: "insensitive" } },
+                {
+                  author: {
+                    OR: [
+                      { fullName: { contains: searchText, mode: "insensitive" } },
+                      { username: { contains: searchText, mode: "insensitive" } }
+                    ]
+                  }
+                },
+                ...(searchTermVariants.length > 0
+                  ? [
+                      { techStack: { hasSome: searchTermVariants } },
+                      { industries: { hasSome: searchTermVariants } }
+                    ]
+                  : [])
+              ]
+            },
+            ...tokenSearchClauses
+          ]
+        : undefined,
       price: {
         gte: query.minPrice ? Number(query.minPrice) : undefined,
         lte: query.maxPrice ? Number(query.maxPrice) : undefined
