@@ -776,6 +776,13 @@ export default function DeveloperDashboardPage() {
     [threads],
   );
 
+  const messageActivityCount = useMemo(
+    () => (unreadMessages > 0 ? unreadMessages : threads.length),
+    [threads.length, unreadMessages],
+  );
+
+  const messageActivitySubtitle = unreadMessages > 0 ? "Unread now" : "Conversations";
+
   const unreadNotifications = useMemo(
     () => notifications.filter((notification) => !notification.isRead).length,
     [notifications],
@@ -873,13 +880,13 @@ export default function DeveloperDashboardPage() {
               name={profile?.fullName ?? "Developer"}
               unread={unreadNotifications}
               profileViews={totalProjectViews}
-              messages={unreadMessages}
+              messages={messageActivityCount}
               completeness={completeness}
             />
 
             <section className="flex gap-2 overflow-x-auto pb-1">
               <StatCard title="Project views" value={String(totalProjectViews)} trend="Live" subtitle="Across your portfolio" delay={0.05} />
-              <StatCard title="Messages" value={String(unreadMessages)} trend="Live" subtitle="Unread now" delay={0.09} />
+              <StatCard title="Messages" value={String(messageActivityCount)} trend="Live" subtitle={messageActivitySubtitle} delay={0.09} />
               <StatCard title="Saved projects" value={String(savedProjectsCount)} trend="Live" subtitle="In your shortlist" delay={0.13} />
               <StatCard title="Published" value={String(publishedProjectCount)} trend="Live" subtitle="Visible to clients" delay={0.17} />
               <StatCard title="Drafts" value={String(draftProjectCount)} trend="Live" subtitle="Not yet published" delay={0.21} />

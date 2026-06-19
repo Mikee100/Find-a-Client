@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Circle, Search, SendHorizontal } from "lucide-react";
+import { ArrowLeft, Circle, Search, SendHorizontal } from "lucide-react";
 import ClientDashboardNavbar from "@/features/client/client-dashboard-navbar";
 import { getRealtimeClient } from "@/lib/realtime";
 import {
@@ -354,6 +354,15 @@ export default function ClientMessagesPage() {
     router.replace(`/client/messages?${params.toString()}`, { scroll: false });
   }
 
+  function onBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+
+    router.replace("/client/feed");
+  }
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] text-neutral-900">
       <ClientDashboardNavbar />
@@ -426,6 +435,14 @@ export default function ClientMessagesPage() {
 
             <section className="flex min-h-[72vh] flex-col bg-transparent">
               <header className="border-b border-slate-200 px-4 py-2.5">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="mb-1 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back
+                </button>
                 <div className="flex items-center gap-2">
                   <Circle className={`h-2.5 w-2.5 ${realtimeEnabled ? "fill-emerald-500 text-emerald-500" : "fill-amber-500 text-amber-500"}`} />
                   <p className="text-sm font-semibold text-slate-900">{recipientLabel}</p>
