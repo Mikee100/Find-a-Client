@@ -386,7 +386,6 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (!project?.slug || !viewerId) {
-      setIsLiked(false);
       return;
     }
 
@@ -423,6 +422,7 @@ export default function ProjectDetailPage() {
   const hasLongOverview = overviewText.length > 540;
   const visibleOverview = hasLongOverview && !showFullOverview ? `${overviewText.slice(0, 540).trimEnd()}...` : overviewText;
   const isAuthenticated = Boolean(viewerId);
+  const likedForDisplay = isAuthenticated && Boolean(project?.slug) ? isLiked : false;
   const canEdit = Boolean(project && viewerId && project.author.id === viewerId);
   const messageDeveloperHref = useMemo(() => {
     if (!project) {
@@ -1073,7 +1073,7 @@ export default function ProjectDetailPage() {
                       disabled={likeLoading}
                       className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60"
                     >
-                      {likeLoading ? "Updating..." : isLiked ? `Liked (${project.likeCount})` : `Like Project (${project.likeCount})`}
+                      {likeLoading ? "Updating..." : likedForDisplay ? `Liked (${project.likeCount})` : `Like Project (${project.likeCount})`}
                     </button>
                     <button
                       type="button"
