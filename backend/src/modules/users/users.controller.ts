@@ -49,6 +49,11 @@ export class UsersController {
     return this.usersService.getSavedProjects(user.sub);
   }
 
+  @Get("me/likes")
+  getLikedProjects(@CurrentUser() user: CurrentUserPayload) {
+    return this.usersService.getLikedProjects(user.sub);
+  }
+
   @Get("me/projects")
   getMyProjects(@CurrentUser() user: CurrentUserPayload) {
     return this.usersService.getMyProjects(user.sub);

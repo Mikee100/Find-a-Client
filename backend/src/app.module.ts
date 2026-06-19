@@ -14,6 +14,7 @@ import { ResponseTransformInterceptor } from "src/common/interceptors/response-t
 import { AdminModule } from "src/modules/admin/admin.module";
 import { AuthModule } from "src/modules/auth/auth.module";
 import { HealthController } from "src/modules/health.controller";
+import { HireRequestsModule } from "src/modules/hire-requests/hire-requests.module";
 import { MediaModule } from "src/modules/media/media.module";
 import { MessagesModule } from "src/modules/messages/messages.module";
 import { NotificationsModule } from "src/modules/notifications/notifications.module";
@@ -41,6 +42,7 @@ import { PrismaModule } from "src/prisma/prisma.module";
     AuthModule,
     UsersModule,
     ProjectsModule,
+    HireRequestsModule,
     MediaModule,
     MessagesModule,
     NotificationsModule,

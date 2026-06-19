@@ -64,6 +64,16 @@ enum AvailabilityStatus {
   NOT_ACCEPTING_WORK
 }
 
+enum HireRequestStatus {
+  PENDING
+  REVIEWING
+  PROPOSAL_SENT
+  NEGOTIATING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
 model User {
   id            String     @id @default(uuid()) @db.Uuid
   email         String     @unique
@@ -96,11 +106,14 @@ model User {
   sentMessages  Message[]  @relation("MessageSender")
   notifications Notification[]
   savedProjects Saved[]
+  likedProjects ProjectLike[]
   refreshSession RefreshSession?
   authAuditLogs  AuthAuditLog[]
 
   threadParticipantsA Thread[] @relation("ThreadParticipantA")
   threadParticipantsB Thread[] @relation("ThreadParticipantB")
+  sentHireRequests   HireRequest[] @relation("HireRequestClient")
+  receivedHireRequests HireRequest[] @relation("HireRequestDeveloper")
 }
 
 model RefreshSession {
@@ -164,7 +177,9 @@ model Project {
   questions         Question[]
   reviews           Review[]
   savedBy           Saved[]
+  likedBy           ProjectLike[]
   threads           Thread[]
+  hireRequests      HireRequest[]
   searchDocument    Unsupported("tsvector")?
 
   @@index([status, isFeatured])
@@ -208,11 +223,42 @@ model Thread {
   participantB   User      @relation("ThreadParticipantB", fields: [participantBId], references: [id])
   project        Project?  @relation(fields: [projectId], references: [id])
   messages       Message[]
+  hireRequests   HireRequest[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   @@index([participantAId])
   @@index([participantBId])
+}
+
+model HireRequest {
+  id                   String            @id @default(uuid()) @db.Uuid
+  clientId             String            @db.Uuid
+  developerId          String            @db.Uuid
+  projectId            String?           @db.Uuid
+  threadId             String?           @db.Uuid
+  status               HireRequestStatus @default(PENDING)
+  brief                String
+  budgetAmount         Decimal?          @db.Decimal(10, 2)
+  budgetCurrency       String?           @db.VarChar(3)
+  timelineDays         Int?
+  proposalMessage      String?
+  proposalAmount       Decimal?          @db.Decimal(10, 2)
+  proposalCurrency     String?           @db.VarChar(3)
+  proposalTimelineDays Int?
+  proposedAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  client               User              @relation("HireRequestClient", fields: [clientId], references: [id], onDelete: Cascade)
+  developer            User              @relation("HireRequestDeveloper", fields: [developerId], references: [id], onDelete: Cascade)
+  project              Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  thread               Thread?           @relation(fields: [threadId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([developerId, createdAt])
+  @@index([status, createdAt])
+  @@index([projectId])
+  @@index([threadId])
 }
 
 model Message {
@@ -273,4 +319,15 @@ model Saved {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@id([userId, projectId])
+}
+
+model ProjectLike {
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([projectId])
 }

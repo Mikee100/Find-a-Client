@@ -47,8 +47,13 @@ export class ProjectsController {
   }
 
   @Post(":slug/like")
-  like(@Param("slug") slug: string) {
-    return this.projectsService.toggleLike(slug);
+  like(@Param("slug") slug: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.projectsService.toggleLike(slug, user.sub);
+  }
+
+  @Get(":slug/like-status")
+  likeStatus(@Param("slug") slug: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.projectsService.getLikeStatus(slug, user.sub);
   }
 
   @Post(":slug/save")

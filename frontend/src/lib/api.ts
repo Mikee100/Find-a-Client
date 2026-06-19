@@ -28,12 +28,81 @@ export interface ProjectInquiryPayload {
   message?: string;
 }
 
+export interface ProjectLikeResponse {
+  liked: boolean;
+  likeCount: number;
+}
+
+export interface CreateHireRequestPayload {
+  developerId: string;
+  projectId?: string;
+  threadId?: string;
+  brief: string;
+  budgetAmount?: number;
+  budgetCurrency?: string;
+  timelineDays?: number;
+}
+
+export interface HireRequestResponse {
+  id: string;
+  clientId: string;
+  developerId: string;
+  projectId: string | null;
+  threadId: string | null;
+  status: "PENDING" | "REVIEWING" | "PROPOSAL_SENT" | "NEGOTIATING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+  brief: string;
+  budgetAmount: string | null;
+  budgetCurrency: string | null;
+  timelineDays: number | null;
+  proposalMessage: string | null;
+  proposalAmount: string | null;
+  proposalCurrency: string | null;
+  proposalTimelineDays: number | null;
+  proposedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl: string | null;
+  };
+  developer?: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl: string | null;
+  };
+  project?: {
+    id: string;
+    slug: string;
+    title: string;
+  } | null;
+  thread?: {
+    id: string;
+    updatedAt: string;
+  } | null;
+}
+
+export interface ListHireRequestsParams {
+  scope?: "all" | "sent" | "received";
+  status?: HireRequestResponse["status"];
+  limit?: number;
+}
+
+export interface SubmitHireRequestProposalPayload {
+  proposalMessage: string;
+  proposalAmount?: number;
+  proposalCurrency?: string;
+  proposalTimelineDays?: number;
+}
+
 interface ApiEnvelope<T> {
   success: boolean;
   data: T;
 }
 
-type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 let inFlightRefresh: Promise<boolean> | null = null;
 let inFlightSession: Promise<AuthSession> | null = null;
 let cachedSession: AuthSession | null = null;
@@ -297,6 +366,30 @@ interface SavedProjectEntry {
   };
 }
 
+export interface LikedProjectEntry {
+  projectId: string;
+  createdAt: string;
+  project: {
+    id: string;
+    slug: string;
+    title: string;
+    shortDescription: string;
+    status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+    category: ProjectCategory;
+    techStack: string[];
+    pricingType: PricingType;
+    price: number | string | null;
+    currency: string;
+    likeCount: number;
+    viewCount: number;
+    inquiryCount: number;
+    thumbnailUrl: string | null;
+    backgroundUrl: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
 export interface MyProjectListItem {
   id: string;
   slug: string;
@@ -367,6 +460,7 @@ export interface PaginatedThreadMessages {
 export interface NotificationItem {
   id: string;
   type: NotificationType;
+  payload?: Record<string, unknown>;
   isRead: boolean;
   createdAt: string;
 }
@@ -490,7 +584,7 @@ async function requestJson<TResponse, TBody = unknown>(
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const hasBody = options?.body !== undefined;
   const allowRetryOn401 = options?.allowRetryOn401 ?? true;
-  const isMutation = method === "POST" || method === "PUT" || method === "DELETE";
+  const isMutation = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
 
   const send = async (): Promise<Response> => {
     const csrfToken = isMutation ? readCookie(CSRF_COOKIE_NAME) : null;
@@ -810,6 +904,10 @@ export async function getSavedProjects(): Promise<SavedProjectEntry[]> {
   return requestJson<SavedProjectEntry[]>("GET", "/users/me/saved");
 }
 
+export async function getLikedProjects(): Promise<LikedProjectEntry[]> {
+  return requestJson<LikedProjectEntry[]>("GET", "/users/me/likes");
+}
+
 export async function getMyProjects(): Promise<MyProjectListItem[]> {
   return requestJson<MyProjectListItem[]>("GET", "/users/me/projects");
 }
@@ -890,6 +988,69 @@ export async function trackProjectInquiry(slug: string, payload: ProjectInquiryP
     "POST",
     `/projects/${encodeURIComponent(slug)}/inquiry`,
     { body: payload }
+  );
+}
+
+export async function toggleProjectLike(slug: string): Promise<ProjectLikeResponse> {
+  return requestJson<ProjectLikeResponse, Record<string, never>>("POST", `/projects/${encodeURIComponent(slug)}/like`, {
+    body: {}
+  });
+}
+
+export async function getProjectLikeStatus(slug: string): Promise<ProjectLikeResponse> {
+  return requestJson<ProjectLikeResponse>("GET", `/projects/${encodeURIComponent(slug)}/like-status`);
+}
+
+export async function createHireRequest(payload: CreateHireRequestPayload): Promise<HireRequestResponse> {
+  return requestJson<HireRequestResponse, CreateHireRequestPayload>("POST", "/hire-requests", {
+    body: payload
+  });
+}
+
+export async function listHireRequests(params: ListHireRequestsParams = {}): Promise<HireRequestResponse[]> {
+  const searchParams = new URLSearchParams();
+  if (params.scope) {
+    searchParams.set("scope", params.scope);
+  }
+  if (params.status) {
+    searchParams.set("status", params.status);
+  }
+  if (params.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString ? `/hire-requests?${queryString}` : "/hire-requests";
+  return requestJson<HireRequestResponse[]>("GET", path);
+}
+
+export async function getHireRequestById(id: string): Promise<HireRequestResponse> {
+  return requestJson<HireRequestResponse>("GET", `/hire-requests/${encodeURIComponent(id)}`);
+}
+
+export async function updateHireRequestStatus(
+  id: string,
+  status: HireRequestResponse["status"]
+): Promise<HireRequestResponse> {
+  return requestJson<HireRequestResponse, { status: HireRequestResponse["status"] }>(
+    "PATCH",
+    `/hire-requests/${encodeURIComponent(id)}/status`,
+    {
+      body: { status }
+    }
+  );
+}
+
+export async function submitHireRequestProposal(
+  id: string,
+  payload: SubmitHireRequestProposalPayload
+): Promise<HireRequestResponse> {
+  return requestJson<HireRequestResponse, SubmitHireRequestProposalPayload>(
+    "PATCH",
+    `/hire-requests/${encodeURIComponent(id)}/proposal`,
+    {
+      body: payload
+    }
   );
 }
 

@@ -17,15 +17,16 @@ import {
   X
 } from "lucide-react";
 import {
-  createMessageThread,
+  getLikedProjects,
   getProjectBySlug,
   listProjectsPaginated,
   PricingType,
   ProjectCategory,
   ProjectDetail,
   ProjectListItem,
-  trackProjectInquiry
+  toggleProjectLike
 } from "@/lib/api";
+import ClientSidebar from "@/features/shared/client-sidebar";
 
 type JobsListMode = "BEST_MATCHES" | "MOST_RECENT" | "SAVED";
 type FeedSortBy = "newest" | "popular" | "price_asc" | "price_desc";
@@ -151,8 +152,8 @@ function PremiumNavbar() {
         </Link>
 
         <div className="ml-auto flex items-center gap-2 text-sm text-[#64748B]">
-          <button className="rounded-lg px-3 py-2 font-medium text-[#111827] hover:bg-[#F8FAFA]">Discover</button>
-          <button className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">Saved</button>
+          <Link href="/client/feed" className="rounded-lg px-3 py-2 font-medium text-[#111827] hover:bg-[#F8FAFA]">Discover</Link>
+          <Link href="/client/likes" className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">Liked</Link>
           <Link href="/client/messages" className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">
             Messages
           </Link>
@@ -202,6 +203,8 @@ export default function ClientFeedPage() {
       return new Set();
     }
   });
+  const [likedProjectIds, setLikedProjectIds] = useState<Set<string>>(new Set());
+  const [likingProjectIds, setLikingProjectIds] = useState<Set<string>>(new Set());
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [hiringProjectId, setHiringProjectId] = useState<string | null>(null);
   const [openingDeveloperProjectId, setOpeningDeveloperProjectId] = useState<string | null>(null);
@@ -341,6 +344,29 @@ export default function ClientFeedPage() {
     }
     window.localStorage.setItem("client-feed-saved-projects", JSON.stringify(Array.from(savedProjectIds)));
   }, [savedProjectIds]);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      try {
+        const liked = await getLikedProjects();
+        if (!active) {
+          return;
+        }
+
+        setLikedProjectIds(new Set(liked.map((entry) => entry.projectId)));
+      } catch {
+        if (active) {
+          setLikedProjectIds(new Set());
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isFilterModalOpen) {
@@ -486,6 +512,51 @@ export default function ClientFeedPage() {
     });
   }
 
+  async function onToggleLikeProject(project: ProjectListItem) {
+    setLikingProjectIds((previous) => new Set(previous).add(project.id));
+
+    try {
+      const result = await toggleProjectLike(project.slug);
+
+      setLikedProjectIds((previous) => {
+        const next = new Set(previous);
+        if (result.liked) {
+          next.add(project.id);
+        } else {
+          next.delete(project.id);
+        }
+        return next;
+      });
+
+      setProjects((previous) =>
+        previous.map((entry) => (entry.id === project.id ? { ...entry, likeCount: result.likeCount } : entry))
+      );
+
+      setProjectDetails((previous) => {
+        const current = previous[project.slug];
+        if (!current) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [project.slug]: {
+            ...current,
+            likeCount: result.likeCount
+          }
+        };
+      });
+    } catch (caughtError) {
+      setActionMessage(caughtError instanceof Error ? caughtError.message : "Unable to update like right now.");
+    } finally {
+      setLikingProjectIds((previous) => {
+        const next = new Set(previous);
+        next.delete(project.id);
+        return next;
+      });
+    }
+  }
+
   async function onShareProject(project: ProjectListItem) {
     const absoluteUrl = typeof window !== "undefined" ? `${window.location.origin}/projects/${project.slug}` : `/projects/${project.slug}`;
     try {
@@ -542,17 +613,12 @@ export default function ClientFeedPage() {
 
     try {
       setHiringProjectId(project.id);
-      await trackProjectInquiry(project.slug, {
-        type: "OFFER_PROJECT",
-        message: `Interested in hiring for ${project.title}.`
-      });
-      const thread = await createMessageThread({
-        recipientId: detail.author.id,
+      const params = new URLSearchParams({
         projectId: project.id,
-        initialMessage: `Hi ${detail.author.fullName}, I would like to hire you for "${project.title}".`
+        projectSlug: project.slug,
+        projectTitle: project.title
       });
-      setActionMessage("Hiring conversation started.");
-      router.push(`/client/feed?thread=${thread.id}`);
+      router.push(`/hire/${detail.author.username}?${params.toString()}`);
     } catch (caughtError) {
       setActionMessage(caughtError instanceof Error ? caughtError.message : "Unable to start hiring conversation.");
     } finally {
@@ -657,7 +723,11 @@ export default function ClientFeedPage() {
             </section>
           ) : null}
 
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px] xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)_330px] xl:grid-cols-[240px_minmax(0,1fr)_360px]">
+            <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
+              <ClientSidebar />
+            </aside>
+
             <div className="space-y-5">
               {loadingProjects ? (
                 <div className="space-y-5">
@@ -697,6 +767,8 @@ export default function ClientFeedPage() {
                       ? detail.techStack
                       : project.techStack || []).slice(0, 6);
                     const isSaved = savedProjectIds.has(project.id);
+                    const isLiked = likedProjectIds.has(project.id);
+                    const isLiking = likingProjectIds.has(project.id);
                     const inquiryCount = detail?.inquiryCount ?? project.inquiryCount ?? 0;
                     const projectUrl = `/projects/${project.slug}`;
 
@@ -785,6 +857,20 @@ export default function ClientFeedPage() {
                       <Link href={projectUrl} className="inline-flex h-9 items-center rounded-lg bg-[#0F172A] px-4 text-xs font-semibold text-white transition hover:bg-[#020617]">
                         View Project
                       </Link>
+                      <button
+                        onClick={() => {
+                          void onToggleLikeProject(project);
+                        }}
+                        disabled={isLiking}
+                        className={`inline-flex h-9 items-center gap-1 rounded-lg border px-4 text-xs font-semibold transition disabled:opacity-60 ${
+                          isLiked
+                            ? "border-[#DC2626] bg-[#FEF2F2] text-[#DC2626]"
+                            : "border-[#E5E7EB] text-[#111827] hover:border-[#CBD5E1]"
+                        }`}
+                      >
+                        <Heart className="h-3.5 w-3.5" aria-hidden />
+                        {isLiking ? "Updating..." : isLiked ? "Liked" : "Like"}
+                      </button>
                       <button
                         onClick={() => {
                           void onViewDeveloper(project, detail);

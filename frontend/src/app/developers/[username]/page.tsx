@@ -5,7 +5,14 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
 import FullPageLoader from "@/components/ui/full-page-loader";
-import { createMessageThread, getAuthSession, getDeveloperPublicProfile, PublicDeveloperProfile, trackProjectInquiry } from "@/lib/api";
+import {
+  createHireRequest,
+  createMessageThread,
+  getAuthSession,
+  getDeveloperPublicProfile,
+  PublicDeveloperProfile,
+  trackProjectInquiry
+} from "@/lib/api";
 
 function toTitleCase(value: string): string {
   return value
@@ -117,10 +124,22 @@ export default function PublicDeveloperProfilePage() {
         initialMessage: trimmedMessage
       });
 
+      let hireRequestId: string | null = null;
+      if (mode === "OFFER_PROJECT") {
+        const hireRequest = await createHireRequest({
+          developerId: profile.id,
+          projectId: project.id,
+          threadId: thread.id,
+          brief: trimmedMessage
+        });
+
+        hireRequestId = hireRequest.id;
+      }
+
       setActionFeedback(
         mode === "ASK_QUESTION"
           ? `Question sent. Conversation thread created (${thread.id.slice(0, 8)}).`
-          : `Project offer sent. Conversation thread created (${thread.id.slice(0, 8)}).`
+          : `Project offer sent. Hire request ${hireRequestId ? `(${hireRequestId.slice(0, 8)})` : ""} created with thread ${thread.id.slice(0, 8)}.`
       );
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : "Unable to send request.";
