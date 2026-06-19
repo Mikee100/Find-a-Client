@@ -465,6 +465,10 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+export interface UnreadNotificationsCount {
+  unread: number;
+}
+
 export interface ProfileCompleteness {
   percentage: number;
   completedFields: number;
@@ -1056,6 +1060,22 @@ export async function submitHireRequestProposal(
 
 export async function getNotifications(limit = 20): Promise<NotificationItem[]> {
   return requestJson<NotificationItem[]>("GET", `/notifications?limit=${limit}`);
+}
+
+export async function getUnreadNotificationsCount(): Promise<UnreadNotificationsCount> {
+  return requestJson<UnreadNotificationsCount>("GET", "/notifications/unread-count");
+}
+
+export async function readAllNotifications(): Promise<{ updated: number }> {
+  return requestJson<{ updated: number }, Record<string, never>>("PUT", "/notifications/read-all", {
+    body: {}
+  });
+}
+
+export async function readNotification(id: string): Promise<{ updated: number }> {
+  return requestJson<{ updated: number }, Record<string, never>>("PUT", `/notifications/${encodeURIComponent(id)}/read`, {
+    body: {}
+  });
 }
 
 export async function uploadMediaFile(file: File, options?: UploadMediaOptions): Promise<{ url: string; publicId: string }> {

@@ -42,6 +42,38 @@ export class NotificationsService {
   }
 
   /**
+   * Marks a single notification as read for the authenticated user.
+   */
+  async readOne(userId: string, notificationId: string): Promise<{ updated: number }> {
+    const result = await this.prisma.notification.updateMany({
+      where: {
+        id: notificationId,
+        userId,
+        isRead: false
+      },
+      data: {
+        isRead: true
+      }
+    });
+
+    return { updated: result.count };
+  }
+
+  /**
+   * Returns unread notification count for the authenticated user.
+   */
+  async unreadCount(userId: string): Promise<{ unread: number }> {
+    const unread = await this.prisma.notification.count({
+      where: {
+        userId,
+        isRead: false
+      }
+    });
+
+    return { unread };
+  }
+
+  /**
    * Dispatches notification workflows.
    */
   async dispatch(userId: string, type: NotificationType, payload: Record<string, unknown>): Promise<void> {

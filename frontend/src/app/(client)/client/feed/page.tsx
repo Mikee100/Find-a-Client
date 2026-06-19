@@ -6,7 +6,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
-  Bell,
   Ellipsis,
   Eye,
   Heart,
@@ -16,6 +15,7 @@ import {
   SlidersHorizontal,
   X
 } from "lucide-react";
+import ClientDashboardNavbar from "@/features/client/client-dashboard-navbar";
 import {
   getLikedProjects,
   getProjectBySlug,
@@ -138,35 +138,6 @@ function estimateDeliveryWeeks(project: ProjectListItem, detail: ProjectDetail |
   };
 
   return defaults[project.category] ?? 7;
-}
-
-function PremiumNavbar() {
-  return (
-    <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white">
-      <nav className="mx-auto flex h-18 w-full max-w-365 items-center gap-4 px-4 md:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2 text-[#0F172A]">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F172A] text-xs font-bold text-white">
-            FC
-          </span>
-          <span className="text-sm font-semibold">Find a Client</span>
-        </Link>
-
-        <div className="ml-auto flex items-center gap-2 text-sm text-[#64748B]">
-          <Link href="/client/feed" className="rounded-lg px-3 py-2 font-medium text-[#111827] hover:bg-[#F8FAFA]">Discover</Link>
-          <Link href="/client/likes" className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">Liked</Link>
-          <Link href="/client/messages" className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">
-            Messages
-          </Link>
-          <button className="relative rounded-lg p-2 hover:bg-[#F8FAFA]" aria-label="Notifications">
-            <Bell className="h-4 w-4" aria-hidden />
-          </button>
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#0F172A] text-xs font-semibold text-white">
-            CL
-          </span>
-        </div>
-      </nav>
-    </header>
-  );
 }
 
 export default function ClientFeedPage() {
@@ -464,6 +435,50 @@ export default function ClientFeedPage() {
 
   const topFitMatches = useMemo(() => fitRankedProjects.slice(0, 2), [fitRankedProjects]);
   const topFit = topFitMatches[0] ?? null;
+  const deadlineWeeksInput = useMemo(() => {
+    const value = Number(fitDeadlineWeeks);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [fitDeadlineWeeks]);
+
+  const buildRecommendationReasons = useCallback(
+    (item: (typeof topFitMatches)[number]): string[] => {
+      const reasons: string[] = [];
+
+      if (item.requiredStackCount > 0) {
+        if (item.matchedStackCount > 0) {
+          reasons.push(`Similar stack match (${item.matchedStackCount}/${item.requiredStackCount} technologies aligned).`);
+        } else {
+          reasons.push("Relevant project category and build style for your stated stack needs.");
+        }
+      } else {
+        reasons.push("Similar stack potential based on this project's implementation profile.");
+      }
+
+      if (deadlineWeeksInput !== null) {
+        if (item.estimatedWeeks <= deadlineWeeksInput) {
+          reasons.push(`Timeline compatibility: estimated ~${item.estimatedWeeks.toFixed(1)} weeks fits your target.`);
+        } else {
+          reasons.push(`Timeline compatibility needs discussion: estimated ~${item.estimatedWeeks.toFixed(1)} weeks.`);
+        }
+      } else {
+        reasons.push(`Timeline compatibility estimate: ~${item.estimatedWeeks.toFixed(1)} weeks.`);
+      }
+
+      const engagementSignal = item.project.likeCount * 2 + item.project.inquiryCount * 3 + item.project.viewCount / 20;
+      if (engagementSignal >= 25) {
+        reasons.push("High response reliability indicated by strong portfolio engagement.");
+      } else if (engagementSignal >= 10) {
+        reasons.push("Solid response reliability indicated by active client engagement.");
+      } else {
+        reasons.push("Emerging response reliability with early engagement signals.");
+      }
+
+      reasons.push(`Relevant project category: ${item.project.category.replace(/_/g, " ").toLowerCase()}.`);
+
+      return reasons;
+    },
+    [deadlineWeeksInput]
+  );
 
   const pageNumbers = useMemo(() => {
     if (totalPages <= 1) {
@@ -628,21 +643,21 @@ export default function ClientFeedPage() {
 
   return (
     <main className="min-h-screen bg-[#F8FAFA] font-[Inter] text-[#111827]">
-      <PremiumNavbar />
+      <ClientDashboardNavbar />
 
-      <section className="mx-auto w-full max-w-340 px-4 py-8 md:px-6">
+      <section className="mx-auto w-full max-w-340 px-4 pb-8 pt-4 md:px-6 md:pb-8 md:pt-3">
         <section className="space-y-5">
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#64748B]">Search for projects</p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#0F172A]">Projects you might like</h1>
-                <p className="mt-1 text-sm text-[#64748B]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#64748B]">Search for projects</p>
+                <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-[#0F172A]">Projects you might like</h1>
+                <p className="mt-0.5 text-xs text-[#64748B]">
                   Explore production-ready work from developers around the world.
                 </p>
               </div>
               <div className="relative w-full max-w-sm">
-                <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#64748B]" aria-hidden />
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#64748B]" aria-hidden />
                 <input
                   key={urlQuery}
                   defaultValue={urlQuery}
@@ -650,7 +665,7 @@ export default function ClientFeedPage() {
                     updateQueryInUrlDebounced(event.target.value);
                   }}
                   placeholder="Search developers, projects, technologies..."
-                  className="h-10 w-full rounded-full border border-[#E5E7EB] bg-[#F8FAFA] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#2563EB]"
+                  className="h-9 w-full rounded-full border border-[#E5E7EB] bg-[#F8FAFA] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#2563EB]"
                 />
               </div>
               <button
@@ -659,7 +674,7 @@ export default function ClientFeedPage() {
                   setDraftFilters(appliedFilters);
                   setIsFilterModalOpen(true);
                 }}
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 text-sm font-medium text-[#111827] hover:border-[#CBD5E1]"
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3.5 text-xs font-medium text-[#111827] hover:border-[#CBD5E1]"
               >
                 <SlidersHorizontal className="h-4 w-4" aria-hidden />
                 Filter
@@ -671,12 +686,12 @@ export default function ClientFeedPage() {
               </button>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-3.5 flex flex-wrap gap-2">
               <button
                 onClick={() => {
                   setJobsListMode("BEST_MATCHES");
                 }}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                   jobsListMode === "BEST_MATCHES"
                     ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
@@ -688,7 +703,7 @@ export default function ClientFeedPage() {
                 onClick={() => {
                   setJobsListMode("MOST_RECENT");
                 }}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                   jobsListMode === "MOST_RECENT"
                     ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
@@ -700,7 +715,7 @@ export default function ClientFeedPage() {
                 onClick={() => {
                   setJobsListMode("SAVED");
                 }}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                   jobsListMode === "SAVED"
                     ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
@@ -723,7 +738,7 @@ export default function ClientFeedPage() {
             </section>
           ) : null}
 
-          <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)_330px] xl:grid-cols-[240px_minmax(0,1fr)_360px]">
+          <div className="grid gap-5 lg:grid-cols-[160px_minmax(0,1fr)_250px] xl:grid-cols-[180px_minmax(0,1fr)_270px]">
             <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
               <ClientSidebar />
             </aside>
@@ -958,13 +973,10 @@ export default function ClientFeedPage() {
             <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
               <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
                 <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-semibold text-[#0F172A]">Fit Score</h2>
-                  <span className="rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-1 text-xs font-semibold text-[#1D4ED8]">
-                    {topFit ? `${topFit.score}%` : "-"}
-                  </span>
+                  <h2 className="text-sm font-semibold text-[#0F172A]">Recommendation Reasons</h2>
                 </div>
 
-                <p className="mt-1 text-[11px] text-[#64748B]">Set budget, timeline, and stack.</p>
+                <p className="mt-1 text-[11px] text-[#64748B]">Why these projects match your needs.</p>
 
                 <div className="mt-2.5 space-y-2">
                   <label className="block text-[11px] font-medium text-[#64748B]">
@@ -1007,15 +1019,16 @@ export default function ClientFeedPage() {
                 {topFit ? (
                   <div className="mt-3 rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-2">
                     <p className="text-xs font-semibold text-[#0F172A]">Top: {topFit.project.title}</p>
-                    <p className="mt-0.5 text-[11px] text-[#64748B]">
-                      B {topFit.budgetScore}% | T {topFit.timelineScore}% | S {topFit.stackScore}%
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-[#64748B]">~{topFit.estimatedWeeks.toFixed(1)}w, stack {topFit.matchedStackCount}/{topFit.requiredStackCount || 0}</p>
+                    <div className="mt-1.5 space-y-1">
+                      {buildRecommendationReasons(topFit).map((reason) => (
+                        <p key={reason} className="text-[11px] text-[#64748B]">- {reason}</p>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
 
                 <div className="mt-3 space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Best matches</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Recommended projects</p>
                   {topFitMatches.length > 0 ? (
                     topFitMatches.map((item) => (
                       <Link
@@ -1024,11 +1037,11 @@ export default function ClientFeedPage() {
                         className="flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-1.5 text-xs text-[#111827] hover:border-[#CBD5E1]"
                       >
                         <span className="line-clamp-1 pr-2">{item.project.title}</span>
-                        <span className="font-semibold text-[#1D4ED8]">{item.score}%</span>
+                        <span className="font-semibold text-[#1D4ED8]">{item.project.category.replace(/_/g, " ")}</span>
                       </Link>
                     ))
                   ) : (
-                    <p className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-2 text-xs text-[#64748B]">No ranked projects yet.</p>
+                    <p className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-2 text-xs text-[#64748B]">No recommendation reasons yet.</p>
                   )}
                 </div>
               </section>
