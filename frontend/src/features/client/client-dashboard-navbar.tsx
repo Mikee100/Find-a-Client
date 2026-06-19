@@ -120,12 +120,16 @@ export default function ClientDashboardNavbar() {
   };
 
   useEffect(() => {
-    void refreshUnreadCount();
+    const initialFetchId = window.setTimeout(() => {
+      void refreshUnreadCount();
+    }, 0);
+
     const intervalId = window.setInterval(() => {
       void refreshUnreadCount();
     }, 30_000);
 
     return () => {
+      window.clearTimeout(initialFetchId);
       window.clearInterval(intervalId);
     };
   }, []);
