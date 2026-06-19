@@ -52,23 +52,23 @@ export default function DeveloperDashboardNavbar({
         </div>
 
         <div className="ml-auto flex items-center gap-2 text-sm">
-          <button className="relative rounded-lg border border-neutral-200 p-2 text-neutral-600">
+          <Link href="/developer/messages" className="relative rounded-lg border border-neutral-200 p-2 text-neutral-600">
             <MessageSquare className="h-4 w-4" />
             {unreadMessages > 0 ? (
               <span className="absolute -right-1 -top-1 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
                 {unreadMessages}
               </span>
             ) : null}
-          </button>
+          </Link>
 
-          <button className="relative rounded-lg border border-neutral-200 p-2 text-neutral-600">
+          <Link href="/developer/dashboard#notifications" className="relative rounded-lg border border-neutral-200 p-2 text-neutral-600">
             <Bell className="h-4 w-4" />
             {unreadNotifications > 0 ? (
               <span className="absolute -right-1 -top-1 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
                 {unreadNotifications}
               </span>
             ) : null}
-          </button>
+          </Link>
 
           <AccountMenu
             roleLabel="Developer"

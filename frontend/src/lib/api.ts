@@ -315,14 +315,53 @@ export interface MyProjectListItem {
 
 export interface ThreadSummary {
   id: string;
+  participantAId: string;
+  participantBId: string;
   projectId: string | null;
+  project?: {
+    id: string;
+    slug: string;
+    title: string;
+  } | null;
+  participantA?: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl: string | null;
+  };
+  participantB?: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl: string | null;
+  };
   updatedAt: string;
   unreadCount: number;
   messages: Array<{
     id: string;
+    senderId?: string;
     content: string;
     createdAt: string;
   }>;
+}
+
+export interface ThreadMessage {
+  id: string;
+  threadId: string;
+  senderId: string;
+  content: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface MessagePageMeta {
+  hasNext: boolean;
+  nextCursor?: string;
+}
+
+export interface PaginatedThreadMessages {
+  items: ThreadMessage[];
+  meta: MessagePageMeta;
 }
 
 export interface NotificationItem {
@@ -781,6 +820,58 @@ export async function getMessageThreads(): Promise<ThreadSummary[]> {
 
 export async function createMessageThread(payload: CreateThreadPayload): Promise<CreatedThread> {
   return requestJson<CreatedThread, CreateThreadPayload>("POST", "/messages/threads", { body: payload });
+}
+
+export async function getThreadMessages(threadId: string, cursor?: string, limit = 30): Promise<PaginatedThreadMessages> {
+  const searchParams = new URLSearchParams();
+  if (cursor) {
+    searchParams.set("cursor", cursor);
+  }
+  if (limit) {
+    searchParams.set("limit", String(limit));
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString
+    ? `/messages/threads/${encodeURIComponent(threadId)}?${queryString}`
+    : `/messages/threads/${encodeURIComponent(threadId)}`;
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    credentials: "include"
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const payload = (await response.json()) as
+    | { success?: boolean; data?: ThreadMessage[]; meta?: MessagePageMeta }
+    | ThreadMessage[];
+
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      meta: { hasNext: false }
+    };
+  }
+
+  return {
+    items: Array.isArray(payload.data) ? payload.data : [],
+    meta: payload.meta ?? { hasNext: false }
+  };
+}
+
+export async function sendThreadMessage(threadId: string, content: string): Promise<ThreadMessage> {
+  return requestJson<ThreadMessage, { content: string }>("POST", `/messages/threads/${encodeURIComponent(threadId)}`, {
+    body: { content }
+  });
+}
+
+export async function markThreadRead(threadId: string): Promise<{ updated: number }> {
+  return requestJson<{ updated: number }, Record<string, never>>("PUT", `/messages/threads/${encodeURIComponent(threadId)}/read`, {
+    body: {}
+  });
 }
 
 export async function trackProjectInquiry(slug: string, payload: ProjectInquiryPayload): Promise<{ tracked: true; inquiryType: string; inquiryCount: number; messageAccepted: boolean }> {
