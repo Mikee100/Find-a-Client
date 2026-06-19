@@ -68,6 +68,7 @@ export class ProjectsService {
    */
   async list(query: ListProjectsDto) {
     const limit = Number(query.limit ?? 20);
+    const page = query.page ? Math.max(1, Number(query.page)) : null;
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
       status: PROJECT_STATUS.PUBLISHED,
@@ -85,11 +86,42 @@ export class ProjectsService {
     const orderBy: Prisma.ProjectOrderByWithRelationInput =
       query.sortBy === "popular"
         ? { likeCount: "desc" }
+        : query.sortBy === "most_viewed"
+          ? { viewCount: "desc" }
+          : query.sortBy === "oldest"
+            ? { createdAt: "asc" }
         : query.sortBy === "price_asc"
           ? { price: "asc" }
           : query.sortBy === "price_desc"
             ? { price: "desc" }
             : { createdAt: "desc" };
+
+    if (page !== null) {
+      const [items, totalItems] = await this.prisma.$transaction([
+        this.prisma.project.findMany({
+          where,
+          orderBy,
+          take: limit,
+          skip: (page - 1) * limit
+        }),
+        this.prisma.project.count({ where })
+      ]);
+
+      const totalPages = totalItems > 0 ? Math.ceil(totalItems / limit) : 1;
+      const hasNext = page < totalPages;
+
+      return {
+        success: true,
+        data: items,
+        meta: {
+          hasNext,
+          nextCursor: hasNext ? items[items.length - 1]?.id : undefined,
+          page,
+          totalPages,
+          totalItems
+        }
+      };
+    }
 
     const items = await this.prisma.project.findMany({
       where,

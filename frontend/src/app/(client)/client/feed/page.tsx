@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
   Bell,
@@ -18,7 +19,7 @@ import {
 import {
   createMessageThread,
   getProjectBySlug,
-  listProjects,
+  listProjectsPaginated,
   PricingType,
   ProjectCategory,
   ProjectDetail,
@@ -48,6 +49,8 @@ const DEFAULT_FEED_FILTERS: FeedFilters = {
   techStack: "",
   industries: ""
 };
+
+const FEED_PAGE_SIZE = 20;
 
 function initials(name: string): string {
   const parts = name.split(" ").filter(Boolean);
@@ -173,9 +176,13 @@ function PremiumNavbar() {
 
 export default function ClientFeedPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectDetails, setProjectDetails] = useState<Record<string, ProjectDetail | null>>({});
   const [loadingProjects, setLoadingProjects] = useState(true);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
@@ -187,10 +194,12 @@ export default function ClientFeedPage() {
     if (typeof window === "undefined") {
       return new Set();
     }
+
     const saved = window.localStorage.getItem("client-feed-saved-projects");
     if (!saved) {
       return new Set();
     }
+
     try {
       const ids = JSON.parse(saved) as string[];
       return Array.isArray(ids) ? new Set(ids) : new Set();
@@ -198,7 +207,6 @@ export default function ClientFeedPage() {
       return new Set();
     }
   });
-  const [visibleCount, setVisibleCount] = useState(8);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [hiringProjectId, setHiringProjectId] = useState<string | null>(null);
   const [openingDeveloperProjectId, setOpeningDeveloperProjectId] = useState<string | null>(null);
@@ -206,30 +214,71 @@ export default function ClientFeedPage() {
   const [fitDeadlineWeeks, setFitDeadlineWeeks] = useState("");
   const [fitRequiredStack, setFitRequiredStack] = useState("");
 
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const currentPage = useMemo(() => {
+    const pageParam = Number(searchParams.get("page") ?? "1");
+    if (!Number.isFinite(pageParam) || pageParam <= 0) {
+      return 1;
+    }
+    return Math.floor(pageParam);
+  }, [searchParams]);
+
+  const updatePageInUrl = useCallback(
+    (page: number) => {
+      const normalized = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+      const params = new URLSearchParams(searchParams.toString());
+      if (normalized > 1) {
+        params.set("page", String(normalized));
+      } else {
+        params.delete("page");
+      }
+      const next = params.toString();
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   useEffect(() => {
     void (async () => {
       try {
         setLoadingProjects(true);
         setError(null);
-        const items = await listProjects({
+        const page = await listProjectsPaginated({
           category: appliedFilters.category === "ALL" ? undefined : appliedFilters.category,
           pricingType: appliedFilters.pricingType === "ALL" ? undefined : appliedFilters.pricingType,
           sortBy: appliedFilters.sortBy,
+          search: query.trim() || undefined,
           minPrice: appliedFilters.minPrice.trim() || undefined,
           maxPrice: appliedFilters.maxPrice.trim() || undefined,
           techStack: parseCommaList(appliedFilters.techStack),
-          industries: parseCommaList(appliedFilters.industries)
+          industries: parseCommaList(appliedFilters.industries),
+          page: currentPage,
+          limit: FEED_PAGE_SIZE
         });
-        setProjects(items);
+
+        const resolvedTotalPages = page.meta.totalPages ?? 1;
+        if (currentPage > resolvedTotalPages) {
+          updatePageInUrl(resolvedTotalPages);
+          return;
+        }
+
+        setProjects(page.items);
+        setTotalPages(resolvedTotalPages);
+        setTotalItems(page.meta.totalItems ?? page.items.length);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "Failed to load projects.");
       } finally {
         setLoadingProjects(false);
       }
     })();
-  }, [appliedFilters]);
+  }, [appliedFilters, currentPage, query, updatePageInUrl]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentPage]);
 
   const filteredProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -296,7 +345,7 @@ export default function ClientFeedPage() {
     return count;
   }, [appliedFilters]);
 
-  const visibleProjects = useMemo(() => rankedProjects.slice(0, visibleCount), [rankedProjects, visibleCount]);
+  const visibleProjects = useMemo(() => rankedProjects, [rankedProjects]);
 
   const fitRankedProjects = useMemo(() => {
     const requiredStack = parseCommaList(fitRequiredStack).map((item) => item.toLowerCase());
@@ -366,29 +415,18 @@ export default function ClientFeedPage() {
   const topFitMatches = useMemo(() => fitRankedProjects.slice(0, 2), [fitRankedProjects]);
   const topFit = topFitMatches[0] ?? null;
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry.isIntersecting && visibleCount < rankedProjects.length) {
-          setVisibleCount((current) => Math.min(current + 6, rankedProjects.length));
-        }
-      },
-      { rootMargin: "240px" }
-    );
-
-    const sentinel = sentinelRef.current;
-    if (sentinel) {
-      observer.observe(sentinel);
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 1) {
+      return [] as number[];
     }
 
-    return () => {
-      if (sentinel) {
-        observer.unobserve(sentinel);
-      }
-      observer.disconnect();
-    };
-  }, [rankedProjects.length, visibleCount]);
+    const windowSize = 5;
+    const start = Math.max(1, currentPage - Math.floor(windowSize / 2));
+    const end = Math.min(totalPages, start + windowSize - 1);
+    const adjustedStart = Math.max(1, end - windowSize + 1);
+
+    return Array.from({ length: end - adjustedStart + 1 }, (_, index) => adjustedStart + index);
+  }, [currentPage, totalPages]);
 
   useEffect(() => {
     const slugsToLoad = visibleProjects
@@ -519,7 +557,7 @@ export default function ClientFeedPage() {
                   value={query}
                   onChange={(event) => {
                     setQuery(event.target.value);
-                    setVisibleCount(8);
+                    updatePageInUrl(1);
                   }}
                   placeholder="Search developers, projects, technologies..."
                   className="h-10 w-full rounded-full border border-[#E5E7EB] bg-[#F8FAFA] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#2563EB]"
@@ -547,7 +585,6 @@ export default function ClientFeedPage() {
               <button
                 onClick={() => {
                   setJobsListMode("BEST_MATCHES");
-                  setVisibleCount(8);
                 }}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   jobsListMode === "BEST_MATCHES"
@@ -560,7 +597,6 @@ export default function ClientFeedPage() {
               <button
                 onClick={() => {
                   setJobsListMode("MOST_RECENT");
-                  setVisibleCount(8);
                 }}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   jobsListMode === "MOST_RECENT"
@@ -573,7 +609,6 @@ export default function ClientFeedPage() {
               <button
                 onClick={() => {
                   setJobsListMode("SAVED");
-                  setVisibleCount(8);
                 }}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   jobsListMode === "SAVED"
@@ -683,11 +718,15 @@ export default function ClientFeedPage() {
 
                     <div className="mt-4 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F8FAFA]">
                       {heroUrl ? (
-                        <img
-                          src={heroUrl}
-                          alt={project.title}
-                          className="aspect-video w-full object-cover transition duration-200 group-hover:scale-[1.03]"
-                        />
+                        <div className="relative aspect-video w-full">
+                          <Image
+                            src={heroUrl}
+                            alt={project.title}
+                            fill
+                            unoptimized
+                            className="object-cover transition duration-200 group-hover:scale-[1.03]"
+                          />
+                        </div>
                       ) : (
                         <div className="aspect-video w-full px-6 py-5">
                           <p className="text-sm font-semibold text-[#0F172A]">{project.title}</p>
@@ -760,8 +799,49 @@ export default function ClientFeedPage() {
                     );
                   })}
 
-                  <div ref={sentinelRef} className="h-8 w-full" />
+                  {totalPages > 1 ? (
+                    <div className="flex justify-center pt-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={currentPage <= 1}
+                          onClick={() => updatePageInUrl(Math.max(1, currentPage - 1))}
+                          className="h-9 rounded-lg border border-[#E5E7EB] bg-white px-3 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Prev
+                        </button>
+
+                        {pageNumbers.map((pageNumber) => (
+                          <button
+                            key={pageNumber}
+                            type="button"
+                            onClick={() => updatePageInUrl(pageNumber)}
+                            className={`h-9 min-w-9 rounded-lg border px-3 text-xs font-semibold transition ${
+                              currentPage === pageNumber
+                                ? "border-[#0F172A] bg-[#0F172A] text-white"
+                                : "border-[#E5E7EB] bg-white text-[#111827] hover:border-[#CBD5E1]"
+                            }`}
+                          >
+                            {pageNumber}
+                          </button>
+                        ))}
+
+                        <button
+                          type="button"
+                          disabled={currentPage >= totalPages}
+                          onClick={() => updatePageInUrl(Math.min(totalPages, currentPage + 1))}
+                          className="h-9 rounded-lg border border-[#E5E7EB] bg-white px-3 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
+              ) : null}
+
+              {!loadingProjects && projects.length > 0 ? (
+                <p className="text-center text-xs text-[#64748B]">Page {currentPage} of {Math.max(totalPages, 1)} • {totalItems} total projects</p>
               ) : null}
             </div>
 
@@ -961,7 +1041,7 @@ export default function ClientFeedPage() {
                 onClick={() => {
                   setDraftFilters(DEFAULT_FEED_FILTERS);
                   setAppliedFilters(DEFAULT_FEED_FILTERS);
-                  setVisibleCount(8);
+                  updatePageInUrl(1);
                   setIsFilterModalOpen(false);
                 }}
                 className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-xs font-semibold text-[#64748B] hover:border-[#CBD5E1]"
@@ -972,7 +1052,7 @@ export default function ClientFeedPage() {
                 type="button"
                 onClick={() => {
                   setAppliedFilters(draftFilters);
-                  setVisibleCount(8);
+                  updatePageInUrl(1);
                   setIsFilterModalOpen(false);
                 }}
                 className="rounded-lg bg-[#2563EB] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1d4ed8]"

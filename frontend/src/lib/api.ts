@@ -1,4 +1,4 @@
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/+$/, "");
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4311").replace(/\/+$/, "");
 const CSRF_COOKIE_NAME = process.env.NEXT_PUBLIC_AUTH_CSRF_COOKIE_NAME ?? "csrf_token";
 
 interface ApiErrorBody {
@@ -185,11 +185,25 @@ export interface ListProjectsParams {
   industries?: string[];
   pricingType?: PricingType;
   search?: string;
-  sortBy?: "newest" | "popular" | "price_asc" | "price_desc";
+  sortBy?: "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc";
   minPrice?: string;
   maxPrice?: string;
   cursor?: string;
+  page?: number;
   limit?: number;
+}
+
+export interface CursorPageMeta {
+  hasNext: boolean;
+  nextCursor?: string;
+  page?: number;
+  totalPages?: number;
+  totalItems?: number;
+}
+
+export interface PaginatedProjectList {
+  items: ProjectListItem[];
+  meta: CursorPageMeta;
 }
 
 export type ProjectCategory =
@@ -229,6 +243,8 @@ export interface ProjectListItem {
   pricingType: PricingType;
   price: number | string | null;
   currency: string;
+  thumbnailUrl: string | null;
+  backgroundUrl: string | null;
   likeCount: number;
   viewCount: number;
   inquiryCount: number;
@@ -670,6 +686,9 @@ export async function listProjects(params: ListProjectsParams = {}): Promise<Pro
   if (params.cursor) {
     searchParams.set("cursor", params.cursor);
   }
+  if (params.page) {
+    searchParams.set("page", String(params.page));
+  }
   if (params.limit) {
     searchParams.set("limit", String(params.limit));
   }
@@ -677,6 +696,71 @@ export async function listProjects(params: ListProjectsParams = {}): Promise<Pro
   const queryString = searchParams.toString();
   const path = queryString ? `/projects?${queryString}` : "/projects";
   return requestJson<ProjectListItem[]>("GET", path);
+}
+
+export async function listProjectsPaginated(params: ListProjectsParams = {}): Promise<PaginatedProjectList> {
+  const searchParams = new URLSearchParams();
+
+  if (params.category) {
+    searchParams.set("category", params.category);
+  }
+  if (params.techStack?.length) {
+    params.techStack.forEach((value) => searchParams.append("techStack", value));
+  }
+  if (params.industries?.length) {
+    params.industries.forEach((value) => searchParams.append("industries", value));
+  }
+  if (params.pricingType) {
+    searchParams.set("pricingType", params.pricingType);
+  }
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (params.sortBy) {
+    searchParams.set("sortBy", params.sortBy);
+  }
+  if (params.minPrice?.trim()) {
+    searchParams.set("minPrice", params.minPrice.trim());
+  }
+  if (params.maxPrice?.trim()) {
+    searchParams.set("maxPrice", params.maxPrice.trim());
+  }
+  if (params.cursor) {
+    searchParams.set("cursor", params.cursor);
+  }
+  if (params.page) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString ? `/projects?${queryString}` : "/projects";
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    credentials: "include"
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const payload = (await response.json()) as
+    | { success?: boolean; data?: ProjectListItem[]; meta?: CursorPageMeta }
+    | ProjectListItem[];
+
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      meta: { hasNext: false }
+    };
+  }
+
+  return {
+    items: Array.isArray(payload.data) ? payload.data : [],
+    meta: payload.meta ?? { hasNext: false }
+  };
 }
 
 export async function getProjectBySlug(slug: string): Promise<ProjectDetail> {
