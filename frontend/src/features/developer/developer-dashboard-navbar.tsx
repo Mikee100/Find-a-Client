@@ -52,6 +52,10 @@ export default function DeveloperDashboardNavbar({
         </div>
 
         <div className="ml-auto flex items-center gap-2 text-sm">
+          <Link href="/developer/hire-requests" className="rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
+            Hire Requests
+          </Link>
+
           <Link href="/developer/messages" className="relative rounded-lg border border-neutral-200 p-2 text-neutral-600">
             <MessageSquare className="h-4 w-4" />
             {unreadMessages > 0 ? (

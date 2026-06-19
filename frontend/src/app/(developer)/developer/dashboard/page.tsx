@@ -85,6 +85,50 @@ function formatTime(iso: string): string {
   });
 }
 
+function formatNotificationTitle(type: string): string {
+  return type
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+type NotificationPayload = {
+  threadId?: string;
+  projectId?: string;
+  projectTitle?: string;
+  senderId?: string;
+  senderName?: string;
+  preview?: string;
+};
+
+function isNotificationPayload(value: unknown): value is NotificationPayload {
+  return typeof value === "object" && value !== null;
+}
+
+function getThreadPartnerName(thread: ThreadSummary, currentUserId?: string): string {
+  const participantA = thread.participantA;
+  const participantB = thread.participantB;
+
+  if (currentUserId && participantA?.id === currentUserId) {
+    return participantB?.fullName || participantB?.username || "Client";
+  }
+
+  if (currentUserId && participantB?.id === currentUserId) {
+    return participantA?.fullName || participantA?.username || "Client";
+  }
+
+  if (participantA?.fullName || participantA?.username) {
+    return participantA.fullName || participantA.username;
+  }
+
+  if (participantB?.fullName || participantB?.username) {
+    return participantB.fullName || participantB.username;
+  }
+
+  return "Client";
+}
+
 function formatProjectStatus(status: "DRAFT" | "PUBLISHED" | "ARCHIVED"): string {
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
@@ -830,22 +874,55 @@ export default function DeveloperDashboardPage() {
   const activities: ActivityItem[] = useMemo(() => {
     const fromThreads = threads.slice(0, 3).map((thread) => ({
       id: `thread-${thread.id}`,
-      title: "Client message",
-      detail: thread.messages[0]?.content ?? "New thread activity",
+      title: `${getThreadPartnerName(thread, profile?.id)} message`,
+      detail: thread.project?.title
+        ? `About ${thread.project.title}: ${thread.messages[0]?.content ?? "New thread activity"}`
+        : (thread.messages[0]?.content ?? "New thread activity"),
       time: formatTime(thread.updatedAt),
       unread: thread.unreadCount > 0,
     }));
 
-    const fromNotifications = notifications.slice(0, 3).map((notification) => ({
-      id: `notification-${notification.id}`,
-      title: notification.type.replace(/_/g, " "),
-      detail: "Notification from your account activity",
-      time: formatTime(notification.createdAt),
-      unread: !notification.isRead,
-    }));
+    const fromNotifications = notifications.slice(0, 3).map((notification) => {
+      const payload = isNotificationPayload(notification.payload) ? notification.payload : undefined;
+      const linkedThread = payload?.threadId
+        ? threads.find((thread) => thread.id === payload.threadId)
+        : undefined;
+
+      const senderName = typeof payload?.senderName === "string"
+        ? payload.senderName
+        : (linkedThread ? getThreadPartnerName(linkedThread, profile?.id) : "Client");
+
+      const projectTitle =
+        typeof payload?.projectTitle === "string"
+          ? payload.projectTitle
+          : (linkedThread?.project?.title ?? undefined);
+
+      const preview = typeof payload?.preview === "string" ? payload.preview : "";
+
+      let detail = "Notification from your account activity";
+      if (notification.type === "NEW_MESSAGE") {
+        if (projectTitle && preview) {
+          detail = `${senderName} asked about ${projectTitle}: ${preview}`;
+        } else if (projectTitle) {
+          detail = `${senderName} asked about ${projectTitle}`;
+        } else if (preview) {
+          detail = `${senderName}: ${preview}`;
+        } else {
+          detail = `${senderName} sent you a new message`;
+        }
+      }
+
+      return {
+        id: `notification-${notification.id}`,
+        title: formatNotificationTitle(notification.type),
+        detail,
+        time: formatTime(notification.createdAt),
+        unread: !notification.isRead,
+      };
+    });
 
     return [...fromThreads, ...fromNotifications].slice(0, 6);
-  }, [notifications, threads]);
+  }, [notifications, profile?.id, threads]);
 
   if (!hasSession) {
     return null;

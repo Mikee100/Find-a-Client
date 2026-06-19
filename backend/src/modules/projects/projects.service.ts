@@ -311,15 +311,93 @@ export class ProjectsService {
   }
 
   /**
-   * Toggles like and adjusts counter.
+   * Toggles like for current user and adjusts project counter.
    */
-  async toggleLike(slug: string): Promise<{ liked: true }> {
-    const project = await this.prisma.project.findUnique({ where: { slug } });
+  async toggleLike(slug: string, userId: string): Promise<{ liked: boolean; likeCount: number }> {
+    return this.prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { slug },
+        select: { id: true, authorId: true, likeCount: true }
+      });
+
+      if (!project) {
+        throw new NotFoundException("Project not found");
+      }
+
+      if (project.authorId === userId) {
+        throw new ForbiddenException("You cannot like your own project");
+      }
+
+      const existingLike = await tx.$queryRaw<Array<{ userId: string }>>`
+        SELECT "userId"
+        FROM "ProjectLike"
+        WHERE "userId" = ${userId}::uuid
+          AND "projectId" = ${project.id}::uuid
+        LIMIT 1
+      `;
+
+      if (existingLike.length > 0) {
+        await tx.$executeRaw`
+          DELETE FROM "ProjectLike"
+          WHERE "userId" = ${userId}::uuid
+            AND "projectId" = ${project.id}::uuid
+        `;
+
+        const updated = await tx.project.update({
+          where: { id: project.id },
+          data: {
+            likeCount: project.likeCount > 0 ? { decrement: 1 } : undefined
+          },
+          select: { likeCount: true }
+        });
+
+        return {
+          liked: false,
+          likeCount: Math.max(0, updated.likeCount)
+        };
+      }
+
+      await tx.$executeRaw`
+        INSERT INTO "ProjectLike" ("userId", "projectId", "createdAt")
+        VALUES (${userId}::uuid, ${project.id}::uuid, NOW())
+        ON CONFLICT ("userId", "projectId") DO NOTHING
+      `;
+
+      const updated = await tx.project.update({
+        where: { id: project.id },
+        data: { likeCount: { increment: 1 } },
+        select: { likeCount: true }
+      });
+
+      return {
+        liked: true,
+        likeCount: updated.likeCount
+      };
+    });
+  }
+
+  async getLikeStatus(slug: string, userId: string): Promise<{ liked: boolean; likeCount: number }> {
+    const project = await this.prisma.project.findUnique({
+      where: { slug },
+      select: { id: true, likeCount: true }
+    });
+
     if (!project) {
       throw new NotFoundException("Project not found");
     }
-    await this.prisma.project.update({ where: { id: project.id }, data: { likeCount: { increment: 1 } } });
-    return { liked: true };
+
+    const like = await this.prisma.$queryRaw<Array<{ userId: string }>>`
+      SELECT "userId"
+      FROM "ProjectLike"
+      WHERE "userId" = ${userId}::uuid
+        AND "projectId" = ${project.id}::uuid
+      LIMIT 1
+    `;
+
+    return {
+      liked: like.length > 0,
+      likeCount: project.likeCount
+    };
   }
 
   /**

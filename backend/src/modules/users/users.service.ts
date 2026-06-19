@@ -354,6 +354,65 @@ export class UsersService {
   }
 
   /**
+   * Lists projects liked by a user.
+   */
+  async getLikedProjects(userId: string) {
+    const likedRows = await this.prisma.$queryRaw<Array<{ projectId: string; createdAt: Date }>>`
+      SELECT "projectId", "createdAt"
+      FROM "ProjectLike"
+      WHERE "userId" = ${userId}::uuid
+      ORDER BY "createdAt" DESC
+    `;
+
+    if (likedRows.length === 0) {
+      return [];
+    }
+
+    const projectIds = likedRows.map((row) => row.projectId);
+    const projects = await this.prisma.project.findMany({
+      where: {
+        id: { in: projectIds },
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        shortDescription: true,
+        status: true,
+        category: true,
+        techStack: true,
+        pricingType: true,
+        price: true,
+        currency: true,
+        likeCount: true,
+        viewCount: true,
+        inquiryCount: true,
+        thumbnailUrl: true,
+        backgroundUrl: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    const projectById = new Map(projects.map((project) => [project.id, project]));
+    return likedRows
+      .map((row) => {
+        const project = projectById.get(row.projectId);
+        if (!project) {
+          return null;
+        }
+
+        return {
+          projectId: row.projectId,
+          createdAt: row.createdAt,
+          project
+        };
+      })
+      .filter((entry): entry is { projectId: string; createdAt: Date; project: (typeof projects)[number] } => entry !== null);
+  }
+
+  /**
    * Lists projects created by current authenticated user.
    */
   async getMyProjects(userId: string) {

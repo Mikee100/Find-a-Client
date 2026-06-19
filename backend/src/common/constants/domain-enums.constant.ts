@@ -53,3 +53,15 @@ export const AVAILABILITY_STATUS = {
 } as const;
 
 export type AvailabilityStatus = (typeof AVAILABILITY_STATUS)[keyof typeof AVAILABILITY_STATUS];
+
+export const HIRE_REQUEST_STATUS = {
+  PENDING: "PENDING",
+  REVIEWING: "REVIEWING",
+  PROPOSAL_SENT: "PROPOSAL_SENT",
+  NEGOTIATING: "NEGOTIATING",
+  ACCEPTED: "ACCEPTED",
+  REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED"
+} as const;
+
+export type HireRequestStatus = (typeof HIRE_REQUEST_STATUS)[keyof typeof HIRE_REQUEST_STATUS];

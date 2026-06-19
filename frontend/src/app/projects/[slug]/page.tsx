@@ -5,7 +5,17 @@ import Link from "next/link";
 import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
-import { getAuthSession, getProjectBySlug, ProjectCategory, ProjectDetail, PricingType, updateProject, uploadMediaFile } from "@/lib/api";
+import {
+  getAuthSession,
+  getProjectBySlug,
+  getProjectLikeStatus,
+  ProjectCategory,
+  ProjectDetail,
+  PricingType,
+  toggleProjectLike,
+  updateProject,
+  uploadMediaFile
+} from "@/lib/api";
 import FullPageLoader from "@/components/ui/full-page-loader";
 import BackButton from "@/components/ui/back-button";
 
@@ -274,6 +284,8 @@ export default function ProjectDetailPage() {
   const [authResolved, setAuthResolved] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeLoading, setLikeLoading] = useState(false);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const hasHandledEditDeepLinkRef = useRef(false);
@@ -372,6 +384,39 @@ export default function ProjectDetailPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!project?.slug || !viewerId) {
+      setIsLiked(false);
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      try {
+        const status = await getProjectLikeStatus(project.slug);
+        if (!active) {
+          return;
+        }
+        setIsLiked(status.liked);
+        setProject((current) => {
+          if (!current || current.likeCount === status.likeCount) {
+            return current;
+          }
+          return { ...current, likeCount: status.likeCount };
+        });
+      } catch {
+        if (active) {
+          setIsLiked(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [project?.slug, viewerId]);
+
   const parsed = useMemo(() => parseIntakeDetails(project?.longDescription ?? ""), [project?.longDescription]);
 
   const overviewText = parsed.narrative.trim();
@@ -393,6 +438,19 @@ export default function ProjectDetailPage() {
     });
     params.delete("thread");
     return `/client/messages?${params.toString()}`;
+  }, [project]);
+  const hireDeveloperHref = useMemo(() => {
+    if (!project) {
+      return "/developers";
+    }
+
+    const params = new URLSearchParams({
+      projectId: project.id,
+      projectSlug: project.slug,
+      projectTitle: project.title
+    });
+
+    return `/hire/${project.author.username}?${params.toString()}`;
   }, [project]);
   const editQuery = (searchParams.get("edit") ?? "").trim().toLowerCase();
   const hasEditQuery = editQuery === "1" || editQuery === "true" || editQuery === "yes";
@@ -756,6 +814,31 @@ export default function ProjectDetailPage() {
     window.setTimeout(() => setCopiedState("none"), 1500);
   };
 
+  const handleToggleLike = async (): Promise<void> => {
+    if (!project) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setSaveError("Sign in to like projects.");
+      return;
+    }
+
+    setLikeLoading(true);
+    setSaveError(null);
+
+    try {
+      const result = await toggleProjectLike(project.slug);
+      setIsLiked(result.liked);
+      setProject((current) => (current ? { ...current, likeCount: result.likeCount } : current));
+    } catch (likeError) {
+      const message = likeError instanceof Error ? likeError.message : "Unable to update like.";
+      setSaveError(message);
+    } finally {
+      setLikeLoading(false);
+    }
+  };
+
   const handleSaveUpdate = async (): Promise<void> => {
     if (!project) {
       return;
@@ -977,11 +1060,21 @@ export default function ProjectDetailPage() {
                       </a>
                     ) : null}
                     <Link
-                      href={`/developers/${project.author.username}`}
+                      href={hireDeveloperHref}
                       className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
                     >
                       Hire Developer
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleToggleLike();
+                      }}
+                      disabled={likeLoading}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {likeLoading ? "Updating..." : isLiked ? `Liked (${project.likeCount})` : `Like Project (${project.likeCount})`}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setIsSaved((current) => !current)}
@@ -1493,7 +1586,7 @@ export default function ProjectDetailPage() {
 
                     <div className="mt-4 space-y-2">
                       <Link
-                        href={`/developers/${project.author.username}`}
+                        href={hireDeveloperHref}
                         className="block text-sm font-semibold text-slate-900 underline underline-offset-4"
                       >
                         Hire Developer

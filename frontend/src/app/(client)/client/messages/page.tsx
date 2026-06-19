@@ -9,6 +9,8 @@ import { getRealtimeClient } from "@/lib/realtime";
 import {
   createMessageThread,
   getAuthSession,
+  HireRequestResponse,
+  listHireRequests,
   getMessageThreads,
   getThreadMessages,
   markThreadRead,
@@ -45,6 +47,14 @@ function initials(name: string): string {
   return (name.slice(0, 2) || "NA").toUpperCase();
 }
 
+function formatHireStatus(status: HireRequestResponse["status"]): string {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function ClientMessagesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -59,6 +69,7 @@ export default function ClientMessagesPage() {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [threadSearch, setThreadSearch] = useState("");
+  const [hireRequests, setHireRequests] = useState<HireRequestResponse[]>([]);
   const selectedThreadIdRef = useRef<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
@@ -135,6 +146,11 @@ export default function ClientMessagesPage() {
     });
   }, [threadQuery]);
 
+  const refreshHireRequests = useCallback(async () => {
+    const data = await listHireRequests({ scope: "sent", limit: 100 });
+    setHireRequests(data);
+  }, []);
+
   const refreshMessages = useCallback(async (threadId: string, markAsRead = false) => {
     const page = await getThreadMessages(threadId, undefined, 50);
     setMessages(page.items.slice().reverse());
@@ -174,6 +190,23 @@ export default function ClientMessagesPage() {
 
     return participant?.fullName || participant?.username || "Conversation";
   }, [selectedThread, viewerId]);
+  const latestHireRequestByThreadId = useMemo(() => {
+    const map = new Map<string, HireRequestResponse>();
+
+    for (const item of hireRequests) {
+      if (!item.threadId) {
+        continue;
+      }
+
+      const current = map.get(item.threadId);
+      if (!current || new Date(item.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+        map.set(item.threadId, item);
+      }
+    }
+
+    return map;
+  }, [hireRequests]);
+  const selectedThreadHireRequest = selectedThreadId ? latestHireRequestByThreadId.get(selectedThreadId) : undefined;
 
   useEffect(() => {
     void (async () => {
@@ -209,14 +242,14 @@ export default function ClientMessagesPage() {
           setSelectedThreadId(createdThread.id);
         }
 
-        await refreshThreads();
+        await Promise.all([refreshThreads(), refreshHireRequests()]);
       } catch (caughtError) {
         handleRequestError(caughtError, "Unable to load conversations.");
       } finally {
         setLoadingThreads(false);
       }
     })();
-  }, [handleRequestError, projectIdQuery, recipientIdQuery, refreshThreads, router, searchParams]);
+  }, [handleRequestError, projectIdQuery, recipientIdQuery, refreshHireRequests, refreshThreads, router, searchParams]);
 
   useEffect(() => {
     if (!selectedThreadId) {
@@ -251,7 +284,7 @@ export default function ClientMessagesPage() {
           const payload = (event.payload ?? {}) as { threadId?: string };
           const payloadThreadId = payload.threadId || threadId;
 
-          void refreshThreads().catch((caughtError) => {
+          void Promise.all([refreshThreads(), refreshHireRequests()]).catch((caughtError) => {
             handleRequestError(caughtError, "Unable to refresh conversations.");
           });
           if (selectedThreadIdRef.current === payloadThreadId) {
@@ -268,7 +301,7 @@ export default function ClientMessagesPage() {
         void supabase.removeChannel(channel);
       });
     };
-  }, [handleRequestError, refreshMessages, refreshThreads, threads]);
+  }, [handleRequestError, refreshHireRequests, refreshMessages, refreshThreads, threads]);
 
   useEffect(() => {
     const sync = () => {
@@ -276,7 +309,7 @@ export default function ClientMessagesPage() {
         return;
       }
 
-      void refreshThreads().catch((caughtError) => {
+      void Promise.all([refreshThreads(), refreshHireRequests()]).catch((caughtError) => {
         handleRequestError(caughtError, "Unable to refresh conversations.");
       });
       if (selectedThreadId) {
@@ -295,7 +328,7 @@ export default function ClientMessagesPage() {
       window.removeEventListener("focus", sync);
       document.removeEventListener("visibilitychange", sync);
     };
-  }, [handleRequestError, realtimeEnabled, refreshMessages, refreshThreads, selectedThreadId]);
+  }, [handleRequestError, realtimeEnabled, refreshHireRequests, refreshMessages, refreshThreads, selectedThreadId]);
 
   useEffect(() => {
     if (!shouldStickToBottomRef.current) {
@@ -402,6 +435,7 @@ export default function ClientMessagesPage() {
                     : thread.participantA;
                   const label = participant?.fullName || participant?.username || "Conversation";
                   const lastMessage = thread.messages[0]?.content ?? "No messages yet";
+                  const linkedHireRequest = latestHireRequestByThreadId.get(thread.id);
 
                   return (
                     <button
@@ -426,6 +460,9 @@ export default function ClientMessagesPage() {
                         ) : null}
                       </div>
                       <p className="mt-1 truncate text-xs text-slate-600">{lastMessage}</p>
+                      {linkedHireRequest ? (
+                        <p className="mt-1 text-[11px] font-medium text-blue-700">Hire request: {formatHireStatus(linkedHireRequest.status)}</p>
+                      ) : null}
                       <p className="mt-1 text-[11px] text-slate-400">{formatThreadTime(thread.updatedAt)}</p>
                     </button>
                   );
@@ -451,6 +488,11 @@ export default function ClientMessagesPage() {
                 {selectedThread?.project ? (
                   <Link href={`/projects/${selectedThread.project.slug}`} className="mt-1 inline-flex text-xs font-medium text-blue-700 hover:underline">
                     Regarding: {selectedThread.project.title}
+                  </Link>
+                ) : null}
+                {selectedThreadHireRequest ? (
+                  <Link href="/client/hire-requests" className="mt-1 inline-flex text-xs font-semibold text-blue-700 hover:underline">
+                    Hire request status: {formatHireStatus(selectedThreadHireRequest.status)}
                   </Link>
                 ) : null}
               </header>

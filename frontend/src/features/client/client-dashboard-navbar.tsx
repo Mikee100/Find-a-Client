@@ -40,6 +40,12 @@ export default function ClientDashboardNavbar() {
 
         <div className="flex items-center gap-2">
             <Link
+              href="/client/hire-requests"
+              className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-2.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+            >
+              Hire Requests
+            </Link>
+            <Link
               href="/client/messages"
               className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-2.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
             >

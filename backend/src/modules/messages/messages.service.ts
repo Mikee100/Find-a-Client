@@ -213,10 +213,30 @@ export class MessagesService {
     const recipientId = thread.participantAId === userId ? thread.participantBId : thread.participantAId;
 
     try {
+      const [sender, project] = await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            fullName: true,
+            username: true
+          }
+        }),
+        thread.projectId
+          ? this.prisma.project.findUnique({
+              where: { id: thread.projectId },
+              select: {
+                title: true
+              }
+            })
+          : Promise.resolve(null)
+      ]);
+
       await this.notificationsService.dispatch(recipientId, NOTIFICATION_TYPE.NEW_MESSAGE, {
         threadId,
         projectId: thread.projectId,
+        projectTitle: project?.title ?? null,
         senderId: userId,
+        senderName: sender?.fullName || sender?.username || null,
         messageId: message.id,
         preview: message.content.slice(0, 160)
       });
