@@ -1,15 +1,18 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import MarketplaceNavbar from "@/features/shared/marketplace-navbar";
-import { ProjectListItem, listProjects } from "@/lib/api";
+import { ProjectListItem, listProjectsPaginated } from "@/lib/api";
 import FullPageLoader from "@/components/ui/full-page-loader";
 import BackButton from "@/components/ui/back-button";
 
 type SortOption = "newest" | "oldest" | "mostLiked" | "mostViewed" | "priceAsc" | "priceDesc";
 
 const ALL_FILTER = "ALL";
+const PAGE_SIZE = 20;
 
 function formatMoney(price: number | string | null, currency: string, pricingType: ProjectListItem["pricingType"]): string {
   if (pricingType === "FREE") {
@@ -37,13 +40,24 @@ function formatMoney(price: number | string | null, currency: string, pricingTyp
   }).format(numericPrice);
 }
 
-function toNumberPrice(price: number | string | null): number | null {
-  if (price === null || price === undefined) {
-    return null;
+function toServerSort(sortBy: SortOption): "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc" {
+  if (sortBy === "mostLiked") {
+    return "popular";
+  }
+  if (sortBy === "mostViewed") {
+    return "most_viewed";
+  }
+  if (sortBy === "priceAsc") {
+    return "price_asc";
+  }
+  if (sortBy === "priceDesc") {
+    return "price_desc";
+  }
+  if (sortBy === "oldest") {
+    return "oldest";
   }
 
-  const numericPrice = typeof price === "string" ? Number(price) : price;
-  return Number.isFinite(numericPrice) ? numericPrice : null;
+  return "newest";
 }
 
 function formatCategoryLabel(category: ProjectListItem["category"]): string {
@@ -62,97 +76,97 @@ function formatCompactDate(value: string): string {
 }
 
 export default function ProjectsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [hasLoadedFirstPage, setHasLoadedFirstPage] = useState(false);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<ProjectListItem["category"] | typeof ALL_FILTER>(ALL_FILTER);
   const [pricingFilter, setPricingFilter] = useState<ProjectListItem["pricingType"] | typeof ALL_FILTER>(ALL_FILTER);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
 
+  const currentPage = useMemo(() => {
+    const pageParam = Number(searchParams.get("page") ?? "1");
+    if (!Number.isFinite(pageParam) || pageParam <= 0) {
+      return 1;
+    }
+    return Math.floor(pageParam);
+  }, [searchParams]);
+
+  const updatePageInUrl = useCallback(
+    (page: number) => {
+      const normalized = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+      const params = new URLSearchParams(searchParams.toString());
+      if (normalized > 1) {
+        params.set("page", String(normalized));
+      } else {
+        params.delete("page");
+      }
+      const next = params.toString();
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
   useEffect(() => {
+    let cancelled = false;
+
     void (async () => {
       try {
-        const items = await listProjects();
-        setProjects(items);
+        setLoading(true);
+        setError(null);
+        const page = await listProjectsPaginated({
+          category: categoryFilter === ALL_FILTER ? undefined : categoryFilter,
+          pricingType: pricingFilter === ALL_FILTER ? undefined : pricingFilter,
+          sortBy: toServerSort(sortBy),
+          search: query.trim() || undefined,
+          page: currentPage,
+          limit: PAGE_SIZE
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const resolvedTotalPages = page.meta.totalPages ?? 1;
+        if (currentPage > resolvedTotalPages) {
+          updatePageInUrl(resolvedTotalPages);
+          return;
+        }
+
+        setProjects(page.items);
+        setTotalPages(resolvedTotalPages);
+        setTotalItems(page.meta.totalItems ?? page.items.length);
       } catch (loadError) {
+        if (cancelled) {
+          return;
+        }
         const message = loadError instanceof Error ? loadError.message : "Failed to load projects.";
         setError(message);
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setHasLoadedFirstPage(true);
+        }
       }
     })();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryFilter, currentPage, pricingFilter, query, sortBy, updatePageInUrl]);
 
   const categoryOptions = useMemo(() => {
     const unique = Array.from(new Set(projects.map((project) => project.category)));
     return unique.sort((left, right) => left.localeCompare(right));
   }, [projects]);
 
-  const visibleProjects = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    const filtered = projects.filter((project) => {
-      if (categoryFilter !== ALL_FILTER && project.category !== categoryFilter) {
-        return false;
-      }
-
-      if (pricingFilter !== ALL_FILTER && project.pricingType !== pricingFilter) {
-        return false;
-      }
-
-      if (!normalizedQuery) {
-        return true;
-      }
-
-      return (
-        project.title.toLowerCase().includes(normalizedQuery) ||
-        project.shortDescription.toLowerCase().includes(normalizedQuery)
-      );
-    });
-
-    return filtered.sort((left, right) => {
-      switch (sortBy) {
-        case "oldest":
-          return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-        case "mostLiked":
-          return right.likeCount - left.likeCount;
-        case "mostViewed":
-          return right.viewCount - left.viewCount;
-        case "priceAsc": {
-          const leftPrice = toNumberPrice(left.price);
-          const rightPrice = toNumberPrice(right.price);
-          if (leftPrice === null && rightPrice === null) {
-            return 0;
-          }
-          if (leftPrice === null) {
-            return 1;
-          }
-          if (rightPrice === null) {
-            return -1;
-          }
-          return leftPrice - rightPrice;
-        }
-        case "priceDesc": {
-          const leftPrice = toNumberPrice(left.price);
-          const rightPrice = toNumberPrice(right.price);
-          if (leftPrice === null && rightPrice === null) {
-            return 0;
-          }
-          if (leftPrice === null) {
-            return 1;
-          }
-          if (rightPrice === null) {
-            return -1;
-          }
-          return rightPrice - leftPrice;
-        }
-        case "newest":
-        default:
-          return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-      }
-    });
-  }, [categoryFilter, pricingFilter, projects, query, sortBy]);
+  const visibleProjects = useMemo(() => projects, [projects]);
 
   const hasActiveFilters = Boolean(query.trim()) || categoryFilter !== ALL_FILTER || pricingFilter !== ALL_FILTER;
   const totalLikes = useMemo(
@@ -169,7 +183,29 @@ export default function ProjectsPage() {
     setCategoryFilter(ALL_FILTER);
     setPricingFilter(ALL_FILTER);
     setSortBy("newest");
+    updatePageInUrl(1);
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentPage]);
+
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 1) {
+      return [] as number[];
+    }
+
+    const windowSize = 5;
+    const start = Math.max(1, currentPage - Math.floor(windowSize / 2));
+    const end = Math.min(totalPages, start + windowSize - 1);
+    const adjustedStart = Math.max(1, end - windowSize + 1);
+
+    return Array.from({ length: end - adjustedStart + 1 }, (_, index) => adjustedStart + index);
+  }, [currentPage, totalPages]);
 
   if (loading) {
     return (
@@ -214,7 +250,7 @@ export default function ProjectsPage() {
           <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>
         ) : null}
 
-        {!loading && !error && projects.length === 0 ? (
+        {!loading && !error && hasLoadedFirstPage && projects.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-slate-300 bg-white p-5 text-sm text-slate-700">
             No published projects yet. If you just created one, publish it first or open it from the success redirect link.
           </div>
@@ -230,7 +266,10 @@ export default function ProjectsPage() {
                   Search
                   <input
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      updatePageInUrl(1);
+                    }}
                     placeholder="Title or description"
                     className="mt-1 block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900"
                   />
@@ -240,9 +279,10 @@ export default function ProjectsPage() {
                   Category
                   <select
                     value={categoryFilter}
-                    onChange={(event) =>
-                      setCategoryFilter(event.target.value as ProjectListItem["category"] | typeof ALL_FILTER)
-                    }
+                    onChange={(event) => {
+                      setCategoryFilter(event.target.value as ProjectListItem["category"] | typeof ALL_FILTER);
+                      updatePageInUrl(1);
+                    }}
                     className="mt-1 block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900"
                   >
                     <option value={ALL_FILTER}>All Categories</option>
@@ -258,9 +298,10 @@ export default function ProjectsPage() {
                   Pricing
                   <select
                     value={pricingFilter}
-                    onChange={(event) =>
-                      setPricingFilter(event.target.value as ProjectListItem["pricingType"] | typeof ALL_FILTER)
-                    }
+                    onChange={(event) => {
+                      setPricingFilter(event.target.value as ProjectListItem["pricingType"] | typeof ALL_FILTER);
+                      updatePageInUrl(1);
+                    }}
                     className="mt-1 block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900"
                   >
                     <option value={ALL_FILTER}>All Pricing</option>
@@ -275,7 +316,10 @@ export default function ProjectsPage() {
                   Sort By
                   <select
                     value={sortBy}
-                    onChange={(event) => setSortBy(event.target.value as SortOption)}
+                    onChange={(event) => {
+                      setSortBy(event.target.value as SortOption);
+                      updatePageInUrl(1);
+                    }}
                     className="mt-1 block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900"
                   >
                     <option value="newest">Newest First</option>
@@ -310,6 +354,20 @@ export default function ProjectsPage() {
                   key={project.id}
                   className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition hover:border-slate-300 hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)]"
                 >
+                  {project.thumbnailUrl || project.backgroundUrl ? (
+                    <Link href={`/projects/${project.slug}`} className="mb-3 block overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                      <div className="relative aspect-video w-full">
+                        <Image
+                          src={project.thumbnailUrl ?? project.backgroundUrl ?? ""}
+                          alt={`${project.title} preview`}
+                          fill
+                          unoptimized
+                          className="object-cover transition duration-300 group-hover:scale-[1.02]"
+                        />
+                      </div>
+                    </Link>
+                  ) : null}
+
                   <div className="mb-3 flex items-center justify-between gap-2 text-[11px]">
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium uppercase tracking-wide text-slate-600">
                       {formatCategoryLabel(project.category)}
@@ -340,6 +398,45 @@ export default function ProjectsPage() {
                   </div>
                 </article>
               ))}
+
+              {visibleProjects.length > 0 && totalPages > 1 ? (
+                <div className="flex justify-center pt-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => updatePageInUrl(Math.max(1, currentPage - 1))}
+                      className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+
+                    {pageNumbers.map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => updatePageInUrl(pageNumber)}
+                        className={`h-9 min-w-9 rounded-lg border px-3 text-xs font-semibold transition ${
+                          currentPage === pageNumber
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-300 bg-white text-slate-700 hover:border-slate-500 hover:text-slate-900"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => updatePageInUrl(Math.min(totalPages, currentPage + 1))}
+                      className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.05)] lg:sticky lg:top-24 lg:h-fit">
@@ -352,7 +449,7 @@ export default function ProjectsPage() {
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">Total</p>
-                  <p className="text-sm font-semibold text-slate-900">{projects.length}</p>
+                  <p className="text-sm font-semibold text-slate-900">{totalItems || projects.length}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">Likes</p>
@@ -371,7 +468,10 @@ export default function ProjectsPage() {
                     <button
                       key={category}
                       type="button"
-                      onClick={() => setCategoryFilter(category)}
+                      onClick={() => {
+                        setCategoryFilter(category);
+                        updatePageInUrl(1);
+                      }}
                       className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs text-slate-700 transition hover:border-slate-400"
                     >
                       <span>{formatCategoryLabel(category)}</span>

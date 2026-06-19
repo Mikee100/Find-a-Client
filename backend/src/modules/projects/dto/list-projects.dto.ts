@@ -26,7 +26,7 @@ export class ListProjectsDto {
 
   @IsOptional()
   @IsString({ message: "Sort value must be a string." })
-  sortBy?: "newest" | "popular" | "price_asc" | "price_desc";
+  sortBy?: "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc";
 
   @IsOptional()
   @IsNumberString({}, { message: "Min price must be numeric." })
@@ -39,6 +39,10 @@ export class ListProjectsDto {
   @IsOptional()
   @IsString({ message: "Cursor must be a string." })
   cursor?: string;
+
+  @IsOptional()
+  @IsNumberString({}, { message: "Page must be numeric." })
+  page?: string;
 
   @IsOptional()
   @IsNumberString({}, { message: "Limit must be numeric." })
