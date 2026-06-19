@@ -19,7 +19,7 @@ describe("AuthService", () => {
     const config = {
       getOrThrow: jest.fn((key: string) => {
         const map: Record<string, string> = {
-          REDIS_URL: "redis://localhost:6379",
+          REDIS_URL: "",
           SUPABASE_URL: "http://localhost:54321",
           SUPABASE_ANON_KEY: "anon",
           SUPABASE_SERVICE_ROLE_KEY: "service",
