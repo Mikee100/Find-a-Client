@@ -153,7 +153,9 @@ function PremiumNavbar() {
         <div className="ml-auto flex items-center gap-2 text-sm text-[#64748B]">
           <button className="rounded-lg px-3 py-2 font-medium text-[#111827] hover:bg-[#F8FAFA]">Discover</button>
           <button className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">Saved</button>
-          <button className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">Messages</button>
+          <Link href="/client/messages" className="rounded-lg px-3 py-2 font-medium hover:bg-[#F8FAFA]">
+            Messages
+          </Link>
           <button className="relative rounded-lg p-2 hover:bg-[#F8FAFA]" aria-label="Notifications">
             <Bell className="h-4 w-4" aria-hidden />
           </button>

@@ -818,6 +818,17 @@ export async function getMessageThreads(): Promise<ThreadSummary[]> {
   return requestJson<ThreadSummary[]>("GET", "/messages/threads");
 }
 
+export async function getMessageQuickReplies(threadId?: string): Promise<string[]> {
+  const searchParams = new URLSearchParams();
+  if (threadId) {
+    searchParams.set("threadId", threadId);
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString ? `/messages/quick-replies?${queryString}` : "/messages/quick-replies";
+  return requestJson<string[]>("GET", path);
+}
+
 export async function createMessageThread(payload: CreateThreadPayload): Promise<CreatedThread> {
   return requestJson<CreatedThread, CreateThreadPayload>("POST", "/messages/threads", { body: payload });
 }

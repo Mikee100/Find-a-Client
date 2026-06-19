@@ -34,9 +34,19 @@ export class MessagesService {
   async createThread(userId: string, dto: CreateThreadDto) {
     const participantAId = [userId, dto.recipientId].sort()[0] as string;
     const participantBId = [userId, dto.recipientId].sort()[1] as string;
-
-    const existing = await this.prisma.thread.findFirst({ where: { participantAId, participantBId, projectId: dto.projectId } });
+    const existing = await this.prisma.thread.findFirst({
+      where: { participantAId, participantBId },
+      orderBy: { updatedAt: "desc" }
+    });
     if (existing) {
+      if (dto.initialMessage) {
+        await this.sendMessage(userId, existing.id, { content: dto.initialMessage });
+      }
+
+      if (!existing.projectId && dto.projectId) {
+        return this.prisma.thread.update({ where: { id: existing.id }, data: { projectId: dto.projectId } });
+      }
+
       return existing;
     }
 
@@ -93,7 +103,7 @@ export class MessagesService {
       orderBy: { updatedAt: "desc" }
     });
 
-    return Promise.all(
+    const unreadByThread = await Promise.all(
       threads.map(async (thread) => {
         const unreadCount = await this.prisma.message.count({
           where: {
@@ -102,9 +112,65 @@ export class MessagesService {
             senderId: { not: userId }
           }
         });
-        return { ...thread, unreadCount };
+
+        return {
+          thread,
+          unreadCount,
+          partnerId: thread.participantAId === userId ? thread.participantBId : thread.participantAId
+        };
       })
     );
+
+    const consolidated = new Map<string, { thread: (typeof unreadByThread)[number]["thread"]; unreadCount: number }>();
+
+    for (const item of unreadByThread) {
+      const current = consolidated.get(item.partnerId);
+      const itemTimestamp = new Date(item.thread.messages[0]?.createdAt ?? item.thread.updatedAt).getTime();
+
+      if (!current) {
+        consolidated.set(item.partnerId, { thread: item.thread, unreadCount: item.unreadCount });
+        continue;
+      }
+
+      const currentTimestamp = new Date(current.thread.messages[0]?.createdAt ?? current.thread.updatedAt).getTime();
+      const nextUnread = current.unreadCount + item.unreadCount;
+
+      if (itemTimestamp > currentTimestamp) {
+        consolidated.set(item.partnerId, { thread: item.thread, unreadCount: nextUnread });
+      } else {
+        consolidated.set(item.partnerId, { thread: current.thread, unreadCount: nextUnread });
+      }
+    }
+
+    return [...consolidated.values()]
+      .map(({ thread, unreadCount }) => ({ ...thread, unreadCount }))
+      .sort((left, right) => {
+        const leftTs = new Date(left.messages[0]?.createdAt ?? left.updatedAt).getTime();
+        const rightTs = new Date(right.messages[0]?.createdAt ?? right.updatedAt).getTime();
+        return rightTs - leftTs;
+      });
+  }
+
+  /**
+   * Returns lightweight quick-reply templates for active conversation.
+   */
+  async getQuickReplies(userId: string, threadId?: string) {
+    if (threadId) {
+      await this.assertThreadParticipant(userId, threadId);
+    }
+
+    const templates = [
+      "Thanks for reaching out. I can take this on and share a delivery plan today.",
+      "Could you share your target timeline, budget range, and key requirements?",
+      "I reviewed your request and can propose a phased MVP approach to reduce risk.",
+      "I am available this week. Would you like to schedule a quick kickoff call?",
+      "I can send a detailed scope, milestone breakdown, and estimate in our next message."
+    ];
+
+    return {
+      success: true,
+      data: templates
+    };
   }
 
   /**
@@ -145,6 +211,7 @@ export class MessagesService {
     });
 
     const recipientId = thread.participantAId === userId ? thread.participantBId : thread.participantAId;
+
     try {
       await this.notificationsService.dispatch(recipientId, NOTIFICATION_TYPE.NEW_MESSAGE, {
         threadId,
