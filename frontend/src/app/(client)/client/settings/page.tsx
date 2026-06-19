@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import ClientDashboardNavbar from "@/features/client/client-dashboard-navbar";
 import {
@@ -111,7 +112,15 @@ export default function ClientSettingsPage() {
               <h1 className="text-2xl font-semibold text-neutral-900">Client Settings</h1>
               <p className="mt-1 text-sm text-neutral-600">Manage your account details used across your hiring workspace.</p>
             </div>
-            <BackButton fallbackHref="/client/feed" label="Back to feed" />
+            <div className="flex items-center gap-2">
+              <Link
+                href="/account/change-password"
+                className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+              >
+                Change password
+              </Link>
+              <BackButton fallbackHref="/client/feed" label="Back to feed" />
+            </div>
           </div>
 
           <div className="mb-5 flex items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3">

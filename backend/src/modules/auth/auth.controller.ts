@@ -6,8 +6,14 @@ import { CurrentUser, CurrentUserPayload } from "src/common/decorators/current-u
 import { Throttle } from "@nestjs/throttler";
 import { Public } from "src/common/decorators/public.decorator";
 import { AuthService } from "src/modules/auth/auth.service";
+import { ChangePasswordDto } from "src/modules/auth/dto/change-password.dto";
+import { ForgotPasswordDto } from "src/modules/auth/dto/forgot-password.dto";
 import { LoginDto } from "src/modules/auth/dto/login.dto";
+import { ResendVerificationDto } from "src/modules/auth/dto/resend-verification.dto";
 import { RegisterDto } from "src/modules/auth/dto/register.dto";
+import { ResetPasswordDto } from "src/modules/auth/dto/reset-password.dto";
+import { VerifyEmailDto } from "src/modules/auth/dto/verify-email.dto";
+import { VerifyEmailStatusDto } from "src/modules/auth/dto/verify-email-status.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -106,8 +112,8 @@ export class AuthController {
       userAgent: this.readUserAgent(request),
       identifier: dto.email
     });
-    this.applyAuthCookies(response, result.accessToken, result.refreshToken);
-    return { userId: result.userId, role: result.role };
+    this.clearAuthCookies(response);
+    return result;
   }
 
   @Public()
@@ -122,6 +128,79 @@ export class AuthController {
     this.applyAuthCookies(response, tokenPair.accessToken, tokenPair.refreshToken);
     const role = this.authService.getRoleFromAccessToken(tokenPair.accessToken);
     return { role };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post("verify-email")
+  async verifyEmail(@Body() dto: VerifyEmailDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const result = await this.authService.verifyEmail(dto, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request)
+    });
+    this.applyAuthCookies(response, result.accessToken, result.refreshToken);
+    return { verified: true as const, role: result.role };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 40, ttl: 60_000 } })
+  @Post("verify-email/status")
+  async verifyEmailStatus(@Body() dto: VerifyEmailStatusDto, @Req() request: Request) {
+    return this.authService.verifyEmailStatus(dto.token, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request),
+      identifier: dto.token.slice(0, 12)
+    });
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  @Post("resend-verification")
+  async resendVerification(@Body() dto: ResendVerificationDto, @Req() request: Request) {
+    return this.authService.resendVerification(dto.email, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request),
+      identifier: dto.email
+    });
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  @Post("forgot-password")
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() request: Request) {
+    return this.authService.forgotPassword(dto, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request),
+      identifier: dto.email
+    });
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post("reset-password")
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const result = await this.authService.resetPassword(dto, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request)
+    });
+    this.applyAuthCookies(response, result.accessToken, result.refreshToken);
+    return { reset: true as const, role: result.role };
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post("change-password")
+  async changePassword(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: ChangePasswordDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ) {
+    const result = await this.authService.changePassword(user.sub, dto, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request)
+    });
+    this.applyAuthCookies(response, result.accessToken, result.refreshToken);
+    return { changed: true as const, role: result.role };
   }
 
   @Public()

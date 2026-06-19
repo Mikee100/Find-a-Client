@@ -1,16 +1,22 @@
 import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import type { Prisma } from "@prisma/client";
-import { createHash } from "crypto";
+import type { AuthActionTokenType, Prisma, User } from "@prisma/client";
+import { createHash, randomBytes, randomUUID } from "crypto";
+import * as RedisModule from "ioredis";
 import { WebSocket } from "ws";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
+import { NotificationsService } from "src/modules/notifications/notifications.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { toSlug } from "src/common/utils/slug.util";
+import { ChangePasswordDto } from "src/modules/auth/dto/change-password.dto";
+import { ForgotPasswordDto } from "src/modules/auth/dto/forgot-password.dto";
 import { LoginDto } from "src/modules/auth/dto/login.dto";
 import { RefreshTokenDto } from "src/modules/auth/dto/refresh-token.dto";
 import { RegisterDto } from "src/modules/auth/dto/register.dto";
+import { ResetPasswordDto } from "src/modules/auth/dto/reset-password.dto";
+import { VerifyEmailDto } from "src/modules/auth/dto/verify-email.dto";
 
 const wsTransport = WebSocket as unknown as never;
 
@@ -25,16 +31,28 @@ export interface AuthRequestContext {
   identifier?: string;
 }
 
+const AUTH_ACTION_TOKEN_TYPE = {
+  EMAIL_VERIFICATION: "EMAIL_VERIFICATION",
+  PASSWORD_RESET: "PASSWORD_RESET"
+} as const;
+
+type AuthActionTokenTypeValue = (typeof AUTH_ACTION_TOKEN_TYPE)[keyof typeof AUTH_ACTION_TOKEN_TYPE];
+
 @Injectable()
 export class AuthService {
   private readonly authRateLimitStore = new Map<string, { count: number; resetAt: number }>();
+  private readonly redisRateLimitClient?: {
+    incr: (key: string) => Promise<number>;
+    pexpire: (key: string, ttl: number) => Promise<number>;
+  };
   private readonly supabaseAnon: SupabaseClient;
   private readonly supabaseAdmin: SupabaseClient;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly notificationsService: NotificationsService
   ) {
     this.supabaseAnon = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
@@ -46,6 +64,22 @@ export class AuthService {
       this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY"),
       { realtime: { transport: wsTransport } }
     );
+
+    const redisUrl = this.configService.get<string>("REDIS_URL", "").trim();
+    if (redisUrl) {
+      const redisCtor = (RedisModule as unknown as { default?: new (...args: unknown[]) => unknown; Redis?: new (...args: unknown[]) => unknown }).default
+        ?? (RedisModule as unknown as { Redis?: new (...args: unknown[]) => unknown }).Redis;
+      if (redisCtor) {
+        this.redisRateLimitClient = new (redisCtor as new (url: string, options: Record<string, unknown>) => {
+          incr: (key: string) => Promise<number>;
+          pexpire: (key: string, ttl: number) => Promise<number>;
+        })(redisUrl, {
+          maxRetriesPerRequest: 1,
+          enableOfflineQueue: false,
+          lazyConnect: false
+        });
+      }
+    }
   }
 
   getRoleFromAccessToken(accessToken: string): UserRole {
@@ -60,29 +94,37 @@ export class AuthService {
   }
 
   /**
-   * Registers a new user in Supabase Auth and local profile store.
+   * Registers a new user and sends an email verification link.
    */
-  async register(dto: RegisterDto, context: AuthRequestContext = {}): Promise<{ userId: string; role: UserRole } & TokenPair> {
+  async register(dto: RegisterDto, context: AuthRequestContext = {}): Promise<{ userId: string; role: UserRole; verificationRequired: true }> {
     this.assertSupabaseConfigured();
-    this.assertRateLimit("register", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 10, 60_000);
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const normalizedUsername = toSlug(dto.username);
 
-    const username = toSlug(dto.username);
-    const existing = await this.prisma.user.findFirst({ where: { OR: [{ email: dto.email }, { username }] } });
+    if (!normalizedUsername) {
+      throw new HttpException("Username is invalid. Use letters, numbers, and hyphens.", HttpStatus.BAD_REQUEST);
+    }
+
+    await this.assertRateLimit("register", `${context.ipAddress ?? "unknown"}:${normalizedEmail}`, 10, 60_000);
+    this.assertStrongPassword(dto.password, "Password");
+
+    const existing = await this.prisma.user.findFirst({ where: { OR: [{ email: normalizedEmail }, { username: normalizedUsername }] } });
     if (existing) {
-      await this.logAuthEvent("register_conflict", false, context, { email: dto.email });
-      throw new HttpException("Email or username already exists", HttpStatus.CONFLICT);
+      const isEmailConflict = existing.email.toLowerCase() === normalizedEmail;
+      await this.logAuthEvent("register_conflict", false, context, { email: normalizedEmail });
+      throw new HttpException(isEmailConflict ? "Email already exists" : "Username already exists", HttpStatus.CONFLICT);
     }
 
     let data: Awaited<ReturnType<typeof this.supabaseAdmin.auth.admin.createUser>>["data"];
     let error: Awaited<ReturnType<typeof this.supabaseAdmin.auth.admin.createUser>>["error"];
     try {
       const response = await this.supabaseAdmin.auth.admin.createUser({
-        email: dto.email,
+        email: normalizedEmail,
         password: dto.password,
         email_confirm: true,
         user_metadata: {
           fullName: dto.fullName,
-          username,
+          username: normalizedUsername,
           role: dto.role
         }
       });
@@ -94,7 +136,7 @@ export class AuthService {
 
     if (error || !data.user) {
       await this.logAuthEvent("register_failed", false, context, {
-        email: dto.email,
+        email: normalizedEmail,
         metadata: { reason: this.mapSupabaseMessage(error?.message) ?? "Registration failed" }
       });
       throw new HttpException(this.mapSupabaseMessage(error?.message) ?? "Registration failed", HttpStatus.BAD_REQUEST);
@@ -103,17 +145,18 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         id: data.user.id,
-        email: dto.email,
-        username,
+        email: normalizedEmail,
+        username: normalizedUsername,
         fullName: dto.fullName,
         role: dto.role,
+        isVerified: false,
         skills: []
       }
     });
 
-    const tokenPair = await this.issueTokens(user.id, user.email, user.role);
+    await this.sendVerificationEmail(user, context);
     await this.logAuthEvent("register_success", true, context, { userId: user.id, email: user.email });
-    return { userId: user.id, role: user.role, ...tokenPair };
+    return { userId: user.id, role: user.role, verificationRequired: true };
   }
 
   /**
@@ -121,7 +164,7 @@ export class AuthService {
    */
   async login(dto: LoginDto, context: AuthRequestContext = {}): Promise<TokenPair> {
     this.assertSupabaseConfigured();
-    this.assertRateLimit("login", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 8, 60_000);
+    await this.assertRateLimit("login", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 8, 60_000);
 
     let data: Awaited<ReturnType<typeof this.supabaseAnon.auth.signInWithPassword>>["data"];
     let error: Awaited<ReturnType<typeof this.supabaseAnon.auth.signInWithPassword>>["error"];
@@ -153,16 +196,159 @@ export class AuthService {
       throw new HttpException("User profile not found", HttpStatus.NOT_FOUND);
     }
 
+    if (!user.isVerified) {
+      await this.logAuthEvent("login_blocked_unverified", false, context, {
+        userId: user.id,
+        email: user.email,
+        metadata: { reason: "Email verification required" }
+      });
+      throw new HttpException("Please verify your email before logging in.", HttpStatus.FORBIDDEN);
+    }
+
     const tokenPair = await this.issueTokens(user.id, user.email, user.role);
     await this.logAuthEvent("login_success", true, context, { userId: user.id, email: user.email });
     return tokenPair;
   }
 
   /**
+   * Verifies account using one-time token and signs user in.
+   */
+  async verifyEmail(dto: VerifyEmailDto, context: AuthRequestContext = {}): Promise<{ role: UserRole } & TokenPair> {
+    await this.assertRateLimit("verify_email", context.ipAddress ?? "unknown", 20, 60_000);
+
+    const user = await this.consumeAuthActionToken(dto.token, AUTH_ACTION_TOKEN_TYPE.EMAIL_VERIFICATION);
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { isVerified: true }
+    });
+
+    const tokenPair = await this.issueTokens(updatedUser.id, updatedUser.email, updatedUser.role);
+    await this.logAuthEvent("verify_email_success", true, context, {
+      userId: updatedUser.id,
+      email: updatedUser.email
+    });
+
+    return { role: updatedUser.role, ...tokenPair };
+  }
+
+  /**
+   * Resends verification link to unverified users.
+   */
+  async resendVerification(email: string, context: AuthRequestContext = {}): Promise<{ sent: true }> {
+    this.assertSupabaseConfigured();
+    await this.assertRateLimit("resend_verification", `${context.ipAddress ?? "unknown"}:${email.toLowerCase()}`, 6, 60_000);
+
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user || user.isVerified) {
+      return { sent: true };
+    }
+
+    await this.sendVerificationEmail(user, context);
+    await this.logAuthEvent("verify_email_resent", true, context, { userId: user.id, email: user.email });
+    return { sent: true };
+  }
+
+  /**
+   * Starts forgot-password flow by sending a reset link.
+   */
+  async forgotPassword(dto: ForgotPasswordDto, context: AuthRequestContext = {}): Promise<{ sent: true }> {
+    this.assertSupabaseConfigured();
+    await this.assertRateLimit("forgot_password", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 6, 60_000);
+
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
+    if (!user) {
+      return { sent: true };
+    }
+
+    const rawToken = await this.createAuthActionToken(user.id, AUTH_ACTION_TOKEN_TYPE.PASSWORD_RESET, this.getPasswordResetTtlSeconds());
+    const resetUrl = this.buildActionUrl(this.configService.get<string>("AUTH_RESET_PASSWORD_PATH", "/reset-password"), rawToken);
+
+    await this.notificationsService.sendPasswordResetEmail(user.email, user.fullName, resetUrl);
+    await this.logAuthEvent("forgot_password_sent", true, context, { userId: user.id, email: user.email });
+    return { sent: true };
+  }
+
+  /**
+   * Completes forgot-password flow and signs user in.
+   */
+  async resetPassword(dto: ResetPasswordDto, context: AuthRequestContext = {}): Promise<{ role: UserRole } & TokenPair> {
+    this.assertSupabaseConfigured();
+    await this.assertRateLimit("reset_password", context.ipAddress ?? "unknown", 12, 60_000);
+    this.assertStrongPassword(dto.newPassword, "New password");
+
+    const user = await this.consumeAuthActionToken(dto.token, AUTH_ACTION_TOKEN_TYPE.PASSWORD_RESET);
+
+    if (!user.isVerified) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { isVerified: true }
+      });
+    }
+
+    const { error } = await this.supabaseAdmin.auth.admin.updateUserById(user.id, {
+      password: dto.newPassword
+    });
+    if (error) {
+      throw new HttpException(this.mapSupabaseMessage(error.message) ?? "Unable to reset password", HttpStatus.BAD_REQUEST);
+    }
+
+    await this.revokeRefreshSessions(user.id);
+    const tokenPair = await this.issueTokens(user.id, user.email, user.role);
+    await this.logAuthEvent("reset_password_success", true, context, { userId: user.id, email: user.email });
+    return { role: user.role, ...tokenPair };
+  }
+
+  /**
+   * Updates password for an authenticated user.
+   */
+  async changePassword(userId: string, dto: ChangePasswordDto, context: AuthRequestContext = {}): Promise<{ role: UserRole } & TokenPair> {
+    this.assertSupabaseConfigured();
+    await this.assertRateLimit("change_password", userId, 12, 60_000);
+
+    if (dto.currentPassword === dto.newPassword) {
+      throw new HttpException("New password must be different from current password.", HttpStatus.BAD_REQUEST);
+    }
+    this.assertStrongPassword(dto.newPassword, "New password");
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new HttpException("User not found", HttpStatus.NOT_FOUND);
+    }
+
+    const signIn = await this.supabaseAnon.auth.signInWithPassword({
+      email: user.email,
+      password: dto.currentPassword
+    });
+
+    if (signIn.error || !signIn.data.user) {
+      await this.logAuthEvent("change_password_failed", false, context, {
+        userId,
+        email: user.email,
+        metadata: { reason: "Current password did not match" }
+      });
+      throw new HttpException("Current password is incorrect", HttpStatus.UNAUTHORIZED);
+    }
+
+    const update = await this.supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: dto.newPassword
+    });
+
+    if (update.error) {
+      throw new HttpException(this.mapSupabaseMessage(update.error.message) ?? "Unable to change password", HttpStatus.BAD_REQUEST);
+    }
+
+    await this.revokeRefreshSessions(userId);
+    const tokenPair = await this.issueTokens(user.id, user.email, user.role);
+    await this.logAuthEvent("change_password_success", true, context, { userId: user.id, email: user.email });
+    return { role: user.role, ...tokenPair };
+  }
+
+  /**
    * Rotates refresh token and issues new pair.
    */
   async refresh(dto: RefreshTokenDto, context: AuthRequestContext = {}): Promise<TokenPair> {
-    this.assertRateLimit("refresh", context.ipAddress ?? "unknown", 30, 60_000);
+    await this.assertRateLimit("refresh", context.ipAddress ?? "unknown", 30, 60_000);
 
     let payload: { sub: string };
     try {
@@ -247,15 +433,7 @@ export class AuthService {
    */
   async logoutAll(userId: string, context: AuthRequestContext = {}): Promise<{ loggedOutAll: true }> {
     try {
-      await this.prisma.refreshSession.updateMany({
-        where: {
-          userId,
-          revokedAt: null
-        },
-        data: {
-          revokedAt: new Date()
-        }
-      });
+      await this.revokeRefreshSessions(userId);
       await this.logAuthEvent("logout_all_success", true, context, { userId });
     } catch (error) {
       if (error instanceof HttpException) {
@@ -277,6 +455,17 @@ export class AuthService {
       `${this.configService.getOrThrow<string>("FRONTEND_URL")}/auth/callback`
     )}`;
     return { url };
+  }
+
+  async verifyEmailStatus(token: string, context: AuthRequestContext = {}): Promise<{ valid: boolean; expiresAt: string | null }> {
+    await this.assertRateLimit("verify_email_status", `${context.ipAddress ?? "unknown"}:${context.identifier ?? "unknown"}`, 40, 60_000);
+    const tokenHash = this.hashToken(token);
+    const tokenRecord = await this.findActiveAuthActionTokenRecord(tokenHash, AUTH_ACTION_TOKEN_TYPE.EMAIL_VERIFICATION);
+
+    return {
+      valid: Boolean(tokenRecord),
+      expiresAt: tokenRecord ? tokenRecord.expiresAt.toISOString() : null
+    };
   }
 
   private assertSupabaseConfigured(): void {
@@ -319,6 +508,173 @@ export class AuthService {
     const message = caughtError instanceof Error ? caughtError.message : "Supabase request failed";
     const mapped = this.mapSupabaseMessage(message) ?? "Supabase request failed";
     throw new HttpException(mapped, HttpStatus.BAD_GATEWAY);
+  }
+
+  private async sendVerificationEmail(user: User, context: AuthRequestContext): Promise<void> {
+    const rawToken = await this.createAuthActionToken(
+      user.id,
+      AUTH_ACTION_TOKEN_TYPE.EMAIL_VERIFICATION,
+      this.getVerificationTtlSeconds()
+    );
+    const verifyUrl = this.buildActionUrl(this.configService.get<string>("AUTH_VERIFY_EMAIL_PATH", "/verify-email"), rawToken);
+    await this.notificationsService.sendAccountVerificationEmail(user.email, user.fullName, verifyUrl);
+    await this.logAuthEvent("verify_email_sent", true, context, { userId: user.id, email: user.email });
+  }
+
+  private buildActionUrl(path: string, token: string): string {
+    const frontendUrl = this.configService.get<string>("FRONTEND_URL", "http://localhost:3000").replace(/\/+$/, "");
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    return `${frontendUrl}${normalizedPath}?token=${encodeURIComponent(token)}`;
+  }
+
+  private getVerificationTtlSeconds(): number {
+    return this.parseTtlToSeconds(this.configService.get<string>("AUTH_VERIFY_TOKEN_TTL", "24h"));
+  }
+
+  private getPasswordResetTtlSeconds(): number {
+    return this.parseTtlToSeconds(this.configService.get<string>("AUTH_RESET_TOKEN_TTL", "30m"));
+  }
+
+  private async createAuthActionToken(
+    userId: string,
+    tokenType: AuthActionTokenTypeValue,
+    ttlSeconds: number
+  ): Promise<string> {
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = this.hashToken(rawToken);
+
+    const authActionToken = this.getAuthActionTokenDelegate();
+
+    try {
+      if (authActionToken) {
+        await authActionToken.deleteMany({
+          where: {
+            userId,
+            tokenType,
+            consumedAt: null
+          }
+        });
+
+        await authActionToken.create({
+          data: {
+            userId,
+            tokenType: tokenType as AuthActionTokenType,
+            tokenHash,
+            expiresAt: new Date(Date.now() + ttlSeconds * 1000)
+          }
+        });
+      } else {
+        const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+        await this.prisma.$executeRawUnsafe(
+          'DELETE FROM "AuthActionToken" WHERE "userId" = $1::uuid AND "tokenType" = $2::"AuthActionTokenType" AND "consumedAt" IS NULL',
+          userId,
+          tokenType
+        );
+        await this.prisma.$executeRawUnsafe(
+          'INSERT INTO "AuthActionToken" ("id", "userId", "tokenType", "tokenHash", "expiresAt", "createdAt") VALUES ($1::uuid, $2::uuid, $3::"AuthActionTokenType", $4, $5, NOW())',
+          randomUUID(),
+          userId,
+          tokenType,
+          tokenHash,
+          expiresAt
+        );
+      }
+    } catch (error) {
+      this.throwAuthStorageError(error);
+    }
+
+    return rawToken;
+  }
+
+  private async consumeAuthActionToken(rawToken: string, tokenType: AuthActionTokenTypeValue): Promise<User> {
+    const tokenHash = this.hashToken(rawToken);
+    const authActionToken = this.getAuthActionTokenDelegate();
+    const tokenRecord = await this.findActiveAuthActionTokenRecord(tokenHash, tokenType);
+
+    if (!tokenRecord) {
+      throw new HttpException("Token is invalid or expired", HttpStatus.BAD_REQUEST);
+    }
+
+    let user: User | null = null;
+    try {
+      if (authActionToken) {
+        const [, resolvedUser] = await this.prisma.$transaction([
+          authActionToken.update({
+            where: { id: tokenRecord.id },
+            data: { consumedAt: new Date() }
+          }),
+          this.prisma.user.findUnique({ where: { id: tokenRecord.userId } })
+        ]);
+        user = resolvedUser;
+      } else {
+        await this.prisma.$executeRawUnsafe(
+          'UPDATE "AuthActionToken" SET "consumedAt" = NOW() WHERE "id" = $1::uuid AND "consumedAt" IS NULL',
+          tokenRecord.id
+        );
+        user = await this.prisma.user.findUnique({ where: { id: tokenRecord.userId } });
+      }
+    } catch (error) {
+      this.throwAuthStorageError(error);
+    }
+
+    if (!user) {
+      throw new HttpException("User not found", HttpStatus.NOT_FOUND);
+    }
+
+    return user;
+  }
+
+  private getAuthActionTokenDelegate(): PrismaService["authActionToken"] | null {
+    const delegate = (this.prisma as PrismaService & { authActionToken?: PrismaService["authActionToken"] }).authActionToken;
+    return delegate ?? null;
+  }
+
+  private async findActiveAuthActionTokenRecord(
+    tokenHash: string,
+    tokenType: AuthActionTokenTypeValue
+  ): Promise<{ id: string; userId: string; expiresAt: Date } | null> {
+    const authActionToken = this.getAuthActionTokenDelegate();
+
+    try {
+      if (authActionToken) {
+        const record = await authActionToken.findFirst({
+          where: {
+            tokenHash,
+            tokenType: tokenType as AuthActionTokenType,
+            consumedAt: null,
+            expiresAt: { gt: new Date() }
+          },
+          select: {
+            id: true,
+            userId: true,
+            expiresAt: true
+          }
+        });
+
+        return record;
+      }
+
+      const rows = await this.prisma.$queryRawUnsafe<Array<{ id: string; userId: string; expiresAt: Date }>>(
+        'SELECT "id", "userId", "expiresAt" FROM "AuthActionToken" WHERE "tokenHash" = $1 AND "tokenType" = $2::"AuthActionTokenType" AND "consumedAt" IS NULL AND "expiresAt" > NOW() ORDER BY "createdAt" DESC LIMIT 1',
+        tokenHash,
+        tokenType
+      );
+      return rows[0] ?? null;
+    } catch (error) {
+      this.throwAuthStorageError(error);
+    }
+  }
+
+  private async revokeRefreshSessions(userId: string): Promise<void> {
+    await this.prisma.refreshSession.updateMany({
+      where: {
+        userId,
+        revokedAt: null
+      },
+      data: {
+        revokedAt: new Date()
+      }
+    });
   }
 
   private async issueTokens(userId: string, email: string, role: UserRole): Promise<TokenPair> {
@@ -366,7 +722,30 @@ export class AuthService {
     return createHash("sha256").update(token).digest("hex");
   }
 
-  private assertRateLimit(scope: string, key: string, limit: number, ttlMs: number): void {
+  private async assertRateLimit(scope: string, key: string, limit: number, ttlMs: number): Promise<void> {
+    if (this.redisRateLimitClient) {
+      const now = Date.now();
+      const bucket = Math.floor(now / ttlMs);
+      const redisKey = `auth-rate-limit:${scope}:${key}:${bucket}`;
+
+      try {
+        const count = await this.redisRateLimitClient.incr(redisKey);
+        if (count === 1) {
+          await this.redisRateLimitClient.pexpire(redisKey, ttlMs);
+        }
+
+        if (count > limit) {
+          throw new HttpException("Too many authentication attempts. Please try again later.", HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        return;
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+      }
+    }
+
     const now = Date.now();
     const compound = `${scope}:${key}`;
     const existing = this.authRateLimitStore.get(compound);
@@ -382,6 +761,19 @@ export class AuthService {
 
     existing.count += 1;
     this.authRateLimitStore.set(compound, existing);
+  }
+
+  private assertStrongPassword(value: string, label: string): void {
+    if (value.length < 8) {
+      throw new HttpException(`${label} must be at least 8 characters.`, HttpStatus.BAD_REQUEST);
+    }
+
+    if (!/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/\d/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
+      throw new HttpException(
+        `${label} must include uppercase, lowercase, number, and special character.`,
+        HttpStatus.BAD_REQUEST
+      );
+    }
   }
 
   private async logAuthEvent(
@@ -408,6 +800,12 @@ export class AuthService {
   }
 
   private throwAuthStorageError(error: unknown): never {
+    const errorMessage = error instanceof Error ? error.message : "";
+
+    if (error instanceof HttpException) {
+      throw error;
+    }
+
     if (
       typeof error === "object" &&
       error !== null &&
@@ -417,6 +815,18 @@ export class AuthService {
     ) {
       throw new HttpException(
         "Authentication storage is not ready. Run backend database migrations before using auth endpoints.",
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
+
+    if (
+      errorMessage.includes("authActionToken") ||
+      errorMessage.includes("deleteMany") ||
+      errorMessage.includes("create is not a function") ||
+      errorMessage.includes("AuthActionToken")
+    ) {
+      throw new HttpException(
+        "Authentication storage is not ready. Run `npm run prisma:generate`, apply migrations, and restart the backend server.",
         HttpStatus.SERVICE_UNAVAILABLE
       );
     }

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Code2, Eye, EyeOff, Globe, Lock, Mail } from "lucide-react";
 
-import { AppRole, login } from "@/lib/api";
+import { AppRole, login, resendVerification } from "@/lib/api";
 import BrandLogo from "@/components/ui/brand-logo";
 
 function getRedirectPath(role: AppRole): string {
@@ -30,8 +30,11 @@ type FieldErrors = {
 export default function LoginPage() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [pendingResend, setPendingResend] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [attemptedEmail, setAttemptedEmail] = useState("");
   const [selectedRole, setSelectedRole] = useState<RoleChoice>(() => {
     if (typeof window === "undefined") {
       return "DEVELOPER";
@@ -55,10 +58,16 @@ export default function LoginPage() {
     [selectedRole],
   );
 
+  const requiresVerification = useMemo(
+    () => (generalError ?? "").toLowerCase().includes("verify your email"),
+    [generalError]
+  );
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setGeneralError(null);
+    setNotice(null);
     setFieldErrors({});
 
     const formData = new FormData(event.currentTarget);
@@ -84,6 +93,7 @@ export default function LoginPage() {
     }
 
     try {
+      setAttemptedEmail(email);
       const result = await login({ email, password });
       router.push(getRedirectPath(result.role));
     } catch (submitError) {
@@ -92,6 +102,27 @@ export default function LoginPage() {
       setGeneralError(message);
     } finally {
       setPending(false);
+    }
+  }
+
+  async function onResendVerification(): Promise<void> {
+    if (!attemptedEmail) {
+      setGeneralError("Enter your email and attempt login once, then resend verification.");
+      return;
+    }
+
+    setPendingResend(true);
+    setGeneralError(null);
+    setNotice(null);
+
+    try {
+      await resendVerification({ email: attemptedEmail });
+      setNotice("Verification email sent. Check your inbox and spam folder.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to resend verification email.";
+      setGeneralError(message);
+    } finally {
+      setPendingResend(false);
     }
   }
 
@@ -160,6 +191,36 @@ export default function LoginPage() {
               </p>
             ) : null}
 
+            {notice ? (
+              <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                {notice}
+              </p>
+            ) : null}
+
+            {requiresVerification ? (
+              <div className="mt-4 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm text-amber-800">Your account exists but email verification is still pending.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void onResendVerification();
+                    }}
+                    disabled={pendingResend}
+                    className="rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {pendingResend ? "Sending..." : "Resend verification"}
+                  </button>
+                  <Link
+                    href={attemptedEmail ? `/verify-email?email=${encodeURIComponent(attemptedEmail)}` : "/verify-email"}
+                    className="rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                  >
+                    Go to verify page
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
             <form onSubmit={onSubmit} className="mt-5 grid gap-4">
               <div className="grid gap-1.5">
                 <label
@@ -224,7 +285,7 @@ export default function LoginPage() {
 
               <div className="flex items-center justify-between text-sm">
                 <Link
-                  href="#"
+                  href="/forgot-password"
                   className="text-slate-500 transition hover:text-slate-700 hover:underline"
                 >
                   Forgot password

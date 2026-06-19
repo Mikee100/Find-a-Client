@@ -1,6 +1,7 @@
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { AuthService } from "src/modules/auth/auth.service";
+import { NotificationsService } from "src/modules/notifications/notifications.service";
 import { PrismaService } from "src/prisma/prisma.service";
 
 jest.mock("@supabase/supabase-js", () => ({
@@ -30,7 +31,11 @@ describe("AuthService", () => {
       get: jest.fn(() => "15m")
     } as unknown as ConfigService;
     const jwt = { signAsync: jest.fn() } as unknown as JwtService;
-    const service = new AuthService(prisma, config, jwt);
+    const notifications = {
+      sendAccountVerificationEmail: jest.fn(),
+      sendPasswordResetEmail: jest.fn()
+    } as unknown as NotificationsService;
+    const service = new AuthService(prisma, config, jwt, notifications);
     expect(service).toBeDefined();
   });
 });

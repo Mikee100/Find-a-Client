@@ -74,6 +74,20 @@ enum HireRequestStatus {
   CANCELLED
 }
 
+enum AuthActionTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum EmailDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  BOUNCED
+  REJECTED
+  FAILED
+}
+
 model User {
   id            String     @id @default(uuid()) @db.Uuid
   email         String     @unique
@@ -109,11 +123,26 @@ model User {
   likedProjects ProjectLike[]
   refreshSession RefreshSession?
   authAuditLogs  AuthAuditLog[]
+  authActionTokens AuthActionToken[]
 
   threadParticipantsA Thread[] @relation("ThreadParticipantA")
   threadParticipantsB Thread[] @relation("ThreadParticipantB")
   sentHireRequests   HireRequest[] @relation("HireRequestClient")
   receivedHireRequests HireRequest[] @relation("HireRequestDeveloper")
+}
+
+model AuthActionToken {
+  id         String              @id @default(uuid()) @db.Uuid
+  userId     String              @db.Uuid
+  tokenType  AuthActionTokenType
+  tokenHash  String              @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime            @default(now())
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tokenType, createdAt])
+  @@index([tokenType, expiresAt])
 }
 
 model RefreshSession {
@@ -143,6 +172,25 @@ model AuthAuditLog {
 
   @@index([userId, createdAt])
   @@index([event, createdAt])
+}
+
+model EmailDeliveryLog {
+  id           String              @id @default(uuid()) @db.Uuid
+  provider     String
+  messageId    String?
+  toEmail      String
+  subject      String
+  templateKey  String?
+  status       EmailDeliveryStatus @default(QUEUED)
+  eventType    String?
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([messageId])
+  @@index([toEmail, createdAt])
+  @@index([status, createdAt])
 }
 
 model Project {

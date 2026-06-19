@@ -143,10 +143,52 @@ export type AppRole = "DEVELOPER" | "CLIENT" | "ADMIN";
 interface RegisterResponse {
   userId: string;
   role: AppRole;
+  verificationRequired: true;
 }
 
 interface LoginResponse {
   role: AppRole;
+}
+
+interface VerifyEmailResponse {
+  verified: true;
+  role: AppRole;
+}
+
+interface ForgotPasswordResponse {
+  sent: true;
+}
+
+interface ResetPasswordResponse {
+  reset: true;
+  role: AppRole;
+}
+
+interface ChangePasswordResponse {
+  changed: true;
+  role: AppRole;
+}
+
+export interface VerifyEmailPayload {
+  token: string;
+}
+
+export interface ResendVerificationPayload {
+  email: string;
+}
+
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
 }
 
 export interface AuthSession {
@@ -658,6 +700,32 @@ export async function login(payload: LoginPayload): Promise<LoginResponse> {
   cachedSession = null;
   cachedSessionAt = 0;
   return postJson<LoginResponse, LoginPayload>("/auth/login", payload);
+}
+
+export async function verifyEmail(payload: VerifyEmailPayload): Promise<VerifyEmailResponse> {
+  cachedSession = null;
+  cachedSessionAt = 0;
+  return postJson<VerifyEmailResponse, VerifyEmailPayload>("/auth/verify-email", payload);
+}
+
+export async function resendVerification(payload: ResendVerificationPayload): Promise<ForgotPasswordResponse> {
+  return postJson<ForgotPasswordResponse, ResendVerificationPayload>("/auth/resend-verification", payload);
+}
+
+export async function forgotPassword(payload: ForgotPasswordPayload): Promise<ForgotPasswordResponse> {
+  return postJson<ForgotPasswordResponse, ForgotPasswordPayload>("/auth/forgot-password", payload);
+}
+
+export async function resetPassword(payload: ResetPasswordPayload): Promise<ResetPasswordResponse> {
+  cachedSession = null;
+  cachedSessionAt = 0;
+  return postJson<ResetPasswordResponse, ResetPasswordPayload>("/auth/reset-password", payload);
+}
+
+export async function changePassword(payload: ChangePasswordPayload): Promise<ChangePasswordResponse> {
+  cachedSession = null;
+  cachedSessionAt = 0;
+  return postJson<ChangePasswordResponse, ChangePasswordPayload>("/auth/change-password", payload);
 }
 
 export async function refreshSession(): Promise<boolean> {

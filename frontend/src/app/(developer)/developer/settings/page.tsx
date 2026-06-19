@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import {
@@ -447,7 +448,15 @@ export default function DeveloperSettingsPage() {
               <h1 className="text-2xl font-semibold text-neutral-900">Account Settings</h1>
               <p className="mt-1 text-sm text-neutral-600">Manage your profile information visible across the platform.</p>
             </div>
-            <BackButton fallbackHref="/developer/dashboard" label="Back to dashboard" />
+            <div className="flex items-center gap-2">
+              <Link
+                href="/account/change-password"
+                className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+              >
+                Change password
+              </Link>
+              <BackButton fallbackHref="/developer/dashboard" label="Back to dashboard" />
+            </div>
           </div>
 
           <div className="mb-5 flex items-center gap-3 border-y border-neutral-200 py-3">

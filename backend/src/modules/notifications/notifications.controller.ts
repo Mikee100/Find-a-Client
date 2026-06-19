@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Put, Query } from "@nestjs/common";
 import { CurrentUser, CurrentUserPayload } from "src/common/decorators/current-user.decorator";
+import { Public } from "src/common/decorators/public.decorator";
 import { DispatchNotificationDto } from "src/modules/notifications/dto/dispatch-notification.dto";
 import { NotificationsService } from "src/modules/notifications/notifications.service";
 
@@ -30,5 +31,14 @@ export class NotificationsController {
   @Post("dispatch")
   dispatch(@Body() dto: DispatchNotificationDto) {
     return this.notificationsService.dispatch(dto.userId, dto.type, dto.payload);
+  }
+
+  @Public()
+  @Post("webhooks/resend")
+  handleResendWebhook(
+    @Body() payload: Record<string, unknown>,
+    @Headers("x-webhook-secret") secretHeader?: string
+  ) {
+    return this.notificationsService.processResendWebhook(payload, secretHeader);
   }
 }
