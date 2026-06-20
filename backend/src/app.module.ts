@@ -11,6 +11,8 @@ import { GlobalExceptionFilter } from "src/common/filters/global-exception.filte
 import { JwtAuthGuard } from "src/common/guards/jwt-auth.guard";
 import { RolesGuard } from "src/common/guards/roles.guard";
 import { LoggingInterceptor } from "src/common/interceptors/logging.interceptor";
+import { ApiPerformanceInterceptor } from "src/common/performance/api-performance.interceptor";
+import { PerformanceModule } from "src/common/performance/performance.module";
 import { ResponseTransformInterceptor } from "src/common/interceptors/response-transform.interceptor";
 import { AdminModule } from "src/modules/admin/admin.module";
 import { AuthModule } from "src/modules/auth/auth.module";
@@ -40,6 +42,7 @@ import { PrismaModule } from "src/prisma/prisma.module";
       }
     ]),
     CacheModule,
+    PerformanceModule,
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -68,6 +71,10 @@ import { PrismaModule } from "src/prisma/prisma.module";
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ApiPerformanceInterceptor
     },
     {
       provide: APP_INTERCEPTOR,

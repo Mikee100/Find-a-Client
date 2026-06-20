@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { buildPagination } from "src/common/utils/pagination.util";
 import { PROJECT_STATUS } from "src/common/constants/domain-enums.constant";
@@ -14,6 +14,8 @@ import { UpdateProjectDto } from "src/modules/projects/dto/update-project.dto";
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService
@@ -114,6 +116,7 @@ export class ProjectsService {
    * Lists projects with filter and cursor pagination.
    */
   async list(query: ListProjectsDto) {
+    const startedAt = Date.now();
     const cacheKey = await this.cacheService.composeKey("projects-list", JSON.stringify(query));
     const cached = await this.cacheService.get<{
       success: true;
@@ -122,11 +125,21 @@ export class ProjectsService {
     }>(cacheKey);
 
     if (cached) {
+      this.logger.debug(
+        JSON.stringify({
+          event: "projects_list",
+          source: "cache",
+          durationMs: Date.now() - startedAt,
+          query
+        })
+      );
       return cached;
     }
 
-    const limit = Number(query.limit ?? 20);
-    const page = query.page ? Math.max(1, Number(query.page)) : null;
+    const requestedLimit = Number(query.limit ?? 20);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(50, Math.max(1, Math.floor(requestedLimit))) : 20;
+    const requestedPage = query.page ? Number(query.page) : null;
+    const page = requestedPage !== null && Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : null;
     const searchText = query.search?.trim();
     const searchTerms = searchText
       ? [
@@ -245,6 +258,19 @@ export class ProjectsService {
       };
 
       await this.cacheService.set(cacheKey, payload, 60);
+      this.logger.debug(
+        JSON.stringify({
+          event: "projects_list",
+          source: "database",
+          mode: "page",
+          durationMs: Date.now() - startedAt,
+          requestedLimit,
+          appliedLimit: limit,
+          page,
+          resultCount: items.length,
+          totalItems
+        })
+      );
       return payload;
     }
 
@@ -264,6 +290,19 @@ export class ProjectsService {
     };
 
     await this.cacheService.set(cacheKey, payload, 60);
+    this.logger.debug(
+      JSON.stringify({
+        event: "projects_list",
+        source: "database",
+        mode: "cursor",
+        durationMs: Date.now() - startedAt,
+        requestedLimit,
+        appliedLimit: limit,
+        cursor: query.cursor ?? null,
+        resultCount: data.length,
+        hasNext: meta.hasNext
+      })
+    );
     return payload;
   }
 

@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { WebSocket } from "ws";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import { AppModule } from "src/app.module";
 
@@ -79,6 +80,16 @@ async function bootstrap(): Promise<void> {
       transform: true
     })
   );
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle("Find a Client API")
+    .setDescription("API documentation for Find a Client backend")
+    .setVersion("1.0")
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup("api/docs", app, swaggerDocument, {
+    jsonDocumentUrl: "api/docs-json"
+  });
 
   const port = Number(process.env.PORT ?? 4000);
   await app.listen(port);
