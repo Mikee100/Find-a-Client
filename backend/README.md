@@ -10,7 +10,7 @@ Production-grade NestJS backend for DevShowcase, a marketplace where developers 
 - Auth: Supabase Auth + JWT
 - Realtime: Supabase Realtime channels
 - Media: Cloudinary
-- Email: Resend
+- Email: SMTP (app password) or Resend
 - Validation: class-validator + class-transformer
 - Tests: Jest
 
@@ -48,11 +48,36 @@ Critical variables:
 - `AUTH_COOKIE_SECURE`, `AUTH_COOKIE_SAME_SITE`, `AUTH_COOKIE_DOMAIN`
 - `AUTH_ACCESS_COOKIE_NAME`, `AUTH_REFRESH_COOKIE_NAME`, `AUTH_CSRF_COOKIE_NAME`
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
-- `RESEND_API_KEY`
+- `EMAIL_PROVIDER` (`smtp` or `resend`)
+- `EMAIL_FROM`
+- SMTP mode: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`
+- Resend mode: `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`
+- `REDIS_URL` (optional, enables distributed auth rate limits)
+- `AUTH_VERIFY_EMAIL_PATH`, `AUTH_RESET_PASSWORD_PATH`
 - `FRONTEND_URL`
 - `FRONTEND_URLS` (optional comma-separated origins, e.g. `https://find-a-client.vercel.app,https://preview.example.com`)
 
 ## Local Development
+
+### Email Setup (SMTP App Password)
+
+Set `EMAIL_PROVIDER="smtp"` and configure:
+- `SMTP_HOST` (for Gmail: `smtp.gmail.com`)
+- `SMTP_PORT` (`587` with STARTTLS, or `465` with SSL)
+- `SMTP_SECURE` (`false` for 587, `true` for 465)
+- `SMTP_USER` (your mailbox)
+- `SMTP_PASS` (your app password)
+- `EMAIL_FROM` (must be allowed by your provider)
+
+For Gmail app passwords, your Google account must have 2-Step Verification enabled.
+
+### Email Observability Webhook
+
+If using Resend, configure webhook target:
+- `POST /notifications/webhooks/resend`
+- Header: `x-webhook-secret` must match `RESEND_WEBHOOK_SECRET` when set.
+
+Delivery events are stored in `EmailDeliveryLog` and updated as webhook events arrive.
 
 1. Start infrastructure:
 

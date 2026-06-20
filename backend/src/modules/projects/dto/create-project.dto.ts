@@ -25,6 +25,15 @@ export class CreateProjectDto {
   @Length(30, 5000, { message: "Long description must be between 30 and 5000 characters." })
   longDescription!: string;
 
+  @IsOptional()
+  @IsString({ message: "Role in project must be a string." })
+  @Length(2, 120, { message: "Role in project must be between 2 and 120 characters." })
+  roleInProject?: string;
+
+  @IsOptional()
+  @IsUrl({}, { message: "Repository URL is invalid." })
+  repositoryUrl?: string;
+
   @IsIn(Object.values(PROJECT_CATEGORY), { message: "Category is invalid." })
   category!: ProjectCategory;
 

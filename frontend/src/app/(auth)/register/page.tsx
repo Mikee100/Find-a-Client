@@ -5,18 +5,6 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { AppRole, register } from "@/lib/api";
 
-function getRedirectPath(role: AppRole): string {
-  if (role === "ADMIN") {
-    return "/admin/dashboard";
-  }
-
-  if (role === "CLIENT") {
-    return "/client/projects/new?onboarding=1";
-  }
-
-  return "/developers/settings?onboarding=1";
-}
-
 export default function RegisterPage() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -44,9 +32,9 @@ export default function RegisterPage() {
     }
 
     try {
-      const result = await register({ email, password, fullName, username, role });
-      setSuccess("Account created. Redirecting to onboarding...");
-      router.push(getRedirectPath(result.role));
+      await register({ email, password, fullName, username, role });
+      setSuccess("Account created. Check your email for a verification link.");
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Registration failed";
       setError(message);
@@ -85,7 +73,8 @@ export default function RegisterPage() {
               id="username"
               name="username"
               required
-              pattern="[a-z0-9-]+"
+              pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              title="Use lowercase letters, numbers, and single hyphens between words."
               className="rounded-md border border-neutral-300 bg-white px-3 py-2"
             />
           </div>

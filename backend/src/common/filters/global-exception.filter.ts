@@ -6,6 +6,19 @@ import { Request, Response } from "express";
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
+  private isExpectedUnauthorizedProbe(request: Request, status: number): boolean {
+    if (status !== HttpStatus.UNAUTHORIZED) {
+      return false;
+    }
+
+    if ((request.method ?? "").toUpperCase() !== "GET") {
+      return false;
+    }
+
+    const path = (request.url ?? "").split("?")[0] ?? "";
+    return path === "/auth/session" || path === "/users/me/likes" || path === "/notifications/unread-count";
+  }
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -14,7 +27,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const { status, message, code } = this.resolveException(exception);
 
     const logLine = `${request.method} ${request.url} -> ${status}: ${message}`;
-    if (status >= 500) {
+    if (this.isExpectedUnauthorizedProbe(request, status)) {
+      this.logger.debug(logLine);
+    } else if (status >= 500) {
       this.logger.error(logLine);
     } else {
       this.logger.warn(logLine);

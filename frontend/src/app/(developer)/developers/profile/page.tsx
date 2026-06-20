@@ -4,19 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Briefcase, GraduationCap, Languages, LinkIcon, MapPin, Star, Wallet } from "lucide-react";
+import { Briefcase, GraduationCap, Languages, LinkIcon, MapPin, Wallet } from "lucide-react";
 import BackButton from "@/components/ui/back-button";
 import FullPageLoader from "@/components/ui/full-page-loader";
-import { CurrentUserProfile, getCurrentUserProfile, logout, logoutEverywhere } from "@/lib/api";
+import { CurrentUserProfile, getCurrentUserProfile, getMyProjects, MyProjectListItem, logout, logoutEverywhere } from "@/lib/api";
 import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
-
-type ExperienceItem = {
-  id: string;
-  role: string;
-  company: string;
-  period: string;
-  summary: string;
-};
 
 type EducationItem = {
   id: string;
@@ -32,30 +24,6 @@ type CertificationItem = {
   year: string;
 };
 
-type RecommendationItem = {
-  id: string;
-  name: string;
-  role: string;
-  text: string;
-};
-
-const EXPERIENCES: ExperienceItem[] = [
-  {
-    id: "e1",
-    role: "Senior Full-stack Engineer",
-    company: "Northline Labs",
-    period: "2023 - Present",
-    summary: "Leading delivery of SaaS platforms with TypeScript, Next.js, and scalable API architecture.",
-  },
-  {
-    id: "e2",
-    role: "Frontend Engineer",
-    company: "Cloud Harbor",
-    period: "2021 - 2023",
-    summary: "Built high-conversion product surfaces and design-system-first frontend foundations.",
-  },
-];
-
 const EDUCATION_FALLBACK: EducationItem[] = [
   {
     id: "ed1",
@@ -68,21 +36,6 @@ const EDUCATION_FALLBACK: EducationItem[] = [
 const CERTIFICATIONS_FALLBACK: CertificationItem[] = [
   { id: "c1", name: "AWS Certified Developer", issuer: "Amazon Web Services", year: "2025" },
   { id: "c2", name: "Professional Scrum Developer", issuer: "Scrum.org", year: "2024" },
-];
-
-const RECOMMENDATIONS: RecommendationItem[] = [
-  {
-    id: "r1",
-    name: "Miriam Ade",
-    role: "Product Manager",
-    text: "Excellent communicator and highly reliable. Delivered quality features with strong attention to detail.",
-  },
-  {
-    id: "r2",
-    name: "Tom Rivera",
-    role: "Founder",
-    text: "Turned our product vision into a polished platform quickly. Great ownership from planning to launch.",
-  },
 ];
 
 const LANGUAGES_FALLBACK = ["English", "French"];
@@ -160,6 +113,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
 export default function DeveloperProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
+  const [projects, setProjects] = useState<MyProjectListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingSignOut, setPendingSignOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,8 +121,9 @@ export default function DeveloperProfilePage() {
   useEffect(() => {
     void (async () => {
       try {
-        const me = await getCurrentUserProfile();
+        const [me, myProjects] = await Promise.all([getCurrentUserProfile(), getMyProjects()]);
         setProfile(me);
+        setProjects(myProjects);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Failed to load profile.");
       } finally {
@@ -184,6 +139,27 @@ export default function DeveloperProfilePage() {
   const educationItems = useMemo(() => parseEducationEntries(profile?.educationEntries), [profile?.educationEntries]);
   const certificationItems = useMemo(() => parseCertificationEntries(profile?.certificationEntries), [profile?.certificationEntries]);
   const languageItems = useMemo(() => parseLanguageEntries(profile?.languageEntries), [profile?.languageEntries]);
+  const publishedProjects = useMemo(
+    () => projects.filter((project) => project.status === "PUBLISHED"),
+    [projects]
+  );
+  const featuredProjects = useMemo(
+    () => [...publishedProjects].sort((left, right) => right.viewCount - left.viewCount).slice(0, 2),
+    [publishedProjects]
+  );
+  const totalViews = useMemo(() => projects.reduce((sum, project) => sum + project.viewCount, 0), [projects]);
+  const totalLikes = useMemo(() => projects.reduce((sum, project) => sum + project.likeCount, 0), [projects]);
+  const availabilityStatus = profile?.availabilityStatus ?? null;
+  const availabilityLabel = useMemo(() => {
+    if (!availabilityStatus) {
+      return "Open to opportunities";
+    }
+    return availabilityStatus
+      .toLowerCase()
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }, [availabilityStatus]);
 
   async function onSignOut() {
     setPendingSignOut(true);
@@ -252,16 +228,16 @@ export default function DeveloperProfilePage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 pb-1">
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Open to opportunities</span>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{availabilityLabel}</span>
                 <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">@{profile?.username}</span>
               </div>
             </div>
 
             <div className="mt-5 grid gap-2 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
               <div className="inline-flex items-center gap-2"><MapPin className="h-4 w-4 text-slate-500" />{profile?.location || "Remote"}</div>
-              <div className="inline-flex items-center gap-2"><Wallet className="h-4 w-4 text-slate-500" />Hourly rate: $80 - $120</div>
+              <div className="inline-flex items-center gap-2"><Wallet className="h-4 w-4 text-slate-500" />{profile?.primaryStack || "Primary stack not set"}</div>
               <div className="inline-flex items-center gap-2"><LinkIcon className="h-4 w-4 text-slate-500" />{profile?.websiteUrl || "Website not set"}</div>
-              <div className="inline-flex items-center gap-2"><Star className="h-4 w-4 text-slate-500" />4.9 average rating</div>
+              <div className="inline-flex items-center gap-2"><Briefcase className="h-4 w-4 text-slate-500" />{profile?.experienceLevel || "MID"} level</div>
             </div>
           </div>
         </div>
@@ -277,56 +253,62 @@ export default function DeveloperProfilePage() {
             </SectionCard>
 
             <SectionCard title="Experience">
-              <div className="space-y-4">
-                {EXPERIENCES.map((item) => (
-                  <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="inline-flex items-start gap-3">
-                        <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white"><Briefcase className="h-4 w-4" /></span>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{item.role}</p>
-                          <p className="text-sm text-slate-600">{item.company}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs text-slate-500">{item.period}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-700">{item.summary}</p>
-                  </article>
-                ))}
-              </div>
+              <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="inline-flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white"><Briefcase className="h-4 w-4" /></span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{profile?.title || "Professional title not set"}</p>
+                    <p className="text-sm text-slate-600">{profile?.primaryStack || "Primary stack not set"}</p>
+                    <p className="mt-1 text-xs text-slate-500">Experience level: {profile?.experienceLevel || "MID"} · Availability: {availabilityLabel}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm text-slate-700">{headline}</p>
+              </article>
             </SectionCard>
 
             <SectionCard title="Portfolio highlights">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {["SaaS Command Center", "AI Support Assistant"].map((title, idx) => (
-                  <article key={title} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div className="relative h-28 w-full bg-slate-100">
-                      <Image src="/dashboard_preview.png" alt={title} fill className="object-cover" />
-                    </div>
-                    <div className="p-3">
-                      <p className="text-sm font-semibold text-slate-900">{title}</p>
-                      <p className="mt-1 text-xs text-slate-600">Premium product UI and scalable backend architecture.</p>
-                      <p className="mt-2 text-xs text-slate-500">{idx === 0 ? "1.2k views" : "870 views"}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
+              {featuredProjects.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {featuredProjects.map((project) => (
+                    <article key={project.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      <div className="relative h-28 w-full bg-slate-100">
+                        <Image src={project.thumbnailUrl ?? project.backgroundUrl ?? "/dashboard_preview.png"} alt={project.title} fill className="object-cover" />
+                      </div>
+                      <div className="p-3">
+                        <p className="text-sm font-semibold text-slate-900">{project.title}</p>
+                        <p className="mt-1 text-xs text-slate-600 line-clamp-2">{project.shortDescription}</p>
+                        <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                          <span>{project.viewCount} views</span>
+                          <span>{project.likeCount} likes</span>
+                        </div>
+                        <Link href={`/projects/${project.slug}`} className="mt-2 inline-flex text-xs font-semibold text-blue-700 hover:underline">
+                          View project
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600">
+                  No published portfolio highlights yet. Publish a project to showcase your work here.
+                </p>
+              )}
             </SectionCard>
 
-            <SectionCard title="Reviews & recommendations">
-              <div className="space-y-3">
-                {RECOMMENDATIONS.map((item) => (
-                  <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                        <p className="text-xs text-slate-500">{item.role}</p>
-                      </div>
-                      <span className="text-amber-500">★★★★★</span>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-700">{item.text}</p>
-                  </article>
-                ))}
+            <SectionCard title="Portfolio metrics">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Total projects</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900">{projects.length}</p>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Portfolio views</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900">{totalViews}</p>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Project likes</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900">{totalLikes}</p>
+                </article>
               </div>
             </SectionCard>
           </div>

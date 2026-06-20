@@ -1,6 +1,7 @@
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { AuthService } from "src/modules/auth/auth.service";
+import { NotificationsService } from "src/modules/notifications/notifications.service";
 import { PrismaService } from "src/prisma/prisma.service";
 
 jest.mock("@supabase/supabase-js", () => ({
@@ -18,7 +19,7 @@ describe("AuthService", () => {
     const config = {
       getOrThrow: jest.fn((key: string) => {
         const map: Record<string, string> = {
-          REDIS_URL: "redis://localhost:6379",
+          REDIS_URL: "",
           SUPABASE_URL: "http://localhost:54321",
           SUPABASE_ANON_KEY: "anon",
           SUPABASE_SERVICE_ROLE_KEY: "service",
@@ -30,7 +31,11 @@ describe("AuthService", () => {
       get: jest.fn(() => "15m")
     } as unknown as ConfigService;
     const jwt = { signAsync: jest.fn() } as unknown as JwtService;
-    const service = new AuthService(prisma, config, jwt);
+    const notifications = {
+      sendAccountVerificationEmail: jest.fn(),
+      sendPasswordResetEmail: jest.fn()
+    } as unknown as NotificationsService;
+    const service = new AuthService(prisma, config, jwt, notifications);
     expect(service).toBeDefined();
   });
 });

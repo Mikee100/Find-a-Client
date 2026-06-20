@@ -15,7 +15,7 @@ export class CloudinaryService {
   /**
    * Uploads a file buffer to Cloudinary and returns metadata.
    */
-  async upload(buffer: Buffer, folder: string, resourceType: "image" | "video"): Promise<UploadApiResponse> {
+  async upload(buffer: Buffer, folder: string, resourceType: "image" | "video" | "raw"): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream({ folder, resource_type: resourceType }, (error, result) => {
         if (error || !result) {

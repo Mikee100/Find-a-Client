@@ -1,13 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import {
   CurrentUserProfile,
+  getGithubOAuthRedirect,
   getCurrentUserProfile,
   logout,
   logoutEverywhere,
-  updateProfile
+  updateProfile,
+  verifyGithubOwnership
 } from "@/lib/api";
 import FullPageLoader from "@/components/ui/full-page-loader";
 import BackButton from "@/components/ui/back-button";
@@ -194,9 +197,14 @@ export default function DeveloperSettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOnboardingFlow = searchParams.get("onboarding") === "1";
+  const githubConnectedNotice = searchParams.get("githubConnected") === "1"
+    ? "GitHub connection callback received. Click Verify ownership to confirm account ownership."
+    : null;
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [pending, setPending] = useState(false);
   const [pendingSignOut, setPendingSignOut] = useState(false);
+  const [pendingGithubVerification, setPendingGithubVerification] = useState(false);
+  const [pendingGithubConnect, setPendingGithubConnect] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -406,9 +414,54 @@ export default function DeveloperSettingsPage() {
     router.replace("/login");
   }
 
+  async function onConnectGithub() {
+    setPendingGithubConnect(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const redirect = await getGithubOAuthRedirect({
+        next: "/developer/settings?githubConnected=1",
+        intent: "github-connect"
+      });
+      window.location.href = redirect.url;
+    } catch (connectError) {
+      const message = connectError instanceof Error ? connectError.message : "Unable to start GitHub connect flow.";
+      setError(message);
+      setPendingGithubConnect(false);
+    }
+  }
+
+  async function onVerifyGithub() {
+    setPendingGithubVerification(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await verifyGithubOwnership();
+      setGithubUrl(result.githubUrl);
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              githubUrl: result.githubUrl,
+              githubUsername: result.githubUsername,
+              githubVerifiedAt: result.verifiedAt
+            }
+          : current
+      );
+      setSuccess(`GitHub verified: ${result.githubUsername}`);
+    } catch (verifyError) {
+      const message = verifyError instanceof Error ? verifyError.message : "Unable to verify GitHub ownership.";
+      setError(message);
+    } finally {
+      setPendingGithubVerification(false);
+    }
+  }
+
   if (loading) {
     return (
-      <main className="min-h-screen bg-neutral-50 p-6">
+      <main className="min-h-screen bg-slate-50 p-6">
         <DeveloperDashboardNavbar
           onSignOut={() => {
             void onSignOut();
@@ -424,7 +477,7 @@ export default function DeveloperSettingsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <DeveloperDashboardNavbar
         onSignOut={() => {
           void onSignOut();
@@ -437,7 +490,7 @@ export default function DeveloperSettingsPage() {
       <section className="w-full px-4 py-4 md:px-8 md:py-6">
         <div className="w-full">
           {isOnboardingFlow ? (
-            <div className="mb-4 border-l-2 border-cyan-500 pl-3 text-sm text-cyan-900">
+            <div className="mb-4 border-l-2 border-slate-900 pl-3 text-sm text-slate-700">
               Welcome to developer onboarding. Complete your profile details, then continue to your dashboard.
             </div>
           ) : null}
@@ -445,62 +498,70 @@ export default function DeveloperSettingsPage() {
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-semibold text-neutral-900">Account Settings</h1>
-              <p className="mt-1 text-sm text-neutral-600">Manage your profile information visible across the platform.</p>
+              <p className="mt-1 text-sm text-slate-500">Manage your profile information visible across the platform.</p>
             </div>
-            <BackButton fallbackHref="/developer/dashboard" label="Back to dashboard" />
+            <div className="flex items-center gap-2">
+              <Link
+                href="/account/change-password"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+              >
+                Change password
+              </Link>
+              <BackButton fallbackHref="/developer/dashboard" label="Back to dashboard" />
+            </div>
           </div>
 
-          <div className="mb-5 flex items-center gap-3 border-y border-neutral-200 py-3">
+          <div className="mb-5 flex items-center gap-3 border-y border-slate-200 py-3">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-neutral-900 text-sm font-bold text-white">
               {initials}
             </span>
             <div>
-              <p className="font-semibold text-neutral-900">{profile?.email}</p>
-              <p className="text-xs text-neutral-600">@{profile?.username} · {profile?.role}</p>
+              <p className="font-semibold text-slate-900">{profile?.email}</p>
+              <p className="text-xs text-slate-500">@{profile?.username} · {profile?.role}</p>
             </div>
           </div>
 
           <form onSubmit={onSubmit} className="grid gap-4">
             <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
-              <section className="py-1 lg:border-r lg:border-neutral-200 lg:pr-8">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">Account Information</h2>
+              <section className="py-1 lg:border-r lg:border-slate-200 lg:pr-8">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Account Information</h2>
                 <div className="mt-3 grid gap-3">
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Full name</span>
+                    <span className="font-medium text-slate-800">Full name</span>
                     <input
                       value={fullName}
                       onChange={(event) => setFullName(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.fullName ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.fullName ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                     />
                     {fieldErrors.fullName ? <span className="text-xs text-red-600">{fieldErrors.fullName}</span> : null}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Professional title</span>
+                    <span className="font-medium text-slate-800">Professional title</span>
                     <input
                       value={title}
                       onChange={(event) => setTitle(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.title ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.title ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="Full-stack Developer"
                     />
-                    {fieldErrors.title ? <span className="text-xs text-red-600">{fieldErrors.title}</span> : <span className="text-xs text-neutral-500">This appears on your public profile card.</span>}
+                    {fieldErrors.title ? <span className="text-xs text-red-600">{fieldErrors.title}</span> : <span className="text-xs text-slate-500">This appears on your public profile card.</span>}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Username</span>
+                    <span className="font-medium text-slate-800">Username</span>
                     <input
                       value={profile?.username ?? ""}
                       disabled
-                      className="rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-2 text-neutral-600"
+                      className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-slate-600"
                     />
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Location</span>
+                    <span className="font-medium text-slate-800">Location</span>
                     <select
                       value={location}
                       onChange={(event) => setLocation(event.target.value)}
-                      className="rounded-lg border border-neutral-300 px-3 py-2 outline-none transition focus:border-cyan-500"
+                      className="rounded-lg border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-900"
                     >
                       {LOCATION_OPTIONS.map((option) => (
                         <option key={option} value={option}>
@@ -511,11 +572,11 @@ export default function DeveloperSettingsPage() {
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Bio template</span>
+                    <span className="font-medium text-slate-800">Bio template</span>
                     <select
                       value={selectedBioTemplate}
                       onChange={(event) => onBioTemplateChange(event.target.value)}
-                      className="rounded-lg border border-neutral-300 px-3 py-2 outline-none transition focus:border-cyan-500"
+                      className="rounded-lg border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-900"
                     >
                       {BIO_TEMPLATES.map((option) => (
                         <option key={option.id} value={option.id}>
@@ -524,17 +585,17 @@ export default function DeveloperSettingsPage() {
                       ))}
                       <option value="existing">Keep existing bio</option>
                     </select>
-                    <p className={`rounded-lg border px-3 py-2 text-sm ${fieldErrors.bio ? "border-red-300 bg-red-50 text-red-700" : "border-neutral-200 bg-neutral-50 text-neutral-700"}`}>
+                    <p className={`rounded-lg border px-3 py-2 text-sm ${fieldErrors.bio ? "border-red-300 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
                       {bio || "No bio selected."}
                     </p>
                     <div className="flex items-center justify-between">
-                      {fieldErrors.bio ? <span className="text-xs text-red-600">{fieldErrors.bio}</span> : <span className="text-xs text-neutral-500">Up to 500 characters.</span>}
-                      <span className="text-xs text-neutral-500">{bio.trim().length}/500</span>
+                      {fieldErrors.bio ? <span className="text-xs text-red-600">{fieldErrors.bio}</span> : <span className="text-xs text-slate-500">Up to 500 characters.</span>}
+                      <span className="text-xs text-slate-500">{bio.trim().length}/500</span>
                     </div>
                   </label>
 
                   <div className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Skills (select options)</span>
+                    <span className="font-medium text-slate-800">Skills (select options)</span>
                     <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
                       {SKILL_OPTIONS.map((skill) => {
                         const selected = selectedSkills.includes(skill);
@@ -543,7 +604,7 @@ export default function DeveloperSettingsPage() {
                             key={skill}
                             type="button"
                             onClick={() => toggleSkill(skill)}
-                            className={`rounded-md border px-2 py-1.5 text-xs text-left transition ${selected ? "border-cyan-700 bg-cyan-50 text-cyan-900" : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500"}`}
+                            className={`rounded-md border px-2 py-1.5 text-xs text-left transition ${selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-900"}`}
                           >
                             {selected ? "✓ " : ""}
                             {skill}
@@ -551,26 +612,26 @@ export default function DeveloperSettingsPage() {
                         );
                       })}
                     </div>
-                    <span className="text-xs text-neutral-500">Selected: {selectedSkills.length}</span>
+                    <span className="text-xs text-slate-500">Selected: {selectedSkills.length}</span>
                   </div>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Primary stack</span>
+                    <span className="font-medium text-slate-800">Primary stack</span>
                     <input
                       value={primaryStack}
                       onChange={(event) => setPrimaryStack(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.primaryStack ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.primaryStack ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="Next.js + NestJS"
                     />
-                    {fieldErrors.primaryStack ? <span className="text-xs text-red-600">{fieldErrors.primaryStack}</span> : <span className="text-xs text-neutral-500">Used as a ranking signal for matching.</span>}
+                    {fieldErrors.primaryStack ? <span className="text-xs text-red-600">{fieldErrors.primaryStack}</span> : <span className="text-xs text-slate-500">Used as a ranking signal for matching.</span>}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Experience level</span>
+                    <span className="font-medium text-slate-800">Experience level</span>
                     <select
                       value={experienceLevel}
                       onChange={(event) => setExperienceLevel(event.target.value as "JUNIOR" | "MID" | "SENIOR")}
-                      className="rounded-lg border border-neutral-300 px-3 py-2 outline-none transition focus:border-cyan-500"
+                      className="rounded-lg border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-900"
                     >
                       {EXPERIENCE_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -581,11 +642,11 @@ export default function DeveloperSettingsPage() {
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Availability status</span>
+                    <span className="font-medium text-slate-800">Availability status</span>
                     <select
                       value={availabilityStatus}
                       onChange={(event) => setAvailabilityStatus(event.target.value as "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK")}
-                      className="rounded-lg border border-neutral-300 px-3 py-2 outline-none transition focus:border-cyan-500"
+                      className="rounded-lg border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-900"
                     >
                       {AVAILABILITY_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -598,135 +659,169 @@ export default function DeveloperSettingsPage() {
               </section>
 
               <section className="py-1 lg:pl-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700">Contact & Links</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Contact & Links</h2>
                 <div className="mt-3 grid gap-3">
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Contact email</span>
+                    <span className="font-medium text-slate-800">Contact email</span>
                     <input
                       type="email"
                       value={contactEmail}
                       onChange={(event) => setContactEmail(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.contactEmail ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.contactEmail ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="you@example.com"
                     />
                     {fieldErrors.contactEmail ? <span className="text-xs text-red-600">{fieldErrors.contactEmail}</span> : null}
                   </label>
 
-                  <label className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm">
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
                     <input
                       type="checkbox"
                       checked={publicEmailEnabled}
                       onChange={(event) => setPublicEmailEnabled(event.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-neutral-300"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300"
                     />
                     <span>
-                      <span className="block font-medium text-neutral-800">Show contact email publicly</span>
-                      <span className="text-xs text-neutral-600">Turn this off to keep your contact email private while still receiving platform messages.</span>
+                      <span className="block font-medium text-slate-800">Show contact email publicly</span>
+                      <span className="text-xs text-slate-600">Turn this off to keep your contact email private while still receiving platform messages.</span>
                     </span>
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Phone number</span>
+                    <span className="font-medium text-slate-800">Phone number</span>
                     <input
                       value={phoneNumber}
                       onChange={(event) => setPhoneNumber(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.phoneNumber ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.phoneNumber ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="+1 555 123 4567"
                     />
                     {fieldErrors.phoneNumber ? <span className="text-xs text-red-600">{fieldErrors.phoneNumber}</span> : null}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Website</span>
+                    <span className="font-medium text-slate-800">Website</span>
                     <input
                       value={websiteUrl}
                       onChange={(event) => setWebsiteUrl(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.websiteUrl ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.websiteUrl ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="your-site.com"
                     />
-                    {fieldErrors.websiteUrl ? <span className="text-xs text-red-600">{fieldErrors.websiteUrl}</span> : <span className="text-xs text-neutral-500">Any valid website URL.</span>}
+                    {fieldErrors.websiteUrl ? <span className="text-xs text-red-600">{fieldErrors.websiteUrl}</span> : <span className="text-xs text-slate-500">Any valid website URL.</span>}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">GitHub</span>
+                    <span className="font-medium text-slate-800">GitHub</span>
                     <input
                       value={githubUrl}
                       onChange={(event) => setGithubUrl(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.githubUrl ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.githubUrl ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="github.com/username"
                     />
-                    {fieldErrors.githubUrl ? <span className="text-xs text-red-600">{fieldErrors.githubUrl}</span> : <span className="text-xs text-neutral-500">Must be a github.com URL.</span>}
+                    {fieldErrors.githubUrl ? <span className="text-xs text-red-600">{fieldErrors.githubUrl}</span> : <span className="text-xs text-slate-500">Must be a github.com URL.</span>}
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                      <p className="text-xs font-medium text-slate-800">
+                        {profile?.githubVerifiedAt
+                          ? `Verified as ${profile.githubUsername ?? "GitHub user"} on ${new Date(profile.githubVerifiedAt).toLocaleDateString()}`
+                          : "GitHub ownership not verified"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void onConnectGithub();
+                          }}
+                          disabled={pendingGithubConnect || pendingGithubVerification}
+                          className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900 disabled:opacity-60"
+                        >
+                          {pendingGithubConnect ? "Opening..." : "Connect GitHub"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void onVerifyGithub();
+                          }}
+                          disabled={pendingGithubVerification || pendingGithubConnect}
+                          className="rounded-md border border-slate-900 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-black disabled:opacity-60"
+                        >
+                          {pendingGithubVerification ? "Verifying..." : "Verify ownership"}
+                        </button>
+                      </div>
+                    </div>
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">LinkedIn</span>
+                    <span className="font-medium text-slate-800">LinkedIn</span>
                     <input
                       value={linkedinUrl}
                       onChange={(event) => setLinkedinUrl(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.linkedinUrl ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.linkedinUrl ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="linkedin.com/in/username"
                     />
-                    {fieldErrors.linkedinUrl ? <span className="text-xs text-red-600">{fieldErrors.linkedinUrl}</span> : <span className="text-xs text-neutral-500">Must be a linkedin.com profile/company URL.</span>}
+                    {fieldErrors.linkedinUrl ? <span className="text-xs text-red-600">{fieldErrors.linkedinUrl}</span> : <span className="text-xs text-slate-500">Must be a linkedin.com profile/company URL.</span>}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Education entries</span>
+                    <span className="font-medium text-slate-800">Education entries</span>
                     <textarea
                       value={educationEntriesText}
                       onChange={(event) => setEducationEntriesText(event.target.value)}
                       rows={4}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.educationEntries ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.educationEntries ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="University of Technology | B.Sc Computer Science | 2016 - 2020"
                     />
                     {fieldErrors.educationEntries ? (
                       <span className="text-xs text-red-600">{fieldErrors.educationEntries}</span>
                     ) : (
-                      <span className="text-xs text-neutral-500">One entry per line. Use format: School | Degree | Period.</span>
+                      <span className="text-xs text-slate-500">One entry per line. Use format: School | Degree | Period.</span>
                     )}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Certifications</span>
+                    <span className="font-medium text-slate-800">Certifications</span>
                     <textarea
                       value={certificationEntriesText}
                       onChange={(event) => setCertificationEntriesText(event.target.value)}
                       rows={4}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.certificationEntries ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.certificationEntries ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="AWS Certified Developer | Amazon Web Services | 2025"
                     />
                     {fieldErrors.certificationEntries ? (
                       <span className="text-xs text-red-600">{fieldErrors.certificationEntries}</span>
                     ) : (
-                      <span className="text-xs text-neutral-500">One entry per line. Use format: Certification | Issuer | Year.</span>
+                      <span className="text-xs text-slate-500">One entry per line. Use format: Certification | Issuer | Year.</span>
                     )}
                   </label>
 
                   <label className="grid gap-1 text-sm">
-                    <span className="font-medium text-neutral-800">Languages</span>
+                    <span className="font-medium text-slate-800">Languages</span>
                     <input
                       value={languageEntriesText}
                       onChange={(event) => setLanguageEntriesText(event.target.value)}
-                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.languageEntries ? "border-red-400" : "border-neutral-300 focus:border-cyan-500"}`}
+                      className={`rounded-lg border px-3 py-2 outline-none transition ${fieldErrors.languageEntries ? "border-red-400" : "border-slate-300 focus:border-slate-900"}`}
                       placeholder="English, French"
                     />
                     {fieldErrors.languageEntries ? (
                       <span className="text-xs text-red-600">{fieldErrors.languageEntries}</span>
                     ) : (
-                      <span className="text-xs text-neutral-500">Comma-separated list (example: English, French).</span>
+                      <span className="text-xs text-slate-500">Comma-separated list (example: English, French).</span>
                     )}
                   </label>
                 </div>
               </section>
             </div>
 
-            {error ? <p className="border-l-2 border-red-500 pl-3 text-sm font-medium text-red-700">{error}</p> : null}
-            {success ? <p className="border-l-2 border-emerald-500 pl-3 text-sm font-medium text-emerald-700">{success}</p> : null}
+            {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}
+            {success || githubConnectedNotice ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+                {success ?? githubConnectedNotice}
+              </p>
+            ) : null}
 
             <div className="flex items-center justify-end gap-2">
               <button
                 type="submit"
                 disabled={pending}
-                className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:opacity-60"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-60"
               >
                 {pending ? "Saving..." : "Save changes"}
               </button>

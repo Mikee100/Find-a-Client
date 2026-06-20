@@ -74,6 +74,20 @@ enum HireRequestStatus {
   CANCELLED
 }
 
+enum AuthActionTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum EmailDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  BOUNCED
+  REJECTED
+  FAILED
+}
+
 model User {
   id            String     @id @default(uuid()) @db.Uuid
   email         String     @unique
@@ -96,6 +110,8 @@ model User {
   phoneNumber   String?
   websiteUrl    String?
   githubUrl     String?
+  githubUsername String?   @db.VarChar(120)
+  githubVerifiedAt DateTime?
   linkedinUrl   String?
   isVerified    Boolean    @default(false)
   createdAt     DateTime   @default(now())
@@ -109,11 +125,26 @@ model User {
   likedProjects ProjectLike[]
   refreshSession RefreshSession?
   authAuditLogs  AuthAuditLog[]
+  authActionTokens AuthActionToken[]
 
   threadParticipantsA Thread[] @relation("ThreadParticipantA")
   threadParticipantsB Thread[] @relation("ThreadParticipantB")
   sentHireRequests   HireRequest[] @relation("HireRequestClient")
   receivedHireRequests HireRequest[] @relation("HireRequestDeveloper")
+}
+
+model AuthActionToken {
+  id         String              @id @default(uuid()) @db.Uuid
+  userId     String              @db.Uuid
+  tokenType  AuthActionTokenType
+  tokenHash  String              @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime            @default(now())
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tokenType, createdAt])
+  @@index([tokenType, expiresAt])
 }
 
 model RefreshSession {
@@ -145,12 +176,33 @@ model AuthAuditLog {
   @@index([event, createdAt])
 }
 
+model EmailDeliveryLog {
+  id           String              @id @default(uuid()) @db.Uuid
+  provider     String
+  messageId    String?
+  toEmail      String
+  subject      String
+  templateKey  String?
+  status       EmailDeliveryStatus @default(QUEUED)
+  eventType    String?
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([messageId])
+  @@index([toEmail, createdAt])
+  @@index([status, createdAt])
+}
+
 model Project {
   id                String            @id @default(uuid()) @db.Uuid
   slug              String            @unique
   title             String
   shortDescription  String            @db.VarChar(160)
   longDescription   String
+  roleInProject     String?           @db.VarChar(120)
+  repositoryUrl     String?
   category          ProjectCategory
   status            ProjectStatus     @default(DRAFT)
   techStack         String[]
@@ -169,6 +221,7 @@ model Project {
   demoUrl           String?
   videoUrl          String?
   averageRating     Float             @default(0)
+  qualityScore      Float             @default(0)
   deletedAt         DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -270,8 +323,23 @@ model Message {
   createdAt DateTime @default(now())
   thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   sender    User     @relation("MessageSender", fields: [senderId], references: [id])
+  attachments MessageAttachment[]
 
   @@index([threadId, createdAt])
+}
+
+model MessageAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @db.Uuid
+  url       String
+  publicId  String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, createdAt])
 }
 
 model Question {

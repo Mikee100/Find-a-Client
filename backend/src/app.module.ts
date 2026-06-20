@@ -6,6 +6,7 @@ import { resolve } from "path";
 import cloudinaryConfig from "src/config/cloudinary.config";
 import databaseConfig from "src/config/database.config";
 import jwtConfig from "src/config/jwt.config";
+import { CacheModule } from "src/common/cache/cache.module";
 import { GlobalExceptionFilter } from "src/common/filters/global-exception.filter";
 import { JwtAuthGuard } from "src/common/guards/jwt-auth.guard";
 import { RolesGuard } from "src/common/guards/roles.guard";
@@ -38,6 +39,7 @@ import { PrismaModule } from "src/prisma/prisma.module";
         limit: 100
       }
     ]),
+    CacheModule,
     PrismaModule,
     AuthModule,
     UsersModule,

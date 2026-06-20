@@ -31,3 +31,6 @@ You can keep this as a modular monolith first, then split later when scale requi
 - Rate limiting on auth and messaging endpoints
 - Input validation on all write endpoints
 - Audit logs for key hiring actions
+
+## Performance docs
+- Backend caching and indexing implementation: `docs/BACKEND_CACHING_AND_INDEXING.md`

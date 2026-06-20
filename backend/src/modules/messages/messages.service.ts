@@ -1,13 +1,16 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { WebSocket } from "ws";
+import { CacheService } from "src/common/cache/cache.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { buildPagination } from "src/common/utils/pagination.util";
 import { NOTIFICATION_TYPE } from "src/common/constants/domain-enums.constant";
 import { sanitizeInput } from "src/common/utils/sanitize.util";
 import { CreateThreadDto } from "src/modules/messages/dto/create-thread.dto";
+import { SendMessageAttachmentDto } from "src/modules/messages/dto/send-message-attachment.dto";
 import { SendMessageDto } from "src/modules/messages/dto/send-message.dto";
+import { CloudinaryService } from "src/modules/media/cloudinary.service";
 import { NotificationsService } from "src/modules/notifications/notifications.service";
 
 const wsTransport = WebSocket as unknown as never;
@@ -16,16 +19,37 @@ const wsTransport = WebSocket as unknown as never;
 export class MessagesService {
   private readonly supabase: SupabaseClient;
 
+  private readonly messageInclude = {
+    attachments: {
+      orderBy: {
+        createdAt: "asc"
+      }
+    }
+  } as const;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
-    private readonly notificationsService: NotificationsService
+    private readonly cloudinaryService: CloudinaryService,
+    private readonly notificationsService: NotificationsService,
+    private readonly cacheService: CacheService
   ) {
     this.supabase = createClient(
       this.configService.getOrThrow<string>("SUPABASE_URL"),
       this.configService.getOrThrow<string>("SUPABASE_SERVICE_ROLE_KEY"),
       { realtime: { transport: wsTransport } }
     );
+  }
+
+  private async invalidateThreadList(userId: string) {
+    await Promise.all([
+      this.cacheService.invalidateNamespace(`threads-list:${userId}`),
+      this.cacheService.invalidateNamespace(`developer-dashboard:${userId}`)
+    ]);
+  }
+
+  private async invalidateThreadListsForParticipants(participantIds: string[]) {
+    await Promise.all(participantIds.map((id) => this.invalidateThreadList(id)));
   }
 
   /**
@@ -47,6 +71,7 @@ export class MessagesService {
         return this.prisma.thread.update({ where: { id: existing.id }, data: { projectId: dto.projectId } });
       }
 
+      await this.invalidateThreadListsForParticipants([existing.participantAId, existing.participantBId]);
       return existing;
     }
 
@@ -62,6 +87,8 @@ export class MessagesService {
       await this.sendMessage(userId, thread.id, { content: dto.initialMessage });
     }
 
+    await this.invalidateThreadListsForParticipants([thread.participantAId, thread.participantBId]);
+
     return thread;
   }
 
@@ -69,6 +96,13 @@ export class MessagesService {
    * Lists all threads for authenticated user.
    */
   async listThreads(userId: string) {
+    const cacheKey = await this.cacheService.composeKey(`threads-list:${userId}`, "all");
+    const cached = await this.cacheService.get<Array<Record<string, unknown>>>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const threads = await this.prisma.thread.findMany({
       where: { OR: [{ participantAId: userId }, { participantBId: userId }] },
       include: {
@@ -142,13 +176,16 @@ export class MessagesService {
       }
     }
 
-    return [...consolidated.values()]
+    const payload = [...consolidated.values()]
       .map(({ thread, unreadCount }) => ({ ...thread, unreadCount }))
       .sort((left, right) => {
         const leftTs = new Date(left.messages[0]?.createdAt ?? left.updatedAt).getTime();
         const rightTs = new Date(right.messages[0]?.createdAt ?? right.updatedAt).getTime();
         return rightTs - leftTs;
       });
+
+    await this.cacheService.set(cacheKey, payload, 10);
+    return payload;
   }
 
   /**
@@ -180,6 +217,7 @@ export class MessagesService {
     await this.assertThreadParticipant(userId, threadId);
     const messages = await this.prisma.message.findMany({
       where: { threadId },
+      include: this.messageInclude,
       orderBy: { createdAt: "desc" },
       cursor: cursor ? { id: cursor } : undefined,
       skip: cursor ? 1 : 0,
@@ -199,7 +237,8 @@ export class MessagesService {
         threadId,
         senderId: userId,
         content: sanitizeInput(dto.content)
-      }
+      },
+      include: this.messageInclude
     });
 
     await this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } });
@@ -210,39 +249,63 @@ export class MessagesService {
       payload: message
     });
 
-    const recipientId = thread.participantAId === userId ? thread.participantBId : thread.participantAId;
+    await this.dispatchNewMessageNotification(threadId, thread, userId, message.id, message.content);
 
-    try {
-      const [sender, project] = await Promise.all([
-        this.prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            fullName: true,
-            username: true
-          }
-        }),
-        thread.projectId
-          ? this.prisma.project.findUnique({
-              where: { id: thread.projectId },
-              select: {
-                title: true
-              }
-            })
-          : Promise.resolve(null)
-      ]);
+    await this.invalidateThreadListsForParticipants([thread.participantAId, thread.participantBId]);
 
-      await this.notificationsService.dispatch(recipientId, NOTIFICATION_TYPE.NEW_MESSAGE, {
-        threadId,
-        projectId: thread.projectId,
-        projectTitle: project?.title ?? null,
-        senderId: userId,
-        senderName: sender?.fullName || sender?.username || null,
-        messageId: message.id,
-        preview: message.content.slice(0, 160)
-      });
-    } catch {
-      // Do not block chat delivery if notification dispatch fails.
+    return message;
+  }
+
+  async sendAttachment(
+    userId: string,
+    threadId: string,
+    file: { buffer: Buffer; mimetype: string; size: number; originalname: string } | undefined,
+    dto: SendMessageAttachmentDto
+  ) {
+    if (!file) {
+      throw new BadRequestException("Attachment file is required");
     }
+
+    const thread = await this.assertThreadParticipant(userId, threadId);
+    const resourceType: "image" | "video" | "raw" = file.mimetype.startsWith("image/")
+      ? "image"
+      : file.mimetype.startsWith("video/")
+        ? "video"
+        : "raw";
+    const upload = await this.cloudinaryService.upload(file.buffer, `devshowcase/messages/${threadId}`, resourceType);
+
+    const sanitizedContent = sanitizeInput(dto.content?.trim() || "");
+    const messageContent = sanitizedContent || `Attachment: ${sanitizeInput(file.originalname)}`;
+
+    const message = await this.prisma.message.create({
+      data: {
+        threadId,
+        senderId: userId,
+        content: messageContent,
+        attachments: {
+          create: {
+            url: upload.secure_url,
+            publicId: upload.public_id,
+            fileName: sanitizeInput(file.originalname),
+            mimeType: file.mimetype,
+            sizeBytes: file.size
+          }
+        }
+      },
+      include: this.messageInclude
+    });
+
+    await this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } });
+
+    await this.supabase.channel(`thread:${threadId}`).send({
+      type: "broadcast",
+      event: "new_message",
+      payload: message
+    });
+
+    await this.dispatchNewMessageNotification(threadId, thread, userId, message.id, messageContent);
+
+    await this.invalidateThreadListsForParticipants([thread.participantAId, thread.participantBId]);
 
     return message;
   }
@@ -251,7 +314,7 @@ export class MessagesService {
    * Marks all unread thread messages as read.
    */
   async markRead(userId: string, threadId: string): Promise<{ updated: number }> {
-    await this.assertThreadParticipant(userId, threadId);
+    const thread = await this.assertThreadParticipant(userId, threadId);
     const result = await this.prisma.message.updateMany({
       where: {
         threadId,
@@ -276,6 +339,8 @@ export class MessagesService {
       }
     });
 
+    await this.invalidateThreadListsForParticipants([thread.participantAId, thread.participantBId]);
+
     return { updated: result.count };
   }
 
@@ -289,5 +354,47 @@ export class MessagesService {
     }
 
     return thread;
+  }
+
+  private async dispatchNewMessageNotification(
+    threadId: string,
+    thread: { participantAId: string; participantBId: string; projectId: string | null },
+    senderId: string,
+    messageId: string,
+    content: string
+  ): Promise<void> {
+    const recipientId = thread.participantAId === senderId ? thread.participantBId : thread.participantAId;
+
+    try {
+      const [sender, project] = await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: senderId },
+          select: {
+            fullName: true,
+            username: true
+          }
+        }),
+        thread.projectId
+          ? this.prisma.project.findUnique({
+              where: { id: thread.projectId },
+              select: {
+                title: true
+              }
+            })
+          : Promise.resolve(null)
+      ]);
+
+      await this.notificationsService.dispatch(recipientId, NOTIFICATION_TYPE.NEW_MESSAGE, {
+        threadId,
+        projectId: thread.projectId,
+        projectTitle: project?.title ?? null,
+        senderId,
+        senderName: sender?.fullName || sender?.username || null,
+        messageId,
+        preview: content.slice(0, 160)
+      });
+    } catch {
+      // Do not block chat delivery if notification dispatch fails.
+    }
   }
 }
