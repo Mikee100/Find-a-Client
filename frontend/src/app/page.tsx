@@ -9,7 +9,6 @@ import {
   Check,
   ChevronDown,
   Menu,
-  Search,
   ShieldCheck,
   Sparkles,
   Workflow,
@@ -462,7 +461,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="mt-6 border-t border-slate-100 pt-4">
-                    <p className="text-[11px] italic text-slate-400">"{project.feedback}"</p>
+                    <p className="text-[11px] italic text-slate-400">&ldquo;{project.feedback}&rdquo;</p>
                   </div>
                 </article>
               ))}
@@ -496,7 +495,7 @@ export default function Home() {
               <div className="border border-slate-200 bg-white p-5">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Simulated Brief Input</p>
                 <div className="mt-3 rounded border border-slate-100 bg-slate-50 p-3 font-mono text-[11px] text-slate-500">
-                  "Need a developer to build a financial payments dashboard using Next.js, integrating real-time Stripe webhooks and charting settlements."
+                  &ldquo;Need a developer to build a financial payments dashboard using Next.js, integrating real-time Stripe webhooks and charting settlements.&rdquo;
                 </div>
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2">

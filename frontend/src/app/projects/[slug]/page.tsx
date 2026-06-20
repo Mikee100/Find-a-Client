@@ -690,7 +690,7 @@ export default function ProjectDetailPage() {
         { label: "Video Walkthrough", url: projectVideoUrl },
         { label: "Primary Screenshot", url: galleryImages[0] }
       ].filter((item): item is { label: string; url: string } => Boolean(item.url)),
-    [galleryImages, project?.demoUrl, projectVideoUrl]
+    [galleryImages, project?.demoUrl, project?.repositoryUrl, projectVideoUrl]
   );
 
   const authorInitials = useMemo(() => {

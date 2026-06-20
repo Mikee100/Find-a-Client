@@ -149,16 +149,17 @@ export default function DeveloperProfilePage() {
   );
   const totalViews = useMemo(() => projects.reduce((sum, project) => sum + project.viewCount, 0), [projects]);
   const totalLikes = useMemo(() => projects.reduce((sum, project) => sum + project.likeCount, 0), [projects]);
+  const availabilityStatus = profile?.availabilityStatus ?? null;
   const availabilityLabel = useMemo(() => {
-    if (!profile?.availabilityStatus) {
+    if (!availabilityStatus) {
       return "Open to opportunities";
     }
-    return profile.availabilityStatus
+    return availabilityStatus
       .toLowerCase()
       .split("_")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
-  }, [profile?.availabilityStatus]);
+  }, [availabilityStatus]);
 
   async function onSignOut() {
     setPendingSignOut(true);
