@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Circle, Search, SendHorizontal } from "lucide-react";
+import { ArrowLeft, Circle, Paperclip, Search, SendHorizontal } from "lucide-react";
 import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
 import { getRealtimeClient } from "@/lib/realtime";
 import {
@@ -18,6 +18,7 @@ import {
   logout,
   logoutEverywhere,
   markThreadRead,
+  sendThreadAttachment,
   sendThreadMessage,
   ThreadMessage,
   ThreadSummary
@@ -72,6 +73,7 @@ export default function DeveloperMessagesPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [pendingSignOut, setPendingSignOut] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
@@ -81,6 +83,7 @@ export default function DeveloperMessagesPage() {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const hasRedirectedOnAuthErrorRef = useRef(false);
 
   const threadQuery = searchParams.get("thread")?.trim() || "";
@@ -406,6 +409,44 @@ export default function DeveloperMessagesPage() {
     }
   }
 
+  async function onSelectAttachment(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile || !selectedThreadId) {
+      return;
+    }
+
+    try {
+      setUploadingAttachment(true);
+      shouldStickToBottomRef.current = true;
+      const sent = await sendThreadAttachment(selectedThreadId, selectedFile, messageInput.trim() || undefined);
+      setMessages((previous) => [...previous, sent]);
+      setMessageInput("");
+      setThreads((previous) =>
+        previous.map((thread) =>
+          thread.id === selectedThreadId
+            ? {
+                ...thread,
+                updatedAt: sent.createdAt,
+                messages: [
+                  {
+                    id: sent.id,
+                    content: sent.content,
+                    senderId: sent.senderId,
+                    createdAt: sent.createdAt
+                  }
+                ]
+              }
+            : thread
+        )
+      );
+    } catch (caughtError) {
+      handleRequestError(caughtError, "Unable to upload attachment.");
+    } finally {
+      setUploadingAttachment(false);
+      event.target.value = "";
+    }
+  }
+
   async function onSignOut() {
     try {
       setPendingSignOut(true);
@@ -500,8 +541,8 @@ export default function DeveloperMessagesPage() {
                       onClick={() => onSelectThread(thread.id)}
                       className={`w-full border-b px-1 py-2 text-left transition ${
                         selectedThreadId === thread.id
-                          ? "border-slate-900 bg-transparent"
-                          : "border-slate-200 bg-transparent hover:bg-slate-100/60"
+                          ? "border-slate-900 bg-slate-50"
+                          : "border-slate-200 bg-transparent hover:bg-slate-50"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -510,14 +551,14 @@ export default function DeveloperMessagesPage() {
                         </span>
                         <p className="truncate text-sm font-semibold text-slate-900">{label}</p>
                         {thread.unreadCount > 0 ? (
-                          <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
+                          <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[10px] font-semibold text-white">
                             {thread.unreadCount}
                           </span>
                         ) : null}
                       </div>
                       <p className="mt-1 truncate text-xs text-slate-600">{lastMessage}</p>
                       {linkedHireRequest ? (
-                        <p className="mt-1 text-[11px] font-medium text-blue-700">Hire request: {formatHireStatus(linkedHireRequest.status)}</p>
+                        <p className="mt-1 text-[11px] font-medium text-slate-700">Hire request: {formatHireStatus(linkedHireRequest.status)}</p>
                       ) : null}
                       <p className="mt-1 text-[11px] text-slate-400">{formatThreadTime(thread.updatedAt)}</p>
                     </button>
@@ -542,18 +583,18 @@ export default function DeveloperMessagesPage() {
                 </div>
                 <p className="mt-0.5 text-xs text-slate-500">{realtimeEnabled ? "Live updates active" : "Syncing every few seconds"}</p>
                 {selectedThread?.project ? (
-                  <Link href={`/projects/${selectedThread.project.slug}`} className="mt-1 inline-flex text-xs font-medium text-blue-700 hover:underline">
+                  <Link href={`/projects/${selectedThread.project.slug}`} className="mt-1 inline-flex text-xs font-medium text-slate-700 hover:underline">
                     Regarding: {selectedThread.project.title}
                   </Link>
                 ) : null}
                 {selectedThreadHireRequest ? (
-                  <Link href="/developer/hire-requests" className="mt-1 inline-flex text-xs font-semibold text-blue-700 hover:underline">
+                  <Link href="/developer/hire-requests" className="mt-1 inline-flex text-xs font-semibold text-slate-700 hover:underline">
                     Hire request status: {formatHireStatus(selectedThreadHireRequest.status)}
                   </Link>
                 ) : null}
               </header>
 
-              <div ref={messagesContainerRef} onScroll={onMessagesScroll} className="flex-1 space-y-2 overflow-y-auto bg-transparent px-4 py-3">
+              <div ref={messagesContainerRef} onScroll={onMessagesScroll} className="flex-1 space-y-2 overflow-y-auto bg-slate-50/40 px-4 py-3">
                 {loadingMessages ? <p className="text-sm text-slate-500">Loading messages...</p> : null}
                 {!loadingMessages && messages.length === 0 ? (
                   <p className="text-sm text-slate-500">No messages yet. Start the conversation below.</p>
@@ -563,9 +604,24 @@ export default function DeveloperMessagesPage() {
                   const isMine = message.senderId === viewerId;
                   return (
                     <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[82%] px-0 py-0 text-sm ${isMine ? "text-slate-900" : "text-slate-700"}`}>
+                      <div className={`max-w-[82%] rounded-lg border px-3 py-2 text-sm ${isMine ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>
                         <p className="leading-6">{message.content}</p>
-                        <p className={`mt-1 text-[11px] ${isMine ? "text-slate-400" : "text-slate-500"}`}>
+                        {message.attachments && message.attachments.length > 0 ? (
+                          <div className="mt-2 space-y-1">
+                            {message.attachments.map((attachment) => (
+                              <a
+                                key={attachment.id}
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`inline-flex max-w-full truncate rounded border px-2 py-1 text-xs ${isMine ? "border-slate-600 text-slate-100 hover:bg-slate-800" : "border-slate-300 text-slate-700 hover:bg-slate-100"}`}
+                              >
+                                {attachment.fileName}
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
+                        <p className={`mt-1 text-[11px] ${isMine ? "text-slate-300" : "text-slate-500"}`}>
                           {formatTime(message.createdAt)}
                         </p>
                       </div>
@@ -576,6 +632,15 @@ export default function DeveloperMessagesPage() {
               </div>
 
               <form onSubmit={onSend} className="border-t border-slate-200 bg-transparent p-3">
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,.mp4,.webm,.mov,.txt"
+                  className="hidden"
+                  onChange={(event) => {
+                    void onSelectAttachment(event);
+                  }}
+                />
                 {visibleQuickReplies.length > 0 ? (
                   <div className="mb-2 flex flex-wrap gap-2">
                     {visibleQuickReplies.slice(0, 5).map((template) => (
@@ -591,16 +656,25 @@ export default function DeveloperMessagesPage() {
                   </div>
                 ) : null}
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!selectedThreadId || sending || uploadingAttachment}
+                    onClick={() => attachmentInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    {uploadingAttachment ? "Uploading" : "Attach"}
+                  </button>
                   <input
                     value={messageInput}
                     onChange={(event) => setMessageInput(event.target.value)}
                     placeholder={selectedThreadId ? "Type your reply..." : "Select a conversation to begin"}
-                    disabled={!selectedThreadId || sending}
-                    className="h-9 flex-1 border-b border-slate-300 bg-transparent px-1 text-sm outline-none placeholder:text-slate-400 disabled:bg-transparent"
+                    disabled={!selectedThreadId || sending || uploadingAttachment}
+                    className="h-9 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none placeholder:text-slate-400 disabled:bg-slate-100"
                   />
                   <button
                     type="submit"
-                    disabled={!selectedThreadId || sending || !messageInput.trim()}
+                    disabled={!selectedThreadId || sending || uploadingAttachment || !messageInput.trim()}
                     className="inline-flex h-9 items-center gap-1 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white disabled:opacity-60"
                   >
                     <SendHorizontal className="h-4 w-4" />

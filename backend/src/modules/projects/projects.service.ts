@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { buildPagination } from "src/common/utils/pagination.util";
 import { PROJECT_STATUS } from "src/common/constants/domain-enums.constant";
 import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
+import { CacheService } from "src/common/cache/cache.service";
 import { sanitizeInput, sanitizeRichText } from "src/common/utils/sanitize.util";
 import { toSlug } from "src/common/utils/slug.util";
 import { PrismaService } from "src/prisma/prisma.service";
@@ -13,7 +14,22 @@ import { UpdateProjectDto } from "src/modules/projects/dto/update-project.dto";
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService
+  ) {}
+
+  private async invalidateProjectCaches() {
+    await Promise.all([
+      this.cacheService.invalidateNamespace("projects-list"),
+      this.cacheService.invalidateNamespace("projects-search"),
+      this.cacheService.invalidateNamespace("developers-search")
+    ]);
+  }
+
+  private async invalidateDeveloperDashboardCache(userId: string) {
+    await this.cacheService.invalidateNamespace(`developer-dashboard:${userId}`);
+  }
 
   private normalizeStringList(values: string[]): string[] {
     return [...new Set(values.map((value) => sanitizeInput(value).trim()).filter(Boolean))];
@@ -37,6 +53,13 @@ export class ProjectsService {
     return [...variants];
   }
 
+  private computeQualityScore(likeCount: number, viewCount: number, inquiryCount: number, averageRating: number): number {
+    const engagementScore = Math.min(100, likeCount * 4 + inquiryCount * 8 + Math.floor(viewCount / 25));
+    const ratingScore = Math.max(0, Math.min(100, averageRating * 20));
+    const blended = engagementScore * 0.7 + ratingScore * 0.3;
+    return Math.round(blended * 10) / 10;
+  }
+
   /**
    * Creates a new project for the authenticated developer.
    */
@@ -50,12 +73,14 @@ export class ProjectsService {
     const screenshots = this.normalizeStringList(dto.screenshots ?? []);
 
     const slug = toSlug(`${dto.title}-${Date.now()}`);
-    return this.prisma.project.create({
+    const created = await this.prisma.project.create({
       data: {
         slug,
         title: sanitizeInput(dto.title),
         shortDescription: sanitizeInput(dto.shortDescription),
         longDescription: sanitizeRichText(dto.longDescription),
+        roleInProject: dto.roleInProject ? sanitizeInput(dto.roleInProject) : undefined,
+        repositoryUrl: dto.repositoryUrl,
         category: dto.category,
         status: PROJECT_STATUS.DRAFT,
         techStack,
@@ -79,12 +104,27 @@ export class ProjectsService {
           : undefined
       }
     });
+
+    await this.invalidateProjectCaches();
+    await this.invalidateDeveloperDashboardCache(authorId);
+    return created;
   }
 
   /**
    * Lists projects with filter and cursor pagination.
    */
   async list(query: ListProjectsDto) {
+    const cacheKey = await this.cacheService.composeKey("projects-list", JSON.stringify(query));
+    const cached = await this.cacheService.get<{
+      success: true;
+      data: unknown[];
+      meta: Record<string, unknown>;
+    }>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const limit = Number(query.limit ?? 20);
     const page = query.page ? Math.max(1, Number(query.page)) : null;
     const searchText = query.search?.trim();
@@ -192,7 +232,7 @@ export class ProjectsService {
       const totalPages = totalItems > 0 ? Math.ceil(totalItems / limit) : 1;
       const hasNext = page < totalPages;
 
-      return {
+      const payload = {
         success: true,
         data: items,
         meta: {
@@ -203,6 +243,9 @@ export class ProjectsService {
           totalItems
         }
       };
+
+      await this.cacheService.set(cacheKey, payload, 60);
+      return payload;
     }
 
     const items = await this.prisma.project.findMany({
@@ -214,11 +257,14 @@ export class ProjectsService {
     });
 
     const { data, meta } = buildPagination(items, limit);
-    return {
+    const payload = {
       success: true,
       data,
       meta
     };
+
+    await this.cacheService.set(cacheKey, payload, 60);
+    return payload;
   }
 
   /**
@@ -229,8 +275,22 @@ export class ProjectsService {
     if (!project || project.deletedAt) {
       throw new NotFoundException("Project not found");
     }
-    await this.prisma.project.update({ where: { id: project.id }, data: { viewCount: { increment: 1 } } });
-    return project;
+
+    const nextViewCount = project.viewCount + 1;
+    const qualityScore = this.computeQualityScore(project.likeCount, nextViewCount, project.inquiryCount, project.averageRating);
+    await this.prisma.project.update({
+      where: { id: project.id },
+      data: {
+        viewCount: { increment: 1 },
+        qualityScore
+      }
+    });
+
+    return {
+      ...project,
+      viewCount: nextViewCount,
+      qualityScore
+    };
   }
 
   /**
@@ -253,13 +313,14 @@ export class ProjectsService {
       title: rest.title !== undefined ? sanitizeInput(rest.title) : undefined,
       shortDescription: rest.shortDescription !== undefined ? sanitizeInput(rest.shortDescription) : undefined,
       longDescription: rest.longDescription !== undefined ? sanitizeRichText(rest.longDescription) : undefined,
+      roleInProject: rest.roleInProject !== undefined ? sanitizeInput(rest.roleInProject) : undefined,
       techStack: rest.techStack ? this.normalizeStringList(rest.techStack) : undefined,
       industries: rest.industries ? this.normalizeStringList(rest.industries) : undefined
     };
 
     const normalizedScreenshots = screenshots ? this.normalizeStringList(screenshots) : undefined;
 
-    return this.prisma.$transaction(async (tx) => {
+    const updatedProject = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.project.update({ where: { id: existing.id }, data });
 
       if (normalizedScreenshots !== undefined) {
@@ -293,6 +354,10 @@ export class ProjectsService {
 
       return updated;
     });
+
+    await this.invalidateProjectCaches();
+    await this.invalidateDeveloperDashboardCache(userId);
+    return updatedProject;
   }
 
   /**
@@ -307,6 +372,8 @@ export class ProjectsService {
       throw new ForbiddenException("Not project owner");
     }
     await this.prisma.softDeleteProject(existing.id);
+    await this.invalidateProjectCaches();
+    await this.invalidateDeveloperDashboardCache(userId);
     return { archived: true };
   }
 
@@ -314,10 +381,10 @@ export class ProjectsService {
    * Toggles like for current user and adjusts project counter.
    */
   async toggleLike(slug: string, userId: string): Promise<{ liked: boolean; likeCount: number }> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const project = await tx.project.findUnique({
         where: { slug },
-        select: { id: true, authorId: true, likeCount: true }
+        select: { id: true, authorId: true, likeCount: true, viewCount: true, inquiryCount: true, averageRating: true }
       });
 
       if (!project) {
@@ -346,7 +413,13 @@ export class ProjectsService {
         const updated = await tx.project.update({
           where: { id: project.id },
           data: {
-            likeCount: project.likeCount > 0 ? { decrement: 1 } : undefined
+            likeCount: project.likeCount > 0 ? { decrement: 1 } : undefined,
+            qualityScore: this.computeQualityScore(
+              Math.max(0, project.likeCount - 1),
+              project.viewCount,
+              project.inquiryCount,
+              project.averageRating
+            )
           },
           select: { likeCount: true }
         });
@@ -365,7 +438,15 @@ export class ProjectsService {
 
       const updated = await tx.project.update({
         where: { id: project.id },
-        data: { likeCount: { increment: 1 } },
+        data: {
+          likeCount: { increment: 1 },
+          qualityScore: this.computeQualityScore(
+            project.likeCount + 1,
+            project.viewCount,
+            project.inquiryCount,
+            project.averageRating
+          )
+        },
         select: { likeCount: true }
       });
 
@@ -374,6 +455,16 @@ export class ProjectsService {
         likeCount: updated.likeCount
       };
     });
+
+    await this.invalidateProjectCaches();
+    const likedProject = await this.prisma.project.findUnique({
+      where: { slug },
+      select: { authorId: true }
+    });
+    if (likedProject?.authorId) {
+      await this.invalidateDeveloperDashboardCache(likedProject.authorId);
+    }
+    return result;
   }
 
   async getLikeStatus(slug: string, userId: string): Promise<{ liked: boolean; likeCount: number }> {
@@ -411,9 +502,11 @@ export class ProjectsService {
     const existing = await this.prisma.saved.findUnique({ where: { userId_projectId: { userId, projectId: project.id } } });
     if (existing) {
       await this.prisma.saved.delete({ where: { userId_projectId: { userId, projectId: project.id } } });
+      await this.invalidateDeveloperDashboardCache(userId);
       return { saved: false };
     }
     await this.prisma.saved.create({ data: { userId, projectId: project.id } });
+    await this.invalidateDeveloperDashboardCache(userId);
     return { saved: true };
   }
 
@@ -423,7 +516,7 @@ export class ProjectsService {
   async trackInquiry(slug: string, userId: string, dto: CreateProjectInquiryDto) {
     const project = await this.prisma.project.findUnique({
       where: { slug },
-      select: { id: true, authorId: true, inquiryCount: true }
+      select: { id: true, authorId: true, inquiryCount: true, likeCount: true, viewCount: true, averageRating: true }
     });
 
     if (!project) {
@@ -436,9 +529,19 @@ export class ProjectsService {
 
     const updated = await this.prisma.project.update({
       where: { id: project.id },
-      data: { inquiryCount: { increment: 1 } },
+      data: {
+        inquiryCount: { increment: 1 },
+        qualityScore: this.computeQualityScore(
+          project.likeCount,
+          project.viewCount,
+          project.inquiryCount + 1,
+          project.averageRating
+        )
+      },
       select: { inquiryCount: true }
     });
+
+    await this.invalidateDeveloperDashboardCache(project.authorId);
 
     return {
       tracked: true,

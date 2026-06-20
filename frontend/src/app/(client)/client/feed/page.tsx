@@ -642,22 +642,22 @@ export default function ClientFeedPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FAFA] font-[Inter] text-[#111827]">
+    <main className="min-h-screen bg-[#f8fafc] font-sans text-slate-900">
       <ClientDashboardNavbar />
 
       <section className="mx-auto w-full max-w-340 px-4 pb-8 pt-4 md:px-6 md:pb-8 md:pt-3">
         <section className="space-y-5">
-          <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
+          <section className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#64748B]">Search for projects</p>
-                <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-[#0F172A]">Projects you might like</h1>
-                <p className="mt-0.5 text-xs text-[#64748B]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Search for projects</p>
+                <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">Projects you might like</h1>
+                <p className="mt-0.5 text-xs text-slate-500">
                   Explore production-ready work from developers around the world.
                 </p>
               </div>
               <div className="relative w-full max-w-sm">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#64748B]" aria-hidden />
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500" aria-hidden />
                 <input
                   key={urlQuery}
                   defaultValue={urlQuery}
@@ -665,7 +665,7 @@ export default function ClientFeedPage() {
                     updateQueryInUrlDebounced(event.target.value);
                   }}
                   placeholder="Search developers, projects, technologies..."
-                  className="h-9 w-full rounded-full border border-[#E5E7EB] bg-[#F8FAFA] pl-9 pr-3 text-sm text-[#111827] outline-none transition focus:border-[#2563EB]"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-slate-900"
                 />
               </div>
               <button
@@ -674,12 +674,12 @@ export default function ClientFeedPage() {
                   setDraftFilters(appliedFilters);
                   setIsFilterModalOpen(true);
                 }}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3.5 text-xs font-medium text-[#111827] hover:border-[#CBD5E1]"
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold uppercase tracking-wider text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
               >
                 <SlidersHorizontal className="h-4 w-4" aria-hidden />
                 Filter
                 {activeFilterCount > 0 ? (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#2563EB] px-1.5 text-[11px] font-semibold text-white">
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[11px] font-semibold text-white">
                     {activeFilterCount}
                   </span>
                 ) : null}
@@ -691,10 +691,10 @@ export default function ClientFeedPage() {
                 onClick={() => {
                   setJobsListMode("BEST_MATCHES");
                 }}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition ${
                   jobsListMode === "BEST_MATCHES"
-                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-900 hover:text-slate-900"
                 }`}
               >
                 Best Matches
@@ -703,10 +703,10 @@ export default function ClientFeedPage() {
                 onClick={() => {
                   setJobsListMode("MOST_RECENT");
                 }}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition ${
                   jobsListMode === "MOST_RECENT"
-                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-900 hover:text-slate-900"
                 }`}
               >
                 Most Recent
@@ -715,10 +715,10 @@ export default function ClientFeedPage() {
                 onClick={() => {
                   setJobsListMode("SAVED");
                 }}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition ${
                   jobsListMode === "SAVED"
-                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-900 hover:text-slate-900"
                 }`}
               >
                 Saved Projects ({savedProjectIds.size})
@@ -727,31 +727,31 @@ export default function ClientFeedPage() {
           </section>
 
           {actionMessage ? (
-            <section className="rounded-[14px] border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-sm font-medium text-[#1E40AF]">
+            <section className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
               {actionMessage}
             </section>
           ) : null}
 
           {error ? (
-            <section className="rounded-[20px] border border-red-200 bg-red-50 p-6 text-sm font-medium text-red-700">
+            <section className="rounded-[20px] border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
               {error}
             </section>
           ) : null}
 
-          <div className="grid gap-5 lg:grid-cols-[160px_minmax(0,1fr)_250px] xl:grid-cols-[180px_minmax(0,1fr)_270px]">
+          <div className="grid gap-4 lg:grid-cols-[160px_minmax(0,1fr)_250px] xl:grid-cols-[180px_minmax(0,1fr)_270px]">
             <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
               <ClientSidebar />
             </aside>
 
-            <div className="space-y-5">
+            <div className="space-y-4">
               {loadingProjects ? (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   {Array.from({ length: 5 }).map((_, index) => (
-                    <div key={index} className="animate-pulse rounded-[20px] border border-[#E5E7EB] bg-white p-6">
-                      <div className="h-4 w-2/5 rounded bg-[#E5E7EB]" />
-                      <div className="mt-3 h-6 w-4/5 rounded bg-[#E5E7EB]" />
-                      <div className="mt-2 h-4 w-3/4 rounded bg-[#E5E7EB]" />
-                      <div className="mt-4 aspect-video rounded-xl bg-[#E5E7EB]" />
+                    <div key={index} className="animate-pulse rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="h-4 w-2/5 rounded bg-slate-200" />
+                      <div className="mt-3 h-6 w-4/5 rounded bg-slate-200" />
+                      <div className="mt-2 h-4 w-3/4 rounded bg-slate-200" />
+                      <div className="mt-4 aspect-video rounded-xl bg-slate-200" />
                     </div>
                   ))}
                 </div>
@@ -759,21 +759,21 @@ export default function ClientFeedPage() {
 
               {!loadingProjects && rankedProjects.length === 0 ? (
                 <section className="space-y-4">
-                  <p className="rounded-[20px] border border-[#E5E7EB] bg-white p-6 text-center text-sm text-[#64748B]">
+                  <p className="rounded-xl border border-slate-200 bg-white p-4 text-center text-sm text-slate-500">
                     No projects match these filters yet.
                   </p>
                   {Array.from({ length: 2 }).map((_, index) => (
-                    <div key={index} className="animate-pulse rounded-[20px] border border-[#E5E7EB] bg-white p-6">
-                      <div className="h-5 w-1/2 rounded bg-[#E5E7EB]" />
-                      <div className="mt-3 h-4 w-2/3 rounded bg-[#E5E7EB]" />
-                      <div className="mt-4 aspect-video rounded-xl bg-[#E5E7EB]" />
+                    <div key={index} className="animate-pulse rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="h-5 w-1/2 rounded bg-slate-200" />
+                      <div className="mt-3 h-4 w-2/3 rounded bg-slate-200" />
+                      <div className="mt-4 aspect-video rounded-xl bg-slate-200" />
                     </div>
                   ))}
                 </section>
               ) : null}
 
               {!loadingProjects && rankedProjects.length > 0 ? (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   {visibleProjects.map((project) => {
                     const detail = projectDetails[project.slug];
                     const avatarLabel = detail?.author.fullName || "Developer";
@@ -790,7 +790,7 @@ export default function ClientFeedPage() {
                     return (
                       <article
                         key={project.id}
-                        className="group rounded-[20px] border border-[#E5E7EB] bg-white p-6 shadow-[0_6px_20px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-0.75 hover:border-[#CBD5E1] hover:shadow-[0_14px_32px_rgba(15,23,42,0.08)]"
+                        className="group rounded-xl border border-slate-200 bg-white p-4 md:p-5 transition duration-200 hover:border-slate-900"
                       >
                     <header className="flex items-start justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3">
@@ -799,10 +799,10 @@ export default function ClientFeedPage() {
                         </span>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <p className="truncate text-sm font-semibold text-[#111827]">{avatarLabel}</p>
-                            <BadgeCheck className="h-4 w-4 text-[#2563EB]" aria-hidden />
+                            <p className="truncate text-sm font-semibold text-slate-900">{avatarLabel}</p>
+                            <BadgeCheck className="h-4 w-4 text-slate-900" aria-hidden />
                           </div>
-                          <p className="truncate text-xs text-[#64748B]">
+                          <p className="truncate text-xs text-slate-500">
                             Software Developer <span className="px-1">•</span>
                             <MapPin className="mr-1 inline h-3.5 w-3.5" aria-hidden />
                             Remote
@@ -811,21 +811,21 @@ export default function ClientFeedPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                           Open for Work
                         </span>
-                        <span className="text-xs text-[#64748B]">{formatRelativeTime(project.createdAt)}</span>
-                        <button className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#F8FAFA]" aria-label="Open project menu">
+                        <span className="text-xs text-slate-500">{formatRelativeTime(project.createdAt)}</span>
+                        <button className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50" aria-label="Open project menu">
                           <Ellipsis className="h-4 w-4" aria-hidden />
                         </button>
                       </div>
                     </header>
 
-                    <Link href={projectUrl} className="mt-4 block text-[20px] font-semibold leading-snug text-[#111827] hover:text-[#2563EB]">
+                    <Link href={projectUrl} className="mt-3 block line-clamp-2 text-lg font-semibold leading-snug text-slate-900 hover:text-slate-600">
                       {project.title}
                     </Link>
 
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-[#64748B]">{project.shortDescription}</p>
+                    <p className="mt-2 line-clamp-3 text-sm leading-5 text-slate-500">{project.shortDescription}</p>
 
                     <div className="mt-4 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F8FAFA]">
                       {heroUrl ? (
@@ -850,17 +850,17 @@ export default function ClientFeedPage() {
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {techStack.length > 0 ? techStack.map((tech) => (
-                        <span key={`${project.id}-${tech}`} className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-medium text-[#64748B]">
+                        <span key={`${project.id}-${tech}`} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                           {tech}
                         </span>
                       )) : (
-                        <span className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1 text-xs font-medium text-[#64748B]">
+                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                           No tech stack provided
                         </span>
                       )}
                     </div>
 
-                    <div className="mt-4 grid gap-2 text-xs text-[#64748B] sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2 lg:grid-cols-3">
                       <span className="inline-flex items-center gap-1.5"><Eye className="h-3.5 w-3.5" aria-hidden /> {project.viewCount} Views</span>
                       <span className="inline-flex items-center gap-1.5"><Heart className="h-3.5 w-3.5" aria-hidden /> {project.likeCount} Likes</span>
                       <span>Client Inquiries: {inquiryCount}</span>
@@ -869,7 +869,7 @@ export default function ClientFeedPage() {
                     </div>
 
                     <footer className="mt-4 flex flex-wrap items-center gap-2">
-                      <Link href={projectUrl} className="inline-flex h-9 items-center rounded-lg bg-[#0F172A] px-4 text-xs font-semibold text-white transition hover:bg-[#020617]">
+                      <Link href={projectUrl} className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-black">
                         View Project
                       </Link>
                       <button
@@ -877,10 +877,10 @@ export default function ClientFeedPage() {
                           void onToggleLikeProject(project);
                         }}
                         disabled={isLiking}
-                        className={`inline-flex h-9 items-center gap-1 rounded-lg border px-4 text-xs font-semibold transition disabled:opacity-60 ${
+                        className={`inline-flex h-10 items-center gap-1 rounded-lg border px-4 text-xs font-semibold transition disabled:opacity-60 ${
                           isLiked
-                            ? "border-[#DC2626] bg-[#FEF2F2] text-[#DC2626]"
-                            : "border-[#E5E7EB] text-[#111827] hover:border-[#CBD5E1]"
+                            ? "border-rose-300 bg-rose-50 text-rose-700"
+                            : "border-slate-200 text-slate-700 hover:border-slate-900 hover:text-slate-900"
                         }`}
                       >
                         <Heart className="h-3.5 w-3.5" aria-hidden />
@@ -891,23 +891,23 @@ export default function ClientFeedPage() {
                           void onViewDeveloper(project, detail);
                         }}
                         disabled={openingDeveloperProjectId === project.id}
-                        className="inline-flex h-9 items-center rounded-lg border border-[#E5E7EB] px-4 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1] disabled:opacity-60"
+                        className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-xs font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900 disabled:opacity-60"
                       >
                         {openingDeveloperProjectId === project.id ? "Opening..." : "View Developer"}
                       </button>
                       <button
                         onClick={() => toggleSavedProject(project.id)}
-                        className={`inline-flex h-9 items-center rounded-lg border px-4 text-xs font-semibold transition ${
+                        className={`inline-flex h-10 items-center rounded-lg border px-4 text-xs font-semibold transition ${
                           isSaved
-                            ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                            : "border-[#E5E7EB] text-[#111827] hover:border-[#CBD5E1]"
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 text-slate-700 hover:border-slate-900 hover:text-slate-900"
                         }`}
                       >
                         Save
                       </button>
                       <button
                         onClick={() => onShareProject(project)}
-                        className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E5E7EB] px-4 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1]"
+                        className="inline-flex h-10 items-center gap-1 rounded-lg border border-slate-200 px-4 text-xs font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
                       >
                         <Share2 className="h-3.5 w-3.5" aria-hidden />
                         Share
@@ -915,7 +915,7 @@ export default function ClientFeedPage() {
                       <button
                         onClick={() => onHireDeveloper(project, detail)}
                         disabled={hiringProjectId === project.id}
-                        className="inline-flex h-9 items-center rounded-lg bg-[#2563EB] px-4 text-xs font-semibold text-white transition hover:bg-[#1d4ed8] disabled:opacity-60"
+                        className="inline-flex h-10 items-center rounded-lg border border-slate-900 bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-black disabled:opacity-60"
                       >
                         {hiringProjectId === project.id ? "Starting..." : "Hire Developer"}
                       </button>
@@ -931,7 +931,7 @@ export default function ClientFeedPage() {
                           type="button"
                           disabled={currentPage <= 1}
                           onClick={() => updatePageInUrl(Math.max(1, currentPage - 1))}
-                          className="h-9 rounded-lg border border-[#E5E7EB] bg-white px-3 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1] disabled:cursor-not-allowed disabled:opacity-50"
+                          className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Prev
                         </button>
@@ -941,10 +941,10 @@ export default function ClientFeedPage() {
                             key={pageNumber}
                             type="button"
                             onClick={() => updatePageInUrl(pageNumber)}
-                            className={`h-9 min-w-9 rounded-lg border px-3 text-xs font-semibold transition ${
+                            className={`h-10 min-w-10 rounded-lg border px-3 text-xs font-semibold transition ${
                               currentPage === pageNumber
-                                ? "border-[#0F172A] bg-[#0F172A] text-white"
-                                : "border-[#E5E7EB] bg-white text-[#111827] hover:border-[#CBD5E1]"
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-900 hover:text-slate-900"
                             }`}
                           >
                             {pageNumber}
@@ -955,7 +955,7 @@ export default function ClientFeedPage() {
                           type="button"
                           disabled={currentPage >= totalPages}
                           onClick={() => updatePageInUrl(Math.min(totalPages, currentPage + 1))}
-                          className="h-9 rounded-lg border border-[#E5E7EB] bg-white px-3 text-xs font-semibold text-[#111827] transition hover:border-[#CBD5E1] disabled:cursor-not-allowed disabled:opacity-50"
+                          className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Next
                         </button>
@@ -966,20 +966,20 @@ export default function ClientFeedPage() {
               ) : null}
 
               {!loadingProjects && projects.length > 0 ? (
-                <p className="text-center text-xs text-[#64748B]">Page {currentPage} of {Math.max(totalPages, 1)} • {totalItems} total projects</p>
+                <p className="text-center text-xs text-slate-500">Page {currentPage} of {Math.max(totalPages, 1)} • {totalItems} total projects</p>
               ) : null}
             </div>
 
             <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
-              <section className="rounded-[20px] border border-[#E5E7EB] bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-semibold text-[#0F172A]">Recommendation Reasons</h2>
+                  <h2 className="text-sm font-semibold text-slate-900">Recommendation Reasons</h2>
                 </div>
 
-                <p className="mt-1 text-[11px] text-[#64748B]">Why these projects match your needs.</p>
+                <p className="mt-1 text-[11px] text-slate-500">Why these projects match your needs.</p>
 
                 <div className="mt-2.5 space-y-2">
-                  <label className="block text-[11px] font-medium text-[#64748B]">
+                  <label className="block text-[11px] font-medium text-slate-500">
                     Budget (USD)
                     <input
                       type="number"
@@ -988,11 +988,11 @@ export default function ClientFeedPage() {
                       value={fitBudget}
                       onChange={(event) => setFitBudget(event.target.value)}
                       placeholder="e.g. 5000"
-                      className="mt-1 h-8 w-full rounded-lg border border-[#E5E7EB] px-2.5 text-xs text-[#111827] outline-none focus:border-[#2563EB]"
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-slate-900"
                     />
                   </label>
 
-                  <label className="block text-[11px] font-medium text-[#64748B]">
+                  <label className="block text-[11px] font-medium text-slate-500">
                     Deadline (weeks)
                     <input
                       type="number"
@@ -1001,47 +1001,47 @@ export default function ClientFeedPage() {
                       value={fitDeadlineWeeks}
                       onChange={(event) => setFitDeadlineWeeks(event.target.value)}
                       placeholder="e.g. 6"
-                      className="mt-1 h-8 w-full rounded-lg border border-[#E5E7EB] px-2.5 text-xs text-[#111827] outline-none focus:border-[#2563EB]"
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-slate-900"
                     />
                   </label>
 
-                  <label className="block text-[11px] font-medium text-[#64748B]">
+                  <label className="block text-[11px] font-medium text-slate-500">
                     Required stack
                     <input
                       value={fitRequiredStack}
                       onChange={(event) => setFitRequiredStack(event.target.value)}
                       placeholder="React, Node.js, PostgreSQL"
-                      className="mt-1 h-8 w-full rounded-lg border border-[#E5E7EB] px-2.5 text-xs text-[#111827] outline-none focus:border-[#2563EB]"
+                      className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-slate-900"
                     />
                   </label>
                 </div>
 
                 {topFit ? (
-                  <div className="mt-3 rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-2">
-                    <p className="text-xs font-semibold text-[#0F172A]">Top: {topFit.project.title}</p>
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                    <p className="text-xs font-semibold text-slate-900">Top: {topFit.project.title}</p>
                     <div className="mt-1.5 space-y-1">
                       {buildRecommendationReasons(topFit).map((reason) => (
-                        <p key={reason} className="text-[11px] text-[#64748B]">- {reason}</p>
+                        <p key={reason} className="text-[11px] text-slate-500">- {reason}</p>
                       ))}
                     </div>
                   </div>
                 ) : null}
 
                 <div className="mt-3 space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Recommended projects</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">Recommended projects</p>
                   {topFitMatches.length > 0 ? (
                     topFitMatches.map((item) => (
                       <Link
                         key={item.project.id}
                         href={`/projects/${item.project.slug}`}
-                        className="flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-1.5 text-xs text-[#111827] hover:border-[#CBD5E1]"
+                        className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 hover:border-slate-900"
                       >
                         <span className="line-clamp-1 pr-2">{item.project.title}</span>
-                        <span className="font-semibold text-[#1D4ED8]">{item.project.category.replace(/_/g, " ")}</span>
+                        <span className="font-semibold text-slate-700">{item.project.category.replace(/_/g, " ")}</span>
                       </Link>
                     ))
                   ) : (
-                    <p className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFA] px-2.5 py-2 text-xs text-[#64748B]">No recommendation reasons yet.</p>
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-500">No recommendation reasons yet.</p>
                   )}
                 </div>
               </section>
@@ -1051,27 +1051,27 @@ export default function ClientFeedPage() {
       </section>
 
       {isFilterModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/55 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
-              <h2 className="text-base font-semibold text-[#0F172A]">Project Filters</h2>
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/35">
+          <div className="h-full w-full max-w-md overflow-y-auto border-l border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h2 className="text-base font-semibold text-slate-900">Project Filters</h2>
               <button
                 type="button"
                 onClick={() => setIsFilterModalOpen(false)}
-                className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#F8FAFA]"
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-50"
                 aria-label="Close filters"
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="text-xs font-medium text-[#64748B]">
+            <div className="mt-4 grid gap-4">
+              <label className="text-xs font-medium text-slate-500">
                 Category
                 <select
                   value={draftFilters.category}
                   onChange={(event) => setDraftFilters((prev) => ({ ...prev, category: event.target.value as FeedFilters["category"] }))}
-                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                 >
                   <option value="ALL">All</option>
                   <option value="WEB_APP">Web App</option>
@@ -1085,12 +1085,12 @@ export default function ClientFeedPage() {
                 </select>
               </label>
 
-              <label className="text-xs font-medium text-[#64748B]">
+              <label className="text-xs font-medium text-slate-500">
                 Pricing
                 <select
                   value={draftFilters.pricingType}
                   onChange={(event) => setDraftFilters((prev) => ({ ...prev, pricingType: event.target.value as FeedFilters["pricingType"] }))}
-                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                 >
                   <option value="ALL">All</option>
                   <option value="FIXED">Fixed</option>
@@ -1100,12 +1100,12 @@ export default function ClientFeedPage() {
                 </select>
               </label>
 
-              <label className="text-xs font-medium text-[#64748B]">
+              <label className="text-xs font-medium text-slate-500">
                 Sort by
                 <select
                   value={draftFilters.sortBy}
                   onChange={(event) => setDraftFilters((prev) => ({ ...prev, sortBy: event.target.value as FeedSortBy }))}
-                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                 >
                   <option value="newest">Newest</option>
                   <option value="popular">Popular</option>
@@ -1114,51 +1114,51 @@ export default function ClientFeedPage() {
                 </select>
               </label>
 
-              <label className="text-xs font-medium text-[#64748B]">
+              <label className="text-xs font-medium text-slate-500">
                 Tech Stack (comma-separated)
                 <input
                   value={draftFilters.techStack}
                   onChange={(event) => setDraftFilters((prev) => ({ ...prev, techStack: event.target.value }))}
                   placeholder="React, Next.js, Node.js"
-                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                 />
               </label>
 
-              <label className="text-xs font-medium text-[#64748B]">
+              <label className="text-xs font-medium text-slate-500">
                 Industries (comma-separated)
                 <input
                   value={draftFilters.industries}
                   onChange={(event) => setDraftFilters((prev) => ({ ...prev, industries: event.target.value }))}
                   placeholder="Fintech, Healthcare"
-                  className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                 />
               </label>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-medium text-[#64748B]">
+                <label className="text-xs font-medium text-slate-500">
                   Min Price
                   <input
                     value={draftFilters.minPrice}
                     onChange={(event) => setDraftFilters((prev) => ({ ...prev, minPrice: event.target.value }))}
                     inputMode="numeric"
                     placeholder="0"
-                    className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                   />
                 </label>
-                <label className="text-xs font-medium text-[#64748B]">
+                <label className="text-xs font-medium text-slate-500">
                   Max Price
                   <input
                     value={draftFilters.maxPrice}
                     onChange={(event) => setDraftFilters((prev) => ({ ...prev, maxPrice: event.target.value }))}
                     inputMode="numeric"
                     placeholder="10000"
-                    className="mt-1 h-10 w-full rounded-lg border border-[#E5E7EB] px-3 text-sm text-[#111827] outline-none focus:border-[#2563EB]"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                   />
                 </label>
               </div>
             </div>
 
-            <div className="mt-5 flex items-center justify-end gap-2 border-t border-[#E5E7EB] pt-4">
+            <div className="mt-5 flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
               <button
                 type="button"
                 onClick={() => {
@@ -1167,7 +1167,7 @@ export default function ClientFeedPage() {
                   updatePageInUrl(1);
                   setIsFilterModalOpen(false);
                 }}
-                className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-xs font-semibold text-[#64748B] hover:border-[#CBD5E1]"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 hover:border-slate-900 hover:text-slate-900"
               >
                 Clear all
               </button>
@@ -1178,7 +1178,7 @@ export default function ClientFeedPage() {
                   updatePageInUrl(1);
                   setIsFilterModalOpen(false);
                 }}
-                className="rounded-lg bg-[#2563EB] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1d4ed8]"
+                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black"
               >
                 Apply filters
               </button>

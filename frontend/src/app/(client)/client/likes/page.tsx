@@ -83,7 +83,7 @@ export default function ClientLikedProjectsPage() {
 
   const content = useMemo(() => {
     if (loading) {
-      return <p className="text-sm text-neutral-600">Loading liked projects...</p>;
+      return <p className="text-sm text-slate-500">Loading liked projects...</p>;
     }
 
     if (error) {
@@ -92,10 +92,10 @@ export default function ClientLikedProjectsPage() {
 
     if (entries.length === 0) {
       return (
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 text-sm text-neutral-700">
-          <p className="font-semibold text-neutral-900">No liked projects yet.</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">No liked projects yet.</p>
           <p className="mt-1">When you like projects from feed or project detail pages, they will show up here.</p>
-          <Link href="/client/feed" className="mt-4 inline-flex rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-800 hover:bg-neutral-50">
+          <Link href="/client/feed" className="mt-4 inline-flex rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:border-slate-900 hover:text-slate-900">
             Browse projects
           </Link>
         </div>
@@ -109,12 +109,12 @@ export default function ClientLikedProjectsPage() {
           const heroUrl = project.thumbnailUrl || project.backgroundUrl;
 
           return (
-            <article key={entry.projectId} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-              <div className="relative aspect-video w-full bg-neutral-100">
+            <article key={entry.projectId} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="relative aspect-video w-full bg-slate-100">
                 {heroUrl ? (
                   <Image src={heroUrl} alt={project.title} fill className="object-cover" unoptimized />
                 ) : (
-                  <div className="flex h-full items-center justify-center px-6 text-center text-xs text-neutral-500">
+                  <div className="flex h-full items-center justify-center px-6 text-center text-xs text-slate-500">
                     No project image uploaded yet
                   </div>
                 )}
@@ -122,13 +122,13 @@ export default function ClientLikedProjectsPage() {
 
               <div className="space-y-3 p-4">
                 <div>
-                  <Link href={`/projects/${project.slug}`} className="text-base font-semibold text-neutral-900 hover:underline">
+                  <Link href={`/projects/${project.slug}`} className="text-base font-semibold text-slate-900 hover:underline">
                     {project.title}
                   </Link>
-                  <p className="mt-1 line-clamp-2 text-sm text-neutral-600">{project.shortDescription}</p>
+                  <p className="mt-1 line-clamp-2 text-sm text-slate-500">{project.shortDescription}</p>
                 </div>
 
-                <div className="flex flex-wrap gap-2 text-xs text-neutral-600">
+                <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                   <span>{project.category.replace(/_/g, " ")}</span>
                   <span>•</span>
                   <span>{project.likeCount} likes</span>
@@ -136,12 +136,12 @@ export default function ClientLikedProjectsPage() {
                   <span>{project.viewCount} views</span>
                 </div>
 
-                <p className="text-sm font-semibold text-neutral-800">
+                <p className="text-sm font-semibold text-slate-800">
                   Budget: {formatMoney(project.price, project.currency, project.pricingType)}
                 </p>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/projects/${project.slug}`} className="inline-flex rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black">
+                  <Link href={`/projects/${project.slug}`} className="inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black">
                     View Project
                   </Link>
                   <button
@@ -150,7 +150,7 @@ export default function ClientLikedProjectsPage() {
                       void onToggleLike(entry);
                     }}
                     disabled={pendingProjectId === entry.projectId}
-                    className="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
                   >
                     <Heart className="h-3.5 w-3.5" aria-hidden />
                     {pendingProjectId === entry.projectId ? "Updating..." : "Unlike"}
@@ -165,21 +165,21 @@ export default function ClientLikedProjectsPage() {
   }, [entries, error, loading, pendingProjectId]);
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <ClientDashboardNavbar />
-      <section className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6">
+      <section className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-7">
         <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]">
           <aside className="space-y-4 lg:sticky lg:top-22 lg:self-start">
             <ClientSidebar />
           </aside>
 
           <div>
-            <div className="mb-6 flex items-center justify-between gap-3">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-semibold">Liked Projects</h1>
-                <p className="mt-1 text-sm text-neutral-600">Projects you have liked as engagement signals.</p>
+                <p className="mt-1 text-sm text-slate-500">Projects you have liked as engagement signals.</p>
               </div>
-              <Link href="/client/feed" className="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-white">
+              <Link href="/client/feed" className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:border-slate-900 hover:text-slate-900">
                 Back to feed
               </Link>
             </div>

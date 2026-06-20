@@ -36,7 +36,7 @@ function originMatchesPattern(origin: string, pattern: string): boolean {
 
 async function bootstrap(): Promise<void> {
   const quietStartupLogs = process.env.QUIET_STARTUP_LOGS !== "false";
-  const fallbackOriginPatterns = ["http://localhost:3000", "https://find-a-client.vercel.app"];
+  const fallbackOriginPatterns = ["http://localhost:3060", "https://find-a-client.vercel.app"];
   const allowedOriginPatterns = [
     ...(process.env.FRONTEND_URLS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
     process.env.FRONTEND_URL?.trim() ?? "",

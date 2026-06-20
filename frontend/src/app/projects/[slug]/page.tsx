@@ -232,7 +232,7 @@ function UploadDropZone({
       onDragLeave={() => setIsActive(false)}
       onDrop={handleDrop}
       className={`rounded-xl border border-dashed p-3 text-xs transition ${
-        isActive ? "border-cyan-500 bg-cyan-50 text-cyan-900" : "border-neutral-300 bg-white text-neutral-700"
+        isActive ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-300 bg-white text-slate-700"
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -248,9 +248,9 @@ function UploadDropZone({
 
       <p className="mt-1 text-[11px] text-neutral-500">Drag and drop here, or use the button to browse your device.</p>
 
-      {selectedSummary ? <p className="mt-2 text-[11px] font-medium text-cyan-800">Selected: {selectedSummary}</p> : null}
+      {selectedSummary ? <p className="mt-2 text-[11px] font-medium text-slate-800">Selected: {selectedSummary}</p> : null}
       {!selectedSummary && currentUrl ? (
-        <a href={currentUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-medium text-cyan-700 hover:underline">
+        <a href={currentUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-medium text-slate-700 hover:underline">
           View currently linked file
         </a>
       ) : null}
@@ -298,6 +298,8 @@ export default function ProjectDetailPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editShortDescription, setEditShortDescription] = useState("");
   const [editLongDescription, setEditLongDescription] = useState("");
+  const [editRoleInProject, setEditRoleInProject] = useState("");
+  const [editRepositoryUrl, setEditRepositoryUrl] = useState("");
   const [editCategory, setEditCategory] = useState<ProjectCategory>("WEB_APP");
   const [editStatus, setEditStatus] = useState<ProjectDetail["status"]>("DRAFT");
   const [editPricingType, setEditPricingType] = useState<PricingType>("FIXED");
@@ -318,6 +320,8 @@ export default function ProjectDetailPage() {
     setEditTitle(item.title);
     setEditShortDescription(item.shortDescription);
     setEditLongDescription(item.longDescription);
+    setEditRoleInProject(item.roleInProject ?? "");
+    setEditRepositoryUrl(item.repositoryUrl ?? "");
     setEditCategory(item.category);
     setEditStatus(item.status);
     setEditPricingType(item.pricingType);
@@ -484,6 +488,8 @@ export default function ProjectDetailPage() {
         title: false,
         shortDescription: false,
         longDescription: false,
+        roleInProject: false,
+        repositoryUrl: false,
         category: false,
         status: false,
         pricingType: false,
@@ -510,6 +516,8 @@ export default function ProjectDetailPage() {
       title: normalizeText(editTitle) !== normalizeText(project.title),
       shortDescription: normalizeText(editShortDescription) !== normalizeText(project.shortDescription),
       longDescription: normalizeText(editLongDescription) !== normalizeText(project.longDescription),
+      roleInProject: normalizeText(editRoleInProject) !== normalizeText(project.roleInProject),
+      repositoryUrl: normalizeText(editRepositoryUrl) !== normalizeText(project.repositoryUrl),
       category: editCategory !== project.category,
       status: editStatus !== project.status,
       pricingType: editPricingType !== project.pricingType,
@@ -532,6 +540,8 @@ export default function ProjectDetailPage() {
     editDemoUrl,
     editIndustries,
     editLongDescription,
+    editRepositoryUrl,
+    editRoleInProject,
     editPrice,
     editPricingType,
     editScreenshots,
@@ -552,8 +562,8 @@ export default function ProjectDetailPage() {
   );
   const screenshotItems = useMemo(() => parseCommaList(editScreenshots), [editScreenshots]);
   const inputClass = (changed: boolean): string =>
-    `mt-1 block w-full border px-2.5 text-sm outline-none transition focus:border-neutral-900 ${
-      changed ? "border-cyan-400 bg-cyan-50/40" : "border-neutral-300 bg-white"
+    `mt-1 block w-full border px-2.5 text-sm outline-none transition focus:border-slate-900 ${
+      changed ? "border-slate-400 bg-slate-50" : "border-slate-300 bg-white"
     }`;
 
   const removeScreenshotAt = (index: number): void => {
@@ -636,7 +646,7 @@ export default function ProjectDetailPage() {
   const responseTimeLabel = pickDetailValue("response", "reply") ?? "Usually responds in 2 hours";
   const availabilityLabel =
     pickDetailValue("availability") ?? (project?.status === "PUBLISHED" ? "Available for new projects" : "Limited availability");
-  const roleLabel = pickDetailValue("role", "title", "position") ?? "Senior Full Stack Engineer";
+  const roleLabel = project?.roleInProject ?? pickDetailValue("role", "title", "position") ?? "Senior Full Stack Engineer";
   const locationLabel = pickDetailValue("location", "country", "city") ?? "Nairobi, Kenya";
   const projectTypeLabel = project ? friendlyLabel(project.category) : "Project";
 
@@ -676,6 +686,7 @@ export default function ProjectDetailPage() {
     () =>
       [
         { label: "Live Demo", url: project?.demoUrl },
+        { label: "Repository", url: project?.repositoryUrl },
         { label: "Video Walkthrough", url: projectVideoUrl },
         { label: "Primary Screenshot", url: galleryImages[0] }
       ].filter((item): item is { label: string; url: string } => Boolean(item.url)),
@@ -695,17 +706,8 @@ export default function ProjectDetailPage() {
     if (!project) {
       return 4.7;
     }
-    const engagement = project.viewCount + project.likeCount * 8 + project.inquiryCount * 15;
-    if (engagement > 250) {
-      return 5;
-    }
-    if (engagement > 120) {
-      return 4.9;
-    }
-    if (engagement > 50) {
-      return 4.8;
-    }
-    return 4.7;
+    const normalized = Math.max(0, Math.min(100, project.qualityScore ?? 0));
+    return Math.round((normalized / 20) * 10) / 10;
   }, [project]);
 
   const fitAssessment = useMemo(() => {
@@ -857,6 +859,8 @@ export default function ProjectDetailPage() {
         title: editTitle.trim(),
         shortDescription: editShortDescription.trim(),
         longDescription: editLongDescription.trim(),
+        roleInProject: editRoleInProject.trim() || undefined,
+        repositoryUrl: toNullableUrl(editRepositoryUrl),
         category: editCategory,
         status: editStatus,
         pricingType: normalizedPricingType,
@@ -993,7 +997,7 @@ export default function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-neutral-50 text-neutral-900">
+      <main className="min-h-screen bg-slate-50 text-slate-900">
         <MarketplaceNavbar />
         <FullPageLoader label="Loading project" fullScreen={false} />
       </main>
@@ -1103,6 +1107,10 @@ export default function ProjectDetailPage() {
                     <div className="px-0 py-0">
                       <p className="text-slate-600">Trust Score</p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">{trustScore.toFixed(1)} / 5</p>
+                    </div>
+                    <div className="px-0 py-0">
+                      <p className="text-slate-600">Quality</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{(project.qualityScore ?? 0).toFixed(1)} / 100</p>
                     </div>
                     <div className="px-0 py-0">
                       <p className="text-slate-600">Client Inquiries</p>
@@ -1233,6 +1241,15 @@ export default function ProjectDetailPage() {
                       className={`${inputClass(editDiff.shortDescription)} h-9`}
                     />
                   </label>
+
+                  <label className="text-xs text-neutral-600">
+                    Role In Project {editDiff.roleInProject ? <span className="text-cyan-700">(changed)</span> : null}
+                    <input
+                      value={editRoleInProject}
+                      onChange={(event) => setEditRoleInProject(event.target.value)}
+                      className={`${inputClass(editDiff.roleInProject)} h-9`}
+                    />
+                  </label>
                 </div>
 
                 <label className="mt-3 block text-xs text-neutral-600">
@@ -1340,6 +1357,15 @@ export default function ProjectDetailPage() {
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-2">
+                    <label className="text-xs text-neutral-600">
+                      Repository URL {editDiff.repositoryUrl ? <span className="text-cyan-700">(changed)</span> : null}
+                      <input
+                        value={editRepositoryUrl}
+                        onChange={(event) => setEditRepositoryUrl(event.target.value)}
+                        className={`${inputClass(editDiff.repositoryUrl)} h-9`}
+                      />
+                    </label>
+
                     <label className="text-xs text-neutral-600">
                       Demo URL {editDiff.demoUrl ? <span className="text-cyan-700">(changed)</span> : null}
                       <input

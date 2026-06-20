@@ -150,6 +150,10 @@ interface LoginResponse {
   role: AppRole;
 }
 
+interface OAuthSessionResponse {
+  role: AppRole;
+}
+
 interface VerifyEmailResponse {
   verified: true;
   role: AppRole;
@@ -191,6 +195,11 @@ export interface ChangePasswordPayload {
   newPassword: string;
 }
 
+export interface OAuthRedirectOptions {
+  next?: string;
+  intent?: string;
+}
+
 export interface AuthSession {
   sub: string;
   email: string;
@@ -219,7 +228,16 @@ export interface CurrentUserProfile {
   phoneNumber: string | null;
   websiteUrl: string | null;
   githubUrl: string | null;
+  githubUsername: string | null;
+  githubVerifiedAt: string | null;
   linkedinUrl: string | null;
+}
+
+export interface GithubVerificationResult {
+  verified: true;
+  githubUsername: string;
+  githubUrl: string;
+  verifiedAt: string;
 }
 
 export interface DeveloperSearchItem {
@@ -349,6 +367,8 @@ export interface ProjectListItem {
   slug: string;
   title: string;
   shortDescription: string;
+  roleInProject: string | null;
+  repositoryUrl: string | null;
   category: ProjectCategory;
   techStack: string[];
   pricingType: PricingType;
@@ -359,6 +379,7 @@ export interface ProjectListItem {
   likeCount: number;
   viewCount: number;
   inquiryCount: number;
+  qualityScore: number;
   createdAt: string;
 }
 
@@ -368,6 +389,8 @@ export interface ProjectDetail {
   title: string;
   shortDescription: string;
   longDescription: string;
+  roleInProject: string | null;
+  repositoryUrl: string | null;
   category: ProjectCategory;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   techStack: string[];
@@ -382,6 +405,7 @@ export interface ProjectDetail {
   likeCount: number;
   viewCount: number;
   inquiryCount: number;
+  qualityScore: number;
   createdAt: string;
   updatedAt: string;
   author: {
@@ -437,11 +461,14 @@ export interface MyProjectListItem {
   slug: string;
   title: string;
   shortDescription: string;
+  roleInProject: string | null;
+  repositoryUrl: string | null;
   category: ProjectCategory;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   techStack: string[];
   likeCount: number;
   viewCount: number;
+  qualityScore: number;
   thumbnailUrl: string | null;
   backgroundUrl: string | null;
   createdAt: string;
@@ -487,6 +514,15 @@ export interface ThreadMessage {
   content: string;
   isRead: boolean;
   createdAt: string;
+  attachments?: Array<{
+    id: string;
+    url: string;
+    publicId: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    createdAt: string;
+  }>;
 }
 
 export interface MessagePageMeta {
@@ -519,6 +555,16 @@ export interface ProfileCompleteness {
   nextAction: string | null;
 }
 
+export interface DeveloperDashboardData {
+  profile: CurrentUserProfile;
+  threads: ThreadSummary[];
+  notifications: NotificationItem[];
+  savedProjects: SavedProjectEntry[];
+  myProjects: MyProjectListItem[];
+  completeness: ProfileCompleteness;
+  recommendedProjects: ProjectListItem[];
+}
+
 export interface UpdateProfilePayload {
   fullName?: string;
   title?: string;
@@ -543,6 +589,8 @@ export interface CreateProjectPayload {
   title: string;
   shortDescription: string;
   longDescription: string;
+  roleInProject?: string;
+  repositoryUrl?: string;
   category: ProjectCategory;
   techStack: string[];
   industries: string[];
@@ -560,6 +608,8 @@ export interface UpdateProjectPayload {
   title?: string;
   shortDescription?: string;
   longDescription?: string;
+  roleInProject?: string;
+  repositoryUrl?: string | null;
   category?: ProjectCategory;
   status?: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   techStack?: string[];
@@ -702,6 +752,14 @@ export async function login(payload: LoginPayload): Promise<LoginResponse> {
   return postJson<LoginResponse, LoginPayload>("/auth/login", payload);
 }
 
+export async function completeOAuthSession(accessToken: string): Promise<OAuthSessionResponse> {
+  cachedSession = null;
+  cachedSessionAt = 0;
+  return requestJson<OAuthSessionResponse, { accessToken: string }>("POST", "/auth/oauth/session", {
+    body: { accessToken }
+  });
+}
+
 export async function verifyEmail(payload: VerifyEmailPayload): Promise<VerifyEmailResponse> {
   cachedSession = null;
   cachedSessionAt = 0;
@@ -790,6 +848,35 @@ export async function getAuthSession(): Promise<AuthSession> {
   return inFlightSession;
 }
 
+function buildOAuthRedirectPath(provider: "google" | "github", options: OAuthRedirectOptions = {}): string {
+  const search = new URLSearchParams();
+
+  if (options.next) {
+    search.set("next", options.next);
+  }
+
+  if (options.intent) {
+    search.set("intent", options.intent);
+  }
+
+  const query = search.toString();
+  return query ? `/auth/${provider}?${query}` : `/auth/${provider}`;
+}
+
+export async function getGoogleOAuthRedirect(options: OAuthRedirectOptions = {}): Promise<{ url: string }> {
+  return requestJson<{ url: string }>("GET", buildOAuthRedirectPath("google", options));
+}
+
+export async function getGithubOAuthRedirect(options: OAuthRedirectOptions = {}): Promise<{ url: string }> {
+  return requestJson<{ url: string }>("GET", buildOAuthRedirectPath("github", options));
+}
+
+export async function verifyGithubOwnership(): Promise<GithubVerificationResult> {
+  return requestJson<GithubVerificationResult, Record<string, never>>("POST", "/auth/github/verify", {
+    body: {}
+  });
+}
+
 export async function updateProfile(payload: UpdateProfilePayload): Promise<void> {
   const normalizedPayload: UpdateProfilePayload = {
     ...payload,
@@ -803,6 +890,10 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<void
 
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile> {
   return requestJson<CurrentUserProfile>("GET", "/users/me");
+}
+
+export async function getDeveloperDashboardData(): Promise<DeveloperDashboardData> {
+  return requestJson<DeveloperDashboardData>("GET", "/users/me/dashboard");
 }
 
 export async function searchDevelopers(params: SearchDevelopersParams = {}): Promise<DeveloperSearchItem[]> {
@@ -1047,6 +1138,46 @@ export async function sendThreadMessage(threadId: string, content: string): Prom
   return requestJson<ThreadMessage, { content: string }>("POST", `/messages/threads/${encodeURIComponent(threadId)}`, {
     body: { content }
   });
+}
+
+export async function sendThreadAttachment(threadId: string, file: File, content?: string): Promise<ThreadMessage> {
+  const csrfToken = readCookie(CSRF_COOKIE_NAME);
+
+  const send = async (): Promise<Response> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (content?.trim()) {
+      formData.append("content", content.trim());
+    }
+
+    return fetch(`${API_BASE_URL}/messages/threads/${encodeURIComponent(threadId)}/attachments`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        ...(csrfToken ? { "x-csrf-token": csrfToken } : {})
+      },
+      body: formData
+    });
+  };
+
+  let response = await send();
+  if (response.status === 401) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      response = await send();
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const payload = (await response.json()) as ThreadMessage | ApiEnvelope<ThreadMessage>;
+  if (typeof payload === "object" && payload !== null && "success" in payload && "data" in payload) {
+    return (payload as ApiEnvelope<ThreadMessage>).data;
+  }
+
+  return payload as ThreadMessage;
 }
 
 export async function markThreadRead(threadId: string): Promise<{ updated: number }> {

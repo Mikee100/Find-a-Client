@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
   Briefcase,
@@ -25,14 +25,8 @@ import {
 } from "lucide-react";
 import {
   CurrentUserProfile,
+  getDeveloperDashboardData,
   getAuthSession,
-  getCurrentUserProfile,
-  getProfileCompleteness,
-  getMyProjects,
-  getMessageThreads,
-  getNotifications,
-  getSavedProjects,
-  listProjectsPaginated,
   logout,
   logoutEverywhere,
   MyProjectListItem,
@@ -57,6 +51,16 @@ type RecommendationItem = {
   matchedSkills: string[];
 };
 
+type SavedItem = {
+  id: string;
+  project: {
+    id: string;
+    slug: string;
+    title: string;
+    status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  };
+};
+
 type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -72,7 +76,7 @@ const navItems: NavItem[] = [
   { label: "Messages", icon: MessageSquare, href: "/developer/messages" },
   { label: "Analytics", icon: Zap, href: "/developer/dashboard#analytics" },
   { label: "AI Match", icon: Sparkles, href: "/developer/dashboard#ai-match" },
-  { label: "Saved Clients", icon: Users, href: "/developer/dashboard#saved-clients" },
+  { label: "Saved Projects", icon: Users, href: "/developer/dashboard#saved-clients" },
   { label: "Notifications", icon: Bell, href: "/developer/dashboard#notifications" },
   { label: "Settings", icon: Settings, href: "/developers/settings" },
   { label: "Help", icon: CircleHelp, href: "/developer/dashboard#help" },
@@ -203,31 +207,60 @@ function Sidebar({
   onClose: () => void;
   onToggleCollapsed: () => void;
 }) {
+  const sidebarWidth = collapsed ? 80 : 224;
+
   return (
     <>
-      <aside
-        className={`relative hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-slate-200 lg:bg-white lg:py-5 ${
-          collapsed ? "lg:w-20 lg:px-2" : "lg:w-56 lg:px-3"
+      <motion.aside
+        animate={{ width: sidebarWidth }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className={`relative hidden overflow-visible lg:sticky lg:top-0 lg:z-30 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-slate-200 lg:bg-white lg:py-5 ${
+          collapsed ? "lg:px-2" : "lg:px-3"
         }`}
       >
         <div className={`mb-5 ${collapsed ? "flex justify-center" : "px-2"}`}>
-          {collapsed ? (
-            <Link href="/" className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-xs font-bold text-white" aria-label="Go to home">
-              FC
-            </Link>
-          ) : (
-            <DashboardBrand />
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {collapsed ? (
+              <motion.div
+                key="collapsed-brand"
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.92 }}
+                transition={{ duration: 0.18 }}
+              >
+                <Link href="/" className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-xs font-bold text-white" aria-label="Go to home">
+                  FC
+                </Link>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="expanded-brand"
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6 }}
+                transition={{ duration: 0.2 }}
+              >
+                <DashboardBrand />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="absolute right-0 top-18 z-20 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+          className="absolute right-0 top-14 z-40 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          <motion.span
+            key={collapsed ? "expand" : "collapse"}
+            initial={{ rotate: collapsed ? -45 : 45, opacity: 0 }}
+            animate={{ rotate: 0, opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </motion.span>
         </button>
 
         <nav className="space-y-1">
@@ -243,50 +276,76 @@ function Sidebar({
               } ${collapsed ? "justify-center px-2" : ""}`}
             >
               <item.icon className="h-4 w-4" />
-              {!collapsed ? <span>{item.label}</span> : null}
+              <AnimatePresence initial={false}>
+                {!collapsed ? (
+                  <motion.span
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -8 }}
+                    transition={{ duration: 0.18 }}
+                    className="whitespace-nowrap"
+                  >
+                    {item.label}
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
             </Link>
           ))}
         </nav>
-      </aside>
+      </motion.aside>
 
-      {open ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            aria-label="Close sidebar overlay"
-            className="absolute inset-0 bg-slate-950/40"
-            onClick={onClose}
-          />
-          <aside className="relative h-full w-64 border-r border-slate-200 bg-white px-4 py-5">
-            <div className="mb-5 flex items-center justify-between px-2">
-              <DashboardBrand />
-              <button
-                onClick={onClose}
-                className="rounded-md border border-slate-200 p-1.5 text-slate-600"
-                aria-label="Close sidebar"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <nav className="space-y-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            className="fixed inset-0 z-50 lg:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <button
+              aria-label="Close sidebar overlay"
+              className="absolute inset-0 bg-slate-950/40"
+              onClick={onClose}
+            />
+            <motion.aside
+              className="relative h-full w-64 border-r border-slate-200 bg-white px-4 py-5"
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="mb-5 flex items-center justify-between px-2">
+                <DashboardBrand />
+                <button
                   onClick={onClose}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                    item.active
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
+                  className="rounded-md border border-slate-200 p-1.5 text-slate-600"
+                  aria-label="Close sidebar"
                 >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </Link>
-              ))}
-            </nav>
-          </aside>
-        </div>
-      ) : null}
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <nav className="space-y-1">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={onClose}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                      item.active
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </nav>
+            </motion.aside>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </>
   );
 }
@@ -306,7 +365,7 @@ function StatCard({
 }) {
   return (
     <AnimatedCard delay={delay}>
-      <article className="group min-w-[170px] rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <article className="group min-w-42.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
         <div className="mb-1.5 flex items-center justify-between gap-2">
           <p className="truncate text-xs font-medium text-slate-600">{title}</p>
           <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">{trend}</span>
@@ -332,7 +391,6 @@ function Hero({
   completeness: ProfileCompleteness;
 }) {
   const completion = Math.max(0, Math.min(100, completeness.percentage));
-  const dash = `${(completion / 100) * 87.96} ${87.96 - (completion / 100) * 87.96}`;
   const guidance = completeness.nextAction ?? (completeness.missingFields[0] ? `Complete ${completeness.missingFields[0]}` : "Your profile is fully optimized");
   const completionSummary = `${completeness.completedFields}/${completeness.totalFields} fields completed`;
   const missingSummary =
@@ -353,27 +411,15 @@ function Hero({
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-medium text-slate-500">Profile completion</p>
-          <div className="mt-3 flex items-center gap-3">
-            <div className="relative h-16 w-16 shrink-0">
-              <svg viewBox="0 0 36 36" className="h-16 w-16 -rotate-90">
-                <circle cx="18" cy="18" r="14" fill="none" stroke="#E5E7EB" strokeWidth="3.5" />
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="14"
-                  fill="none"
-                  stroke="#2563EB"
-                  strokeWidth="3.5"
-                  strokeDasharray={dash}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-900">
-                {completion}%
-              </span>
+          <div className="mt-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium text-slate-800">{completionSummary}</p>
+              <span className="font-mono text-xs text-slate-700">{completion}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+              <div className="h-full rounded-full bg-slate-900" style={{ width: `${completion}%` }} />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-800">{completionSummary}</p>
               <p className="text-xs text-slate-500">{guidance}</p>
               <p className="mt-0.5 text-[11px] text-slate-400">{missingSummary}</p>
             </div>
@@ -402,6 +448,7 @@ function PortfolioGrid({ projects }: { projects: MyProjectListItem[] }) {
                   src={project.thumbnailUrl ?? project.backgroundUrl ?? "/dashboard_preview.png"}
                   alt={project.title}
                   fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
                   className="object-cover"
                 />
               </div>
@@ -513,7 +560,7 @@ function MessagesPreview({ threads }: { threads: ThreadSummary[] }) {
 
 function RecommendedProjects({ recommendations }: { recommendations: RecommendationItem[] }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="saved-clients">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 className="mb-4 text-lg font-semibold text-slate-900">Recommended projects</h2>
       <div className="space-y-3">
         {recommendations.map((item, index) => (
@@ -554,6 +601,43 @@ function RecommendedProjects({ recommendations }: { recommendations: Recommendat
         {recommendations.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
             No recommended projects yet. Add more skills to improve matching.
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function SavedClientsSection({ savedItems }: { savedItems: SavedItem[] }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="saved-clients">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-900">Saved projects</h2>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+          {savedItems.length}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {savedItems.slice(0, 6).map((item) => (
+          <article key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="line-clamp-1 text-sm font-semibold text-slate-900">{item.project.title}</p>
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                {formatProjectStatus(item.project.status)}
+              </span>
+            </div>
+            <div className="mt-2">
+              <Link href={`/projects/${item.project.slug}`} className="text-xs font-medium text-blue-700 hover:underline">
+                Open project
+              </Link>
+            </div>
+          </article>
+        ))}
+
+        {savedItems.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+            You have no saved projects yet. Browse the marketplace and save opportunities to shortlist them here.
           </p>
         ) : null}
       </div>
@@ -730,6 +814,31 @@ function AnalyticsSection({
   );
 }
 
+function HelpSection() {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="help">
+      <h2 className="mb-2 text-lg font-semibold text-slate-900">Help</h2>
+      <p className="text-sm text-slate-600">
+        Quick shortcuts to resolve common issues and keep your dashboard up to date.
+      </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <Link href="/developer/messages" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100">
+          Contact clients in Messages
+        </Link>
+        <Link href="/developers/settings" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100">
+          Update profile and settings
+        </Link>
+        <Link href="/developer/projects" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100">
+          Manage your portfolio projects
+        </Link>
+        <Link href="/projects" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 hover:bg-slate-100">
+          Browse open client projects
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export default function DeveloperDashboardPage() {
   const router = useRouter();
   const [hasSession, setHasSession] = useState<boolean | undefined>(undefined);
@@ -739,7 +848,7 @@ export default function DeveloperDashboardPage() {
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [savedProjectsCount, setSavedProjectsCount] = useState(0);
+  const [savedProjects, setSavedProjects] = useState<SavedItem[]>([]);
   const [myProjects, setMyProjects] = useState<MyProjectListItem[]>([]);
   const [recommendedProjects, setRecommendedProjects] = useState<ProjectListItem[]>([]);
   const [completeness, setCompleteness] = useState<ProfileCompleteness>({
@@ -768,26 +877,19 @@ export default function DeveloperDashboardPage() {
 
     async function loadDashboardData() {
       try {
-        const [profileData, threadData, notificationData, savedData, myProjectData, completenessData, recommendedData] = await Promise.all([
-          getCurrentUserProfile(),
-          getMessageThreads(),
-          getNotifications(20),
-          getSavedProjects(),
-          getMyProjects(),
-          getProfileCompleteness(),
-          listProjectsPaginated({ sortBy: "popular", limit: 8 })
-        ]);
-        setProfile(profileData);
-        setThreads(threadData);
-        setNotifications(notificationData);
-        setSavedProjectsCount(savedData.length);
-        setMyProjects(myProjectData);
-        setCompleteness(completenessData);
-        setRecommendedProjects(recommendedData.items);
+        const dashboardData = await getDeveloperDashboardData();
+        setProfile(dashboardData.profile);
+        setThreads(dashboardData.threads);
+        setNotifications(dashboardData.notifications);
+        setSavedProjects(dashboardData.savedProjects);
+        setMyProjects(dashboardData.myProjects);
+        setCompleteness(dashboardData.completeness);
+        setRecommendedProjects(dashboardData.recommendedProjects);
       } catch {
         setProfile(null);
         setThreads([]);
         setNotifications([]);
+        setSavedProjects([]);
         setMyProjects([]);
         setRecommendedProjects([]);
         setCompleteness({
@@ -964,7 +1066,7 @@ export default function DeveloperDashboardPage() {
             <section className="flex gap-2 overflow-x-auto pb-1">
               <StatCard title="Project views" value={String(totalProjectViews)} trend="Live" subtitle="Across your portfolio" delay={0.05} />
               <StatCard title="Messages" value={String(messageActivityCount)} trend="Live" subtitle={messageActivitySubtitle} delay={0.09} />
-              <StatCard title="Saved projects" value={String(savedProjectsCount)} trend="Live" subtitle="In your shortlist" delay={0.13} />
+              <StatCard title="Saved projects" value={String(savedProjects.length)} trend="Live" subtitle="In your shortlist" delay={0.13} />
               <StatCard title="Published" value={String(publishedProjectCount)} trend="Live" subtitle="Visible to clients" delay={0.17} />
               <StatCard title="Drafts" value={String(draftProjectCount)} trend="Live" subtitle="Not yet published" delay={0.21} />
               <StatCard title="Project likes" value={String(totalProjectLikes)} trend="Live" subtitle="Engagement signal" delay={0.25} />
@@ -983,7 +1085,7 @@ export default function DeveloperDashboardPage() {
             </div>
 
             <div className="grid gap-6 xl:grid-cols-2">
-              <RecommendedProjects recommendations={recommendationItems} />
+              <SavedClientsSection savedItems={savedProjects} />
               <AnalyticsSection
                 totalProjectViews={totalProjectViews}
                 totalProjectLikes={totalProjectLikes}
@@ -993,6 +1095,10 @@ export default function DeveloperDashboardPage() {
                 publishedProjectCount={publishedProjectCount}
               />
             </div>
+
+            <RecommendedProjects recommendations={recommendationItems} />
+
+            <HelpSection />
 
           </main>
         </div>

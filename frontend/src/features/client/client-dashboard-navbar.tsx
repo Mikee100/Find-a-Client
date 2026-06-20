@@ -199,13 +199,13 @@ export default function ClientDashboardNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur">
-      <nav className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-3 px-4 md:px-6">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <nav className="mx-auto flex h-13 w-full max-w-7xl items-center justify-between gap-2.5 px-4 md:px-6">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setMobileOpen((current) => !current)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-100 md:hidden"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100 md:hidden"
             aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -224,7 +224,7 @@ export default function ClientDashboardNavbar() {
                 key={item.href}
                 href={item.href}
                 className={`inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold transition ${
-                  active ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100"
+                  active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
                 }`}
               >
                 {item.label}
@@ -243,22 +243,22 @@ export default function ClientDashboardNavbar() {
                   void loadNotifications();
                 }
               }}
-              className="relative inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-200 text-neutral-700 hover:bg-neutral-100"
+              className="relative inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100"
               aria-label="Notifications"
               title={unreadCount > 0 ? `${unreadCount} unread notifications` : "No unread notifications"}
             >
               <Bell className="h-4 w-4" aria-hidden />
               {unreadCount > 0 ? (
-                <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-neutral-900 px-1 text-[10px] font-semibold text-white">
+                <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-900 px-1 text-[10px] font-semibold text-white">
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               ) : null}
             </button>
 
             {notificationsOpen ? (
-              <div className="absolute right-0 z-40 mt-2 w-80 rounded-xl border border-neutral-200 bg-white p-2 shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
-                <div className="mb-2 flex items-center justify-between px-1.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Notifications</p>
+              <div className="absolute right-0 z-40 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+                <div className="mb-1.5 flex items-center justify-between px-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Notifications</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -274,18 +274,18 @@ export default function ClientDashboardNavbar() {
                       })();
                     }}
                     disabled={notificationsMarking || unreadCount === 0}
-                    className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+                    className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     {notificationsMarking ? "Updating..." : "Mark all read"}
                   </button>
                 </div>
 
                 {notificationsLoading ? (
-                  <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">Loading notifications...</p>
+                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">Loading notifications...</p>
                 ) : notificationsError ? (
                   <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{notificationsError}</p>
                 ) : notifications.length === 0 ? (
-                  <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">No notifications yet.</p>
+                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">No notifications yet.</p>
                 ) : (
                   <div className="max-h-80 space-y-1 overflow-auto pr-1">
                     {notifications.map((item) => (
@@ -295,9 +295,9 @@ export default function ClientDashboardNavbar() {
                         onClick={() => {
                           void handleNotificationClick(item);
                         }}
-                        className={`rounded-lg border px-3 py-2 text-xs ${
-                          item.isRead ? "border-neutral-200 bg-white text-neutral-600" : "border-blue-200 bg-blue-50 text-blue-900"
-                        } w-full text-left transition hover:border-neutral-300`}
+                        className={`rounded-lg border px-3 py-1.5 text-xs ${
+                          item.isRead ? "border-slate-200 bg-white text-slate-600" : "border-slate-300 bg-slate-50 text-slate-900"
+                        } w-full text-left transition hover:border-slate-400`}
                       >
                         <p className="font-semibold">{notificationHeading(item)}</p>
                         <p className="mt-0.5 line-clamp-2 text-[11px] opacity-90">{notificationBody(item)}</p>
@@ -323,7 +323,7 @@ export default function ClientDashboardNavbar() {
       </nav>
 
       {mobileOpen ? (
-        <div className="border-t border-neutral-200 bg-white px-4 py-3 md:hidden">
+        <div className="border-t border-slate-200 bg-white px-4 py-2.5 md:hidden">
           <div className="grid gap-2">
             {NAV_ITEMS.map((item) => {
               const active = item.match(pathname);
@@ -333,7 +333,7 @@ export default function ClientDashboardNavbar() {
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
                   className={`inline-flex h-9 items-center rounded-md px-3 text-sm font-semibold transition ${
-                    active ? "bg-neutral-900 text-white" : "border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+                    active ? "bg-slate-900 text-white" : "border border-slate-200 text-slate-700 hover:bg-slate-50"
                   }`}
                 >
                   {item.label}

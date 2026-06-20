@@ -6,6 +6,7 @@ import type { Transporter } from "nodemailer";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "crypto";
 import { NOTIFICATION_TYPE, NotificationType } from "src/common/constants/domain-enums.constant";
+import { CacheService } from "src/common/cache/cache.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { buildPagination } from "src/common/utils/pagination.util";
 
@@ -20,7 +21,8 @@ export class NotificationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly cacheService: CacheService
   ) {
     this.defaultFrom = this.configService.get<string>("EMAIL_FROM", "Find a Client <noreply@findaclient.app>");
     const configuredProvider = this.configService.get<string>("EMAIL_PROVIDER", "resend").toLowerCase();
@@ -44,6 +46,13 @@ export class NotificationsService {
     }
 
     this.resend = new Resend(this.configService.getOrThrow<string>("RESEND_API_KEY"));
+  }
+
+  private async invalidateNotificationsCache(userId: string) {
+    await Promise.all([
+      this.cacheService.invalidateNamespace(`notifications-list:${userId}`),
+      this.cacheService.invalidateNamespace(`developer-dashboard:${userId}`)
+    ]);
   }
 
   private mapEventToStatus(eventType: string): DeliveryStatus {
@@ -220,6 +229,20 @@ export class NotificationsService {
    * Lists notifications ordered by unread first.
    */
   async list(userId: string, cursor?: string, limit = 20) {
+    const cacheKey = await this.cacheService.composeKey(
+      `notifications-list:${userId}`,
+      JSON.stringify({ cursor: cursor ?? null, limit })
+    );
+    const cached = await this.cacheService.get<{
+      success: true;
+      data: unknown[];
+      meta: Record<string, unknown>;
+    }>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const items = await this.prisma.notification.findMany({
       where: { userId },
       orderBy: [{ isRead: "asc" }, { createdAt: "desc" }],
@@ -229,7 +252,9 @@ export class NotificationsService {
     });
 
     const { data, meta } = buildPagination(items, limit);
-    return { success: true, data, meta };
+    const payload = { success: true, data, meta };
+    await this.cacheService.set(cacheKey, payload, 10);
+    return payload;
   }
 
   /**
@@ -237,6 +262,7 @@ export class NotificationsService {
    */
   async readAll(userId: string): Promise<{ updated: number }> {
     const result = await this.prisma.notification.updateMany({ where: { userId, isRead: false }, data: { isRead: true } });
+    await this.invalidateNotificationsCache(userId);
     return { updated: result.count };
   }
 
@@ -255,6 +281,7 @@ export class NotificationsService {
       }
     });
 
+    await this.invalidateNotificationsCache(userId);
     return { updated: result.count };
   }
 
@@ -277,6 +304,7 @@ export class NotificationsService {
    */
   async dispatch(userId: string, type: NotificationType, payload: Record<string, unknown>): Promise<void> {
     await this.prisma.notification.create({ data: { userId, type, payload: payload as Prisma.InputJsonValue } });
+    await this.invalidateNotificationsCache(userId);
 
     if (type === NOTIFICATION_TYPE.NEW_MESSAGE || type === NOTIFICATION_TYPE.DEAL_INTEREST) {
       const user = await this.prisma.user.findUnique({ where: { id: userId } });

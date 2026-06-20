@@ -141,10 +141,10 @@ function appendLineValue(existing: string, value: string): string {
 
 function SectionCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-neutral-200 bg-white/95 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)] md:p-5">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 md:p-5">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-neutral-900">{title}</h2>
-        <p className="mt-1 text-sm text-neutral-600">{subtitle}</p>
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
       </div>
       <div className="grid gap-4">{children}</div>
     </section>
@@ -171,10 +171,10 @@ function CommaSelectionChips({
             key={option}
             type="button"
             onClick={() => onChange(toggleCommaValue(value, option))}
-            className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+            className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-xs font-medium transition ${
               active
-                ? "border-cyan-600 bg-cyan-100 text-cyan-900"
-                : "border-neutral-300 bg-white text-neutral-700 hover:border-cyan-400 hover:text-cyan-800"
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-300 bg-white text-slate-700 hover:border-slate-900 hover:text-slate-900"
             }`}
           >
             {option}
@@ -195,12 +195,12 @@ function TextareaQuickSelect({
   const [selected, setSelected] = useState(options[0] ?? "");
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-2">
-      <span className="text-xs font-medium text-neutral-600">Quick add</span>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2">
+      <span className="text-xs font-medium text-slate-600">Quick add</span>
       <select
         value={selected}
         onChange={(event) => setSelected(event.target.value)}
-        className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs outline-none transition focus:border-cyan-500"
+        className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs outline-none transition focus:border-slate-900"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -211,7 +211,7 @@ function TextareaQuickSelect({
       <button
         type="button"
         onClick={() => onAdd(selected)}
-        className="rounded-md border border-cyan-300 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-800 transition hover:border-cyan-500 hover:bg-cyan-100"
+        className="inline-flex min-h-9 items-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
       >
         Add
       </button>
@@ -250,7 +250,7 @@ function UploadDropZone({
       onDragLeave={() => setIsActive(false)}
       onDrop={handleDrop}
       className={`rounded-lg border border-dashed p-3 text-center text-xs transition ${
-        isActive ? "border-cyan-500 bg-cyan-50 text-cyan-800" : "border-neutral-300 bg-white text-neutral-600"
+        isActive ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-300 bg-white text-slate-600"
       }`}
     >
       <p className="font-medium">{label}</p>
@@ -315,6 +315,8 @@ export default function NewProjectPage() {
   const [securityRequirements, setSecurityRequirements] = useState("");
 
   const [demoUrl, setDemoUrl] = useState("");
+  const [roleInProject, setRoleInProject] = useState("");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
   const [backgroundUrl, setBackgroundUrl] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -499,6 +501,8 @@ export default function NewProjectPage() {
         title: title.trim(),
         shortDescription: shortDescription.trim(),
         longDescription: composedBrief,
+        roleInProject: roleInProject.trim() || undefined,
+        repositoryUrl: repositoryUrl.trim() || undefined,
         category,
         techStack,
         industries,
@@ -605,22 +609,22 @@ export default function NewProjectPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbf4ff_0%,#f8fafc_45%,#f1f5f9_100%)]">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <ClientDashboardNavbar />
 
-      <section className="mx-auto w-full max-w-7xl p-4 md:p-6">
+      <section className="mx-auto w-full max-w-7xl p-3 md:p-4">
         {isOnboardingFlow ? (
-          <div className="mb-4 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
             Welcome to client onboarding. Publish your first project brief to start receiving developer proposals.
           </div>
         ) : null}
 
-        <div className="mb-4 overflow-hidden rounded-2xl border border-cyan-100 bg-linear-to-r from-slate-900 via-cyan-900 to-teal-700 p-5 text-white shadow-[0_20px_50px_rgba(15,23,42,0.25)] md:p-6">
+        <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-slate-900 md:p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100">Detailed project intake</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Detailed project intake</p>
               <h1 className="mt-1 text-2xl font-semibold md:text-3xl">Create A High-Quality Project Brief</h1>
-              <p className="mt-2 max-w-3xl text-sm text-cyan-50">
+              <p className="mt-2 max-w-3xl text-sm text-slate-500">
                 This form is intentionally detailed so developers can estimate accurately, deliver faster, and avoid scope confusion.
               </p>
             </div>
@@ -629,45 +633,45 @@ export default function NewProjectPage() {
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
             <div>
-              <div className="h-2 rounded-full bg-white/20">
+              <div className="h-2 rounded-full bg-slate-200">
                 <div
-                  className="h-2 rounded-full bg-cyan-300 transition-all"
+                  className="h-2 rounded-full bg-slate-900 transition-all"
                   style={{ width: `${completionPercent}%` }}
                 />
               </div>
-              <p className="mt-1 text-xs text-cyan-100">Form completeness: {completionPercent}%</p>
+              <p className="mt-1 text-xs text-slate-500">Form completeness: {completionPercent}%</p>
             </div>
-            <div className="rounded-full border border-white/35 bg-white/10 px-3 py-1 text-xs font-semibold text-cyan-50">
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
               Better briefs get better proposals
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid gap-4">
+        <form onSubmit={handleSubmit} className="grid gap-3">
           <SectionCard
             title="1. Project Snapshot"
             subtitle="Define what this project is, who it is for, and how you want pricing handled."
           >
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Project title</span>
+                <span className="font-medium text-slate-800">Project title</span>
                 <input
                   required
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   onBlur={() => markTouched("title")}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="Client portal and internal ops dashboard"
                 />
                 {showFieldError("title") ? <span className="text-xs font-medium text-red-600">{showFieldError("title")}</span> : null}
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Category</span>
+                <span className="font-medium text-slate-800">Category</span>
                 <select
                   value={category}
                   onChange={(event) => setCategory(event.target.value as ProjectCategory)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                 >
                   {CATEGORY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -679,13 +683,13 @@ export default function NewProjectPage() {
             </div>
 
             <label className="grid gap-1 text-sm">
-              <span className="font-medium text-neutral-800">Short public summary</span>
+              <span className="font-medium text-slate-800">Short public summary</span>
               <input
                 required
                 value={shortDescription}
                 onChange={(event) => setShortDescription(event.target.value)}
                 onBlur={() => markTouched("shortDescription")}
-                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                 placeholder="One clear sentence developers see first"
               />
               {showFieldError("shortDescription") ? <span className="text-xs font-medium text-red-600">{showFieldError("shortDescription")}</span> : null}
@@ -693,11 +697,11 @@ export default function NewProjectPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Pricing model</span>
+                <span className="font-medium text-slate-800">Pricing model</span>
                 <select
                   value={pricingType}
                   onChange={(event) => setPricingType(event.target.value as PricingType)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                 >
                   {PRICING_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -708,12 +712,12 @@ export default function NewProjectPage() {
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Expected timeline (weeks)</span>
+                <span className="font-medium text-slate-800">Expected timeline (weeks)</span>
                 <select
                   value={timelineWeeks}
                   onChange={(event) => setTimelineWeeks(event.target.value)}
                   onBlur={() => markTouched("timelineWeeks")}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                 >
                   <option value="">Select timeline</option>
                   {TIMELINE_OPTIONS.map((option) => (
@@ -725,7 +729,7 @@ export default function NewProjectPage() {
                 <input
                   value={timelineWeeks}
                   onChange={(event) => setTimelineWeeks(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="Or type custom timeline"
                 />
                 {showFieldError("timelineWeeks") ? <span className="text-xs font-medium text-red-600">{showFieldError("timelineWeeks")}</span> : null}
@@ -735,7 +739,7 @@ export default function NewProjectPage() {
             {needsPrice ? (
               <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
                 <label className="grid gap-1 text-sm">
-                  <span className="font-medium text-neutral-800">Fixed budget</span>
+                  <span className="font-medium text-slate-800">Fixed budget</span>
                   <input
                     required
                     type="number"
@@ -744,19 +748,19 @@ export default function NewProjectPage() {
                     value={priceInput}
                     onChange={(event) => setPriceInput(event.target.value)}
                     onBlur={() => markTouched("priceInput")}
-                    className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                    className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                     placeholder="2500"
                   />
                   {showFieldError("priceInput") ? <span className="text-xs font-medium text-red-600">{showFieldError("priceInput")}</span> : null}
                 </label>
 
                 <label className="grid gap-1 text-sm">
-                  <span className="font-medium text-neutral-800">Currency</span>
+                  <span className="font-medium text-slate-800">Currency</span>
                   <select
                     required
                     value={currency}
                     onChange={(event) => setCurrency(event.target.value)}
-                    className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                    className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   >
                     {CURRENCY_OPTIONS.map((code) => (
                       <option key={code} value={code}>
@@ -774,13 +778,13 @@ export default function NewProjectPage() {
             subtitle="Capture business context so developers understand what to build and why."
           >
             <label className="grid gap-1 text-sm">
-              <span className="font-medium text-neutral-800">Project overview</span>
+              <span className="font-medium text-slate-800">Project overview</span>
               <textarea
                 required
                 value={longDescription}
                 onChange={(event) => setLongDescription(event.target.value)}
                 onBlur={() => markTouched("longDescription")}
-                className="min-h-28 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                className="min-h-28 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 placeholder="Describe the project, goals, and business outcome in detail"
               />
               {showFieldError("longDescription") ? <span className="text-xs font-medium text-red-600">{showFieldError("longDescription")}</span> : null}
@@ -788,26 +792,26 @@ export default function NewProjectPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Core problem to solve</span>
+                <span className="font-medium text-slate-800">Core problem to solve</span>
                 <textarea
                   required
                   value={coreProblem}
                   onChange={(event) => setCoreProblem(event.target.value)}
                   onBlur={() => markTouched("coreProblem")}
-                  className="min-h-24 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                   placeholder="What pain point is this project fixing?"
                 />
                 {showFieldError("coreProblem") ? <span className="text-xs font-medium text-red-600">{showFieldError("coreProblem")}</span> : null}
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Target users</span>
+                <span className="font-medium text-slate-800">Target users</span>
                 <textarea
                   required
                   value={targetUsers}
                   onChange={(event) => setTargetUsers(event.target.value)}
                   onBlur={() => markTouched("targetUsers")}
-                  className="min-h-24 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                   placeholder="Who will use this and how often?"
                 />
                 {showFieldError("targetUsers") ? <span className="text-xs font-medium text-red-600">{showFieldError("targetUsers")}</span> : null}
@@ -816,7 +820,7 @@ export default function NewProjectPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Must-have features</span>
+                <span className="font-medium text-slate-800">Must-have features</span>
                 <TextareaQuickSelect
                   options={FEATURE_OPTIONS}
                   onAdd={(value) => setMustHaveFeatures((prev) => appendLineValue(prev, value))}
@@ -826,29 +830,29 @@ export default function NewProjectPage() {
                   value={mustHaveFeatures}
                   onChange={(event) => setMustHaveFeatures(event.target.value)}
                   onBlur={() => markTouched("mustHaveFeatures")}
-                  className="min-h-28 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-28 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                   placeholder="List key features that must be included"
                 />
                 {showFieldError("mustHaveFeatures") ? <span className="text-xs font-medium text-red-600">{showFieldError("mustHaveFeatures")}</span> : null}
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Nice-to-have features</span>
+                <span className="font-medium text-slate-800">Nice-to-have features</span>
                 <textarea
                   value={niceToHaveFeatures}
                   onChange={(event) => setNiceToHaveFeatures(event.target.value)}
-                  className="min-h-28 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-28 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                   placeholder="Future enhancements or optional features"
                 />
               </label>
             </div>
 
             <label className="grid gap-1 text-sm">
-              <span className="font-medium text-neutral-800">Success metrics</span>
+              <span className="font-medium text-slate-800">Success metrics</span>
               <textarea
                 value={successMetrics}
                 onChange={(event) => setSuccessMetrics(event.target.value)}
-                className="min-h-20 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                className="min-h-20 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 placeholder="How will you measure project success?"
               />
             </label>
@@ -859,7 +863,7 @@ export default function NewProjectPage() {
             subtitle="Set expectations for milestones, outputs, and collaboration rhythm."
           >
             <label className="grid gap-1 text-sm">
-              <span className="font-medium text-neutral-800">Expected deliverables</span>
+              <span className="font-medium text-slate-800">Expected deliverables</span>
               <TextareaQuickSelect
                 options={DELIVERABLE_OPTIONS}
                 onAdd={(value) => setDeliverables((prev) => appendLineValue(prev, value))}
@@ -869,29 +873,29 @@ export default function NewProjectPage() {
                 value={deliverables}
                 onChange={(event) => setDeliverables(event.target.value)}
                 onBlur={() => markTouched("deliverables")}
-                className="min-h-24 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                className="min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 placeholder="Examples: source code, deployment guide, admin docs, test coverage"
               />
               {showFieldError("deliverables") ? <span className="text-xs font-medium text-red-600">{showFieldError("deliverables")}</span> : null}
             </label>
 
             <label className="grid gap-1 text-sm">
-              <span className="font-medium text-neutral-800">Milestones and checkpoints</span>
+              <span className="font-medium text-slate-800">Milestones and checkpoints</span>
               <textarea
                 value={milestones}
                 onChange={(event) => setMilestones(event.target.value)}
-                className="min-h-24 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                className="min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 placeholder="Week 2 prototype, week 4 core features, week 6 QA"
               />
             </label>
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Timezone or overlap window</span>
+                <span className="font-medium text-slate-800">Timezone or overlap window</span>
                 <select
                   value={timezone}
                   onChange={(event) => setTimezone(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                 >
                   <option value="">Select timezone/overlap</option>
                   {TIMEZONE_OPTIONS.map((option) => (
@@ -903,17 +907,17 @@ export default function NewProjectPage() {
                 <input
                   value={timezone}
                   onChange={(event) => setTimezone(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="Or type custom overlap"
                 />
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Communication cadence</span>
+                <span className="font-medium text-slate-800">Communication cadence</span>
                 <select
                   value={communicationCadence}
                   onChange={(event) => setCommunicationCadence(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                 >
                   <option value="">Select communication cadence</option>
                   {CADENCE_OPTIONS.map((option) => (
@@ -925,7 +929,7 @@ export default function NewProjectPage() {
                 <input
                   value={communicationCadence}
                   onChange={(event) => setCommunicationCadence(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="Or type custom cadence"
                 />
               </label>
@@ -938,7 +942,7 @@ export default function NewProjectPage() {
           >
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Tech stack</span>
+                <span className="font-medium text-slate-800">Tech stack</span>
                 <CommaSelectionChips
                   options={TECH_STACK_OPTIONS}
                   value={techStackInput}
@@ -949,14 +953,14 @@ export default function NewProjectPage() {
                   value={techStackInput}
                   onChange={(event) => setTechStackInput(event.target.value)}
                   onBlur={() => markTouched("techStackInput")}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="Optional custom stack values"
                 />
                 {showFieldError("techStackInput") ? <span className="text-xs font-medium text-red-600">{showFieldError("techStackInput")}</span> : null}
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Industry tags</span>
+                <span className="font-medium text-slate-800">Industry tags</span>
                 <CommaSelectionChips
                   options={INDUSTRY_OPTIONS}
                   value={industriesInput}
@@ -967,7 +971,7 @@ export default function NewProjectPage() {
                   value={industriesInput}
                   onChange={(event) => setIndustriesInput(event.target.value)}
                   onBlur={() => markTouched("industriesInput")}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="Optional custom industry tags"
                 />
                 {showFieldError("industriesInput") ? <span className="text-xs font-medium text-red-600">{showFieldError("industriesInput")}</span> : null}
@@ -975,7 +979,7 @@ export default function NewProjectPage() {
             </div>
 
             <label className="grid gap-1 text-sm">
-              <span className="font-medium text-neutral-800">Integration needs</span>
+              <span className="font-medium text-slate-800">Integration needs</span>
               <TextareaQuickSelect
                 options={INTEGRATION_OPTIONS}
                 onAdd={(value) => setIntegrationNeeds((prev) => appendLineValue(prev, value))}
@@ -983,14 +987,14 @@ export default function NewProjectPage() {
               <textarea
                 value={integrationNeeds}
                 onChange={(event) => setIntegrationNeeds(event.target.value)}
-                className="min-h-20 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                className="min-h-20 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 placeholder="Stripe, Twilio, Salesforce, internal APIs"
               />
             </label>
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Security requirements</span>
+                <span className="font-medium text-slate-800">Security requirements</span>
                 <TextareaQuickSelect
                   options={SECURITY_OPTIONS}
                   onAdd={(value) => setSecurityRequirements((prev) => appendLineValue(prev, value))}
@@ -998,13 +1002,13 @@ export default function NewProjectPage() {
                 <textarea
                   value={securityRequirements}
                   onChange={(event) => setSecurityRequirements(event.target.value)}
-                  className="min-h-20 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-20 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                   placeholder="2FA, RBAC, audit logging, secure sessions"
                 />
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Quality bar</span>
+                <span className="font-medium text-slate-800">Quality bar</span>
                 <TextareaQuickSelect
                   options={QUALITY_OPTIONS}
                   onAdd={(value) => setQualityBar((prev) => appendLineValue(prev, value))}
@@ -1012,7 +1016,7 @@ export default function NewProjectPage() {
                 <textarea
                   value={qualityBar}
                   onChange={(event) => setQualityBar(event.target.value)}
-                  className="min-h-20 rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-20 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                   placeholder="Testing expectations, linting, CI checks"
                 />
               </label>
@@ -1025,41 +1029,41 @@ export default function NewProjectPage() {
           >
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Existing product URL</span>
+                <span className="font-medium text-slate-800">Existing product URL</span>
                 <input
                   type="url"
                   value={existingProductUrl}
                   onChange={(event) => setExistingProductUrl(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="https://app.example.com"
                 />
               </label>
 
               <label className="grid gap-1 text-sm">
-                <span className="font-medium text-neutral-800">Reference links (comma-separated)</span>
+                <span className="font-medium text-slate-800">Reference links (comma-separated)</span>
                 <input
                   value={referenceLinks}
                   onChange={(event) => setReferenceLinks(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                   placeholder="https://site-a.com, https://site-b.com"
                 />
               </label>
             </div>
 
-            <section className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3 md:p-4">
+            <section className="rounded-xl border border-slate-200 bg-slate-50 p-3 md:p-4">
               <div className="mb-3">
-                <h3 className="text-sm font-semibold text-neutral-900">Visual Assets</h3>
-                <p className="mt-0.5 text-xs text-neutral-600">Upload media to Cloudinary or paste direct URLs.</p>
+                <h3 className="text-sm font-semibold text-slate-900">Visual Assets</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Upload media to Cloudinary or paste direct URLs.</p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-lg border border-neutral-200 bg-white p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Background Image</p>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Background Image</p>
                   <input
                     type="url"
                     value={backgroundUrl}
                     onChange={(event) => setBackgroundUrl(event.target.value)}
-                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
                     placeholder="https://example.com/background.jpg"
                   />
                   <div className="mt-2">
@@ -1075,13 +1079,13 @@ export default function NewProjectPage() {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-neutral-200 bg-white p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Thumbnail</p>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Thumbnail</p>
                   <input
                     type="url"
                     value={thumbnailUrl}
                     onChange={(event) => setThumbnailUrl(event.target.value)}
-                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
                     placeholder="https://example.com/thumb.jpg"
                   />
                   <div className="mt-2">
@@ -1097,12 +1101,12 @@ export default function NewProjectPage() {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-neutral-200 bg-white p-3 md:col-span-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Screenshots</p>
+                <div className="rounded-lg border border-slate-200 bg-white p-3 md:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Screenshots</p>
                   <textarea
                     value={screenshotsInput}
                     onChange={(event) => setScreenshotsInput(event.target.value)}
-                    className="mt-2 min-h-20 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    className="mt-2 min-h-20 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
                     placeholder="https://example.com/screen-1.png, https://example.com/screen-2.png"
                   />
                   <div className="mt-2">
@@ -1116,28 +1120,49 @@ export default function NewProjectPage() {
                     />
                   </div>
                   {parseCommaList(screenshotsInput).length > 0 ? (
-                    <p className="mt-2 text-xs text-neutral-600">{parseCommaList(screenshotsInput).length} screenshot URLs added</p>
+                    <p className="mt-2 text-xs text-slate-500">{parseCommaList(screenshotsInput).length} screenshot URLs added</p>
                   ) : null}
                 </div>
 
-                <div className="rounded-lg border border-neutral-200 bg-white p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Demo URL</p>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Role in project</p>
+                  <input
+                    value={roleInProject}
+                    onChange={(event) => setRoleInProject(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                    placeholder="Lead Engineer, Architect, Full Stack Developer"
+                  />
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Repository URL</p>
+                  <input
+                    type="url"
+                    value={repositoryUrl}
+                    onChange={(event) => setRepositoryUrl(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                    placeholder="https://github.com/org/repo"
+                  />
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Demo URL</p>
                   <input
                     type="url"
                     value={demoUrl}
                     onChange={(event) => setDemoUrl(event.target.value)}
-                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
                     placeholder="https://example.com/demo"
                   />
                 </div>
 
-                <div className="rounded-lg border border-neutral-200 bg-white p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Video</p>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Video</p>
                   <input
                     type="url"
                     value={videoUrl}
                     onChange={(event) => setVideoUrl(event.target.value)}
-                    className="mt-2 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
                     placeholder="https://youtube.com/watch?v=..."
                   />
                   <div className="mt-2">
@@ -1155,35 +1180,35 @@ export default function NewProjectPage() {
               </div>
             </section>
 
-            {mediaUploading ? <p className="text-xs font-medium text-neutral-600">Uploading media to Cloudinary...</p> : null}
+            {mediaUploading ? <p className="text-xs font-medium text-slate-500">Uploading media to Cloudinary...</p> : null}
 
-            <div className="grid gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm">
-              <label className="flex items-center gap-2 text-neutral-700">
+            <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <label className="flex items-center gap-2 text-slate-700">
                 <input
                   type="checkbox"
                   checked={ndaRequired}
                   onChange={(event) => setNdaRequired(event.target.checked)}
-                  className="h-4 w-4 rounded border-neutral-300"
+                  className="h-4 w-4 rounded border-slate-300"
                 />
                 NDA required for selected developer
               </label>
 
-              <label className="flex items-center gap-2 text-neutral-700">
+              <label className="flex items-center gap-2 text-slate-700">
                 <input
                   type="checkbox"
                   checked={ipTransferRequired}
                   onChange={(event) => setIpTransferRequired(event.target.checked)}
-                  className="h-4 w-4 rounded border-neutral-300"
+                  className="h-4 w-4 rounded border-slate-300"
                 />
                 Full IP transfer expected at handover
               </label>
 
               <label className="grid gap-1 md:max-w-xs">
-                <span className="font-medium text-neutral-800">Post-launch support</span>
+                <span className="font-medium text-slate-800">Post-launch support</span>
                 <select
                   value={postLaunchSupport}
                   onChange={(event) => setPostLaunchSupport(event.target.value)}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 outline-none transition focus:border-cyan-500"
+                  className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-slate-900"
                 >
                   <option>None</option>
                   <option>1 week</option>
@@ -1194,23 +1219,23 @@ export default function NewProjectPage() {
               </label>
             </div>
 
-            <label className="flex items-center gap-2 text-sm font-medium text-neutral-700">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
               <input
                 type="checkbox"
                 checked={publishNow}
                 onChange={(event) => setPublishNow(event.target.checked)}
-                className="h-4 w-4 rounded border-neutral-300"
+                className="h-4 w-4 rounded border-slate-300"
               />
               Publish immediately after creation
             </label>
           </SectionCard>
 
           {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}
-          {success ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">{success}</p> : null}
+          {success ? <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">{success}</p> : null}
 
-          <div className="sticky bottom-3 z-10 rounded-2xl border border-neutral-200 bg-white/95 p-3 shadow-[0_12px_28px_rgba(15,23,42,0.1)] backdrop-blur md:p-4">
+          <div className="sticky bottom-3 z-10 rounded-xl border border-slate-200 bg-white p-3 md:p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-neutral-600">
+              <p className="text-sm text-slate-500">
                 Your detailed sections are merged into the final project brief developers will read.
               </p>
               <div className="flex items-center gap-2">
@@ -1218,7 +1243,7 @@ export default function NewProjectPage() {
                 <button
                   type="submit"
                   disabled={pending}
-                  className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-h-10 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {pending ? "Creating project..." : "Create project"}
                 </button>

@@ -31,6 +31,33 @@ export interface AuthRequestContext {
   identifier?: string;
 }
 
+export interface OAuthRedirectOptions {
+  next?: string;
+  intent?: string;
+}
+
+type SupabaseIdentity = {
+  provider?: string;
+  identity_data?: {
+    user_name?: string;
+    preferred_username?: string;
+    full_name?: string;
+    avatar_url?: string;
+    email?: string;
+    [key: string]: unknown;
+  };
+};
+
+type SupabaseUserMetadata = {
+  role?: string;
+  username?: string;
+  user_name?: string;
+  preferred_username?: string;
+  full_name?: string;
+  name?: string;
+  [key: string]: unknown;
+};
+
 const AUTH_ACTION_TOKEN_TYPE = {
   EMAIL_VERIFICATION: "EMAIL_VERIFICATION",
   PASSWORD_RESET: "PASSWORD_RESET"
@@ -445,16 +472,166 @@ export class AuthService {
     return { loggedOutAll: true };
   }
 
+  async completeOAuthSession(accessToken: string, context: AuthRequestContext = {}): Promise<{ role: UserRole } & TokenPair> {
+    this.assertSupabaseConfigured();
+    await this.assertRateLimit("oauth_session", context.ipAddress ?? "unknown", 20, 60_000);
+
+    const { data, error } = await this.supabaseAdmin.auth.getUser(accessToken);
+    if (error || !data.user) {
+      await this.logAuthEvent("oauth_session_failed", false, context, {
+        metadata: { reason: this.mapSupabaseMessage(error?.message) ?? "Invalid OAuth access token" }
+      });
+      throw new HttpException(this.mapSupabaseMessage(error?.message) ?? "Invalid OAuth session", HttpStatus.UNAUTHORIZED);
+    }
+
+    const supabaseUser = data.user;
+    const normalizedEmail = (supabaseUser.email ?? "").trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new HttpException("OAuth user is missing email", HttpStatus.BAD_REQUEST);
+    }
+
+    const metadata = (supabaseUser.user_metadata ?? {}) as SupabaseUserMetadata;
+    const metadataRole = typeof metadata.role === "string" ? metadata.role.toUpperCase() : "";
+    const role = Object.values(USER_ROLE).includes(metadataRole as UserRole)
+      ? (metadataRole as UserRole)
+      : USER_ROLE.DEVELOPER;
+
+    let user = await this.prisma.user.findUnique({ where: { id: supabaseUser.id } });
+
+    if (!user) {
+      const baseUsername =
+        toSlug(metadata.username ?? "")
+        || toSlug(metadata.user_name ?? "")
+        || toSlug(metadata.preferred_username ?? "")
+        || toSlug(normalizedEmail.split("@")[0] ?? "")
+        || "user";
+      const username = await this.generateAvailableUsername(baseUsername);
+      const fullName =
+        (typeof metadata.full_name === "string" && metadata.full_name.trim())
+        || (typeof metadata.name === "string" && metadata.name.trim())
+        || normalizedEmail.split("@")[0]
+        || username;
+
+      user = await this.prisma.user.create({
+        data: {
+          id: supabaseUser.id,
+          email: normalizedEmail,
+          username,
+          fullName,
+          role,
+          isVerified: true,
+          skills: []
+        }
+      });
+    } else if (!user.isVerified) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { isVerified: true }
+      });
+    }
+
+    const tokenPair = await this.issueTokens(user.id, user.email, user.role);
+    await this.logAuthEvent("oauth_session_success", true, context, {
+      userId: user.id,
+      email: user.email
+    });
+
+    return { role: user.role, ...tokenPair };
+  }
+
   /**
    * Builds provider auth URL for frontend redirect flow.
    */
-  getOAuthRedirect(provider: "google" | "github"): { url: string } {
+  getOAuthRedirect(provider: "google" | "github", options: OAuthRedirectOptions = {}): { url: string } {
     this.assertSupabaseConfigured();
 
+    const frontendUrl = this.configService.getOrThrow<string>("FRONTEND_URL").replace(/\/+$/, "");
+    const callbackUrl = new URL(`${frontendUrl}/auth/callback`);
+
+    const normalizedNext = options.next?.trim();
+    if (normalizedNext?.startsWith("/")) {
+      callbackUrl.searchParams.set("next", normalizedNext);
+    }
+
+    const normalizedIntent = options.intent?.trim();
+    if (normalizedIntent) {
+      callbackUrl.searchParams.set("intent", normalizedIntent.slice(0, 80));
+    }
+
     const url = `${this.configService.getOrThrow<string>("SUPABASE_URL")}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(
-      `${this.configService.getOrThrow<string>("FRONTEND_URL")}/auth/callback`
+      callbackUrl.toString()
     )}`;
     return { url };
+  }
+
+  async verifyGithubOwnership(
+    userId: string,
+    context: AuthRequestContext = {}
+  ): Promise<{ verified: true; githubUsername: string; githubUrl: string; verifiedAt: string }> {
+    this.assertSupabaseConfigured();
+
+    const { data, error } = await this.supabaseAdmin.auth.admin.getUserById(userId);
+    if (error || !data.user) {
+      await this.logAuthEvent("github_verify_failed", false, context, {
+        userId,
+        metadata: { reason: this.mapSupabaseMessage(error?.message) ?? "Supabase user not found" }
+      });
+      throw new HttpException(this.mapSupabaseMessage(error?.message) ?? "Unable to load user identity", HttpStatus.BAD_GATEWAY);
+    }
+
+    const identities = (data.user.identities ?? []) as SupabaseIdentity[];
+    const githubIdentity = identities.find((identity) => identity.provider === "github");
+
+    if (!githubIdentity) {
+      await this.logAuthEvent("github_verify_failed", false, context, {
+        userId,
+        metadata: { reason: "No linked GitHub identity" }
+      });
+      throw new HttpException(
+        "No linked GitHub identity found. Connect GitHub first using /auth/github.",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const githubUsername =
+      githubIdentity.identity_data?.user_name?.trim()
+      ?? githubIdentity.identity_data?.preferred_username?.trim()
+      ?? "";
+
+    if (!githubUsername) {
+      await this.logAuthEvent("github_verify_failed", false, context, {
+        userId,
+        metadata: { reason: "GitHub username missing from identity data" }
+      });
+      throw new HttpException("Linked GitHub identity is missing username metadata.", HttpStatus.BAD_REQUEST);
+    }
+
+    const githubUrl = `https://github.com/${githubUsername}`;
+    const verifiedAt = new Date();
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        githubUrl,
+        githubUsername,
+        githubVerifiedAt: verifiedAt
+      }
+    });
+
+    await this.logAuthEvent("github_verify_success", true, context, {
+      userId,
+      metadata: {
+        githubUsername,
+        githubUrl
+      }
+    });
+
+    return {
+      verified: true,
+      githubUsername,
+      githubUrl,
+      verifiedAt: verifiedAt.toISOString()
+    };
   }
 
   async verifyEmailStatus(token: string, context: AuthRequestContext = {}): Promise<{ valid: boolean; expiresAt: string | null }> {
@@ -498,6 +675,21 @@ export class AuthService {
     }
 
     return message;
+  }
+
+  private async generateAvailableUsername(baseUsername: string): Promise<string> {
+    const cleanedBase = toSlug(baseUsername) || "user";
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const suffix = attempt === 0 ? "" : `-${randomBytes(2).toString("hex")}`;
+      const candidate = `${cleanedBase}${suffix}`;
+      const existing = await this.prisma.user.findUnique({ where: { username: candidate } });
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    return `${cleanedBase}-${randomUUID().slice(0, 8)}`;
   }
 
   private throwMappedSupabaseError(caughtError: unknown): never {

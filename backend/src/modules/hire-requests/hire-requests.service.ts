@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { HireRequestStatus } from "@prisma/client";
+import { CacheService } from "src/common/cache/cache.service";
 import { NOTIFICATION_TYPE } from "src/common/constants/domain-enums.constant";
 import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 import { sanitizeInput } from "src/common/utils/sanitize.util";
@@ -14,8 +15,21 @@ import { PrismaService } from "src/prisma/prisma.service";
 export class HireRequestsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService
+    private readonly notificationsService: NotificationsService,
+    private readonly cacheService: CacheService
   ) {}
+
+  private async invalidateHireRequestCaches(userIds: string[]) {
+    await this.cacheService.invalidateNamespace("hire-requests-admin");
+    await Promise.all(
+      [...new Set(userIds)].map(async (userId) => {
+        await Promise.all([
+          this.cacheService.invalidateNamespace(`hire-requests-user:${userId}`),
+          this.cacheService.invalidateNamespace(`developer-dashboard:${userId}`)
+        ]);
+      })
+    );
+  }
 
   async create(clientId: string, role: UserRole, dto: CreateHireRequestDto) {
     if (role !== USER_ROLE.CLIENT && role !== USER_ROLE.ADMIN) {
@@ -84,6 +98,8 @@ export class HireRequestsService {
       }
     });
 
+    await this.invalidateHireRequestCaches([clientId, dto.developerId]);
+
     try {
       await this.notificationsService.dispatch(dto.developerId, NOTIFICATION_TYPE.DEAL_INTEREST, {
         hireRequestId: hireRequest.id,
@@ -100,6 +116,15 @@ export class HireRequestsService {
   }
 
   async list(userId: string, role: UserRole, query: ListHireRequestsDto) {
+    const cacheNamespace =
+      role === USER_ROLE.ADMIN ? "hire-requests-admin" : `hire-requests-user:${userId}`;
+    const cacheKey = await this.cacheService.composeKey(cacheNamespace, JSON.stringify(query));
+    const cached = await this.cacheService.get<Array<Record<string, unknown>>>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const limit = query.limit ?? 30;
 
     const where =
@@ -116,7 +141,7 @@ export class HireRequestsService {
                 : { OR: [{ clientId: userId }, { developerId: userId }] })
           };
 
-    return this.prisma.hireRequest.findMany({
+    const payload = await this.prisma.hireRequest.findMany({
       where,
       include: {
         client: {
@@ -152,9 +177,21 @@ export class HireRequestsService {
       orderBy: { createdAt: "desc" },
       take: limit
     });
+
+    await this.cacheService.set(cacheKey, payload, 15);
+    return payload;
   }
 
   async getById(userId: string, role: UserRole, hireRequestId: string) {
+    const cacheNamespace =
+      role === USER_ROLE.ADMIN ? "hire-request-by-id-admin" : `hire-request-by-id-user:${userId}`;
+    const cacheKey = await this.cacheService.composeKey(cacheNamespace, hireRequestId);
+    const cached = await this.cacheService.get<Record<string, unknown>>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       include: {
@@ -198,6 +235,8 @@ export class HireRequestsService {
       throw new ForbiddenException("You do not have access to this hire request");
     }
 
+    await this.cacheService.set(cacheKey, hireRequest, 15);
+
     return hireRequest;
   }
 
@@ -219,12 +258,21 @@ export class HireRequestsService {
       this.assertStatusChangeAllowed(hireRequest.status, dto.status, isClient ? "client" : "developer");
     }
 
-    return this.prisma.hireRequest.update({
+    const updated = await this.prisma.hireRequest.update({
       where: { id: hireRequest.id },
       data: {
         status: dto.status
       }
     });
+
+    await this.invalidateHireRequestCaches([hireRequest.clientId, hireRequest.developerId]);
+    await Promise.all([
+      this.cacheService.invalidateNamespace("hire-request-by-id-admin"),
+      this.cacheService.invalidateNamespace(`hire-request-by-id-user:${hireRequest.clientId}`),
+      this.cacheService.invalidateNamespace(`hire-request-by-id-user:${hireRequest.developerId}`)
+    ]);
+
+    return updated;
   }
 
   async submitProposal(userId: string, role: UserRole, hireRequestId: string, dto: SubmitProposalDto) {
@@ -257,6 +305,13 @@ export class HireRequestsService {
         status: "PROPOSAL_SENT"
       }
     });
+
+    await this.invalidateHireRequestCaches([hireRequest.clientId, hireRequest.developerId]);
+    await Promise.all([
+      this.cacheService.invalidateNamespace("hire-request-by-id-admin"),
+      this.cacheService.invalidateNamespace(`hire-request-by-id-user:${hireRequest.clientId}`),
+      this.cacheService.invalidateNamespace(`hire-request-by-id-user:${hireRequest.developerId}`)
+    ]);
 
     try {
       await this.notificationsService.dispatch(hireRequest.clientId, NOTIFICATION_TYPE.DEAL_INTEREST, {

@@ -1,11 +1,27 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { CacheService } from "src/common/cache/cache.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SearchDevelopersDto } from "src/modules/users/dto/search-developers.dto";
 import { UpdateUserDto } from "src/modules/users/dto/update-user.dto";
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService
+  ) {}
+
+  private async invalidateDiscoveryCaches() {
+    await Promise.all([
+      this.cacheService.invalidateNamespace("developers-search"),
+      this.cacheService.invalidateNamespace("projects-list"),
+      this.cacheService.invalidateNamespace("projects-search")
+    ]);
+  }
+
+  private async invalidateDeveloperDashboardCache(userId: string) {
+    await this.cacheService.invalidateNamespace(`developer-dashboard:${userId}`);
+  }
 
   async getProfileCompleteness(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -125,6 +141,8 @@ export class UsersService {
         phoneNumber: true,
         websiteUrl: true,
         githubUrl: true,
+        githubUsername: true,
+        githubVerifiedAt: true,
         linkedinUrl: true
       }
     });
@@ -134,6 +152,151 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  async getDeveloperDashboard(userId: string) {
+    const cacheKey = await this.cacheService.composeKey(`developer-dashboard:${userId}`, "summary");
+    const cached = await this.cacheService.get<Record<string, unknown>>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const [profile, savedProjects, myProjects, completeness, recommendedProjects, notifications, threads] =
+      await Promise.all([
+        this.getMe(userId),
+        this.getSavedProjects(userId),
+        this.getMyProjects(userId),
+        this.getProfileCompleteness(userId),
+        this.prisma.project.findMany({
+          where: {
+            status: "PUBLISHED",
+            deletedAt: null
+          },
+          orderBy: [{ likeCount: "desc" }, { createdAt: "desc" }],
+          take: 8,
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            shortDescription: true,
+            roleInProject: true,
+            repositoryUrl: true,
+            category: true,
+            techStack: true,
+            pricingType: true,
+            price: true,
+            currency: true,
+            thumbnailUrl: true,
+            backgroundUrl: true,
+            likeCount: true,
+            viewCount: true,
+            inquiryCount: true,
+            qualityScore: true,
+            createdAt: true
+          }
+        }),
+        this.prisma.notification.findMany({
+          where: { userId },
+          orderBy: [{ isRead: "asc" }, { createdAt: "desc" }],
+          take: 20
+        }),
+        this.prisma.thread.findMany({
+          where: { OR: [{ participantAId: userId }, { participantBId: userId }] },
+          include: {
+            participantA: {
+              select: {
+                id: true,
+                username: true,
+                fullName: true,
+                avatarUrl: true
+              }
+            },
+            participantB: {
+              select: {
+                id: true,
+                username: true,
+                fullName: true,
+                avatarUrl: true
+              }
+            },
+            project: {
+              select: {
+                id: true,
+                slug: true,
+                title: true
+              }
+            },
+            messages: {
+              orderBy: { createdAt: "desc" },
+              take: 1
+            }
+          },
+          orderBy: { updatedAt: "desc" }
+        })
+      ]);
+
+    const threadIds = threads.map((thread) => thread.id);
+    const unreadByThread =
+      threadIds.length > 0
+        ? await this.prisma.message.groupBy({
+            by: ["threadId"],
+            where: {
+              threadId: { in: threadIds },
+              isRead: false,
+              senderId: { not: userId }
+            },
+            _count: {
+              threadId: true
+            }
+          })
+        : [];
+
+    const unreadCountByThreadId = new Map<string, number>(
+      unreadByThread.map((row) => [row.threadId, row._count.threadId])
+    );
+
+    const consolidated = new Map<string, { thread: (typeof threads)[number]; unreadCount: number }>();
+    for (const thread of threads) {
+      const unreadCount = unreadCountByThreadId.get(thread.id) ?? 0;
+      const partnerId = thread.participantAId === userId ? thread.participantBId : thread.participantAId;
+      const current = consolidated.get(partnerId);
+      const itemTimestamp = new Date(thread.messages[0]?.createdAt ?? thread.updatedAt).getTime();
+
+      if (!current) {
+        consolidated.set(partnerId, { thread, unreadCount });
+        continue;
+      }
+
+      const currentTimestamp = new Date(current.thread.messages[0]?.createdAt ?? current.thread.updatedAt).getTime();
+      const nextUnread = current.unreadCount + unreadCount;
+
+      if (itemTimestamp > currentTimestamp) {
+        consolidated.set(partnerId, { thread, unreadCount: nextUnread });
+      } else {
+        consolidated.set(partnerId, { thread: current.thread, unreadCount: nextUnread });
+      }
+    }
+
+    const dashboardThreads = [...consolidated.values()]
+      .map(({ thread, unreadCount }) => ({ ...thread, unreadCount }))
+      .sort((left, right) => {
+        const leftTs = new Date(left.messages[0]?.createdAt ?? left.updatedAt).getTime();
+        const rightTs = new Date(right.messages[0]?.createdAt ?? right.updatedAt).getTime();
+        return rightTs - leftTs;
+      });
+
+    const payload = {
+      profile,
+      threads: dashboardThreads,
+      notifications,
+      savedProjects,
+      myProjects,
+      completeness,
+      recommendedProjects
+    };
+
+    await this.cacheService.set(cacheKey, payload, 10);
+    return payload;
   }
 
   /**
@@ -191,6 +354,13 @@ export class UsersService {
   }
 
   async searchDevelopers(query: SearchDevelopersDto) {
+    const cacheKey = await this.cacheService.composeKey("developers-search", JSON.stringify(query));
+    const cached = await this.cacheService.get<Array<Record<string, unknown>>>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
     const limit = query.limit ?? 24;
     const normalizedSkills = (query.skills ?? []).map((skill) => skill.toLowerCase());
     const normalizedQuery = query.q?.trim().toLowerCase() ?? "";
@@ -319,6 +489,7 @@ export class UsersService {
       .sort((a, b) => b.score - a.score || b.projectCount - a.projectCount)
       .slice(0, limit);
 
+    await this.cacheService.set(cacheKey, ranked, 120);
     return ranked;
   }
 
@@ -326,20 +497,48 @@ export class UsersService {
    * Updates current authenticated user profile.
    */
   async updateMe(userId: string, dto: UpdateUserDto) {
-    return this.prisma.user.update({
+    const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
-      data: dto
+      select: {
+        githubUrl: true
+      }
     });
+
+    const normalizedIncomingGithubUrl = dto.githubUrl?.trim();
+    const normalizedExistingGithubUrl = currentUser?.githubUrl?.trim();
+    const githubUrlChanged =
+      normalizedIncomingGithubUrl !== undefined && normalizedIncomingGithubUrl !== normalizedExistingGithubUrl;
+
+    const data = githubUrlChanged
+      ? {
+          ...dto,
+          githubVerifiedAt: null,
+          githubUsername: null
+        }
+      : dto;
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data
+    });
+
+    await this.invalidateDiscoveryCaches();
+    await this.invalidateDeveloperDashboardCache(userId);
+    return updated;
   }
 
   /**
    * Updates avatar URL after successful media upload.
    */
   async updateAvatar(userId: string, avatarUrl: string) {
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: { avatarUrl }
     });
+
+    await this.invalidateDiscoveryCaches();
+    await this.invalidateDeveloperDashboardCache(userId);
+    return updated;
   }
 
   /**
@@ -429,11 +628,14 @@ export class UsersService {
         slug: true,
         title: true,
         shortDescription: true,
+        roleInProject: true,
+        repositoryUrl: true,
         category: true,
         status: true,
         techStack: true,
         likeCount: true,
         viewCount: true,
+        qualityScore: true,
         thumbnailUrl: true,
         backgroundUrl: true,
         createdAt: true,

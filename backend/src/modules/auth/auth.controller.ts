@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, Req, Res } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomBytes } from "crypto";
 import { Request, Response } from "express";
@@ -9,6 +9,7 @@ import { AuthService } from "src/modules/auth/auth.service";
 import { ChangePasswordDto } from "src/modules/auth/dto/change-password.dto";
 import { ForgotPasswordDto } from "src/modules/auth/dto/forgot-password.dto";
 import { LoginDto } from "src/modules/auth/dto/login.dto";
+import { OAuthSessionDto } from "src/modules/auth/dto/oauth-session.dto";
 import { ResendVerificationDto } from "src/modules/auth/dto/resend-verification.dto";
 import { RegisterDto } from "src/modules/auth/dto/register.dto";
 import { ResetPasswordDto } from "src/modules/auth/dto/reset-password.dto";
@@ -251,14 +252,40 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 16, ttl: 60_000 } })
+  @Post("oauth/session")
+  async completeOAuthSession(
+    @Body() dto: OAuthSessionDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ) {
+    const result = await this.authService.completeOAuthSession(dto.accessToken, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request)
+    });
+    this.applyAuthCookies(response, result.accessToken, result.refreshToken);
+    return { role: result.role };
+  }
+
+  @Public()
   @Get("google")
-  googleOAuth() {
-    return this.authService.getOAuthRedirect("google");
+  googleOAuth(@Query("next") next?: string, @Query("intent") intent?: string) {
+    return this.authService.getOAuthRedirect("google", { next, intent });
   }
 
   @Public()
   @Get("github")
-  githubOAuth() {
-    return this.authService.getOAuthRedirect("github");
+  githubOAuth(@Query("next") next?: string, @Query("intent") intent?: string) {
+    return this.authService.getOAuthRedirect("github", { next, intent });
+  }
+
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  @Post("github/verify")
+  verifyGithubOwnership(@CurrentUser() user: CurrentUserPayload, @Req() request: Request) {
+    return this.authService.verifyGithubOwnership(user.sub, {
+      ipAddress: request.ip,
+      userAgent: this.readUserAgent(request),
+      identifier: user.email
+    });
   }
 }
