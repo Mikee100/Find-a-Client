@@ -148,10 +148,16 @@ Paginated responses:
 	"success": true,
 	"data": [],
 	"meta": {
+		"page": 1,
+		"totalPages": 10,
+		"totalItems": 200,
 		"hasNext": true,
 		"nextCursor": "..."
 	}
 }
+
+`GET /projects` supports page-based pagination via `page` and `limit`.
+`limit` is capped server-side at `50` for endpoint protection.
 ```
 
 Error responses:

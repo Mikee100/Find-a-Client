@@ -6,6 +6,12 @@ const WebSocket = require("ws");
 const prisma = new PrismaClient();
 
 const SEED_PASSWORD = "mike1234";
+const ADMIN_SEED = {
+  email: "admin@gmail.com",
+  username: "admin",
+  fullName: "Platform Admin",
+  role: UserRole.ADMIN
+};
 
 const developerSeeds = [
   {
@@ -115,6 +121,114 @@ const projectTemplates = [
     shortDescription: "AI assistant for support teams with retrieval, guardrails, escalation, and analytics.",
     longDescription:
       "Built an AI support copilot that helps agents resolve tickets faster while preserving quality with policy-aware responses.\n\nProject Intake Details\nProblem: Support teams needed faster first-response quality.\nSolution: Retrieval-augmented responses plus escalation rules.\nOutcome: Faster response times and consistent output quality.\nDuration: 9 weeks\nComplexity: Advanced"
+  },
+  {
+    title: "Headless Commerce Storefront",
+    category: ProjectCategory.ECOMMERCE,
+    pricingType: PricingType.FIXED,
+    price: 7600,
+    currency: "USD",
+    techStack: ["Next.js", "Shopify", "TypeScript", "Stripe"],
+    industries: ["Retail", "Ecommerce"],
+    shortDescription: "Headless ecommerce storefront with custom checkout flows and conversion analytics.",
+    longDescription:
+      "Created a conversion-optimized ecommerce experience with fast product discovery and custom checkout integrations.\n\nProject Intake Details\nProblem: Legacy storefront had low conversion and poor mobile experience.\nSolution: Rebuilt as a headless storefront with performance budgets.\nOutcome: Faster loads and improved checkout completion.\nDuration: 8 weeks\nComplexity: Production-grade"
+  },
+  {
+    title: "Clinic Management System",
+    category: ProjectCategory.MANAGEMENT_SYSTEM,
+    pricingType: PricingType.CONTACT,
+    price: null,
+    currency: "USD",
+    techStack: ["React", "NestJS", "PostgreSQL", "Redis"],
+    industries: ["Healthcare", "Operations"],
+    shortDescription: "End-to-end clinic operations suite covering scheduling, billing, and patient workflow.",
+    longDescription:
+      "Built a clinic operations platform to coordinate appointments, records, and billing with role-based access.\n\nProject Intake Details\nProblem: Clinics relied on disconnected tools and manual reconciliation.\nSolution: Unified management system with workflow automation.\nOutcome: Better data quality and reduced admin overhead.\nDuration: 10 weeks\nComplexity: Enterprise"
+  },
+  {
+    title: "Warehouse Desktop Console",
+    category: ProjectCategory.DESKTOP,
+    pricingType: PricingType.FIXED,
+    price: 5900,
+    currency: "USD",
+    techStack: ["Electron", "React", "SQLite", "Node.js"],
+    industries: ["Logistics", "Supply Chain"],
+    shortDescription: "Cross-platform desktop console for warehouse stock control and shipment orchestration.",
+    longDescription:
+      "Delivered a desktop control center for warehouse teams operating in low-connectivity environments.\n\nProject Intake Details\nProblem: Browser tools failed during unstable warehouse networks.\nSolution: Electron app with robust offline sync and local persistence.\nOutcome: More reliable day-to-day operations and fewer stock errors.\nDuration: 7 weeks\nComplexity: Mid-market"
+  },
+  {
+    title: "Restaurant Delivery Mobile Suite",
+    category: ProjectCategory.MOBILE_APP,
+    pricingType: PricingType.NEGOTIABLE,
+    price: null,
+    currency: "USD",
+    techStack: ["Flutter", "Firebase", "Node.js", "PostgreSQL"],
+    industries: ["Food", "Hospitality"],
+    shortDescription: "Consumer and rider mobile suite for restaurant ordering, dispatching, and order tracking.",
+    longDescription:
+      "Built dual mobile apps for customers and riders with real-time dispatch and order visibility.\n\nProject Intake Details\nProblem: Restaurant chain had fragmented ordering and delayed dispatch.\nSolution: Unified ordering, dispatch, and fulfillment workflows.\nOutcome: Faster delivery turnaround and improved customer retention.\nDuration: 9 weeks\nComplexity: High"
+  },
+  {
+    title: "Document Intelligence API",
+    category: ProjectCategory.API,
+    pricingType: PricingType.FIXED,
+    price: 6300,
+    currency: "USD",
+    techStack: ["Python", "FastAPI", "PostgreSQL", "S3"],
+    industries: ["Legal", "Finance"],
+    shortDescription: "Document parsing and extraction API for contracts, invoices, and compliance workflows.",
+    longDescription:
+      "Implemented a scalable API for extracting structured data from documents and routing review tasks.\n\nProject Intake Details\nProblem: Teams spent hours manually processing high-volume documents.\nSolution: Automated extraction pipeline with confidence scoring.\nOutcome: Faster processing and reduced manual errors.\nDuration: 6 weeks\nComplexity: Advanced"
+  },
+  {
+    title: "Learning Portal Platform",
+    category: ProjectCategory.WEB_APP,
+    pricingType: PricingType.CONTACT,
+    price: null,
+    currency: "USD",
+    techStack: ["Next.js", "GraphQL", "PostgreSQL", "Redis"],
+    industries: ["Education", "SaaS"],
+    shortDescription: "Modern learning experience platform with cohort management, progress tracking, and assessments.",
+    longDescription:
+      "Built an education platform with cohort journeys, assignment pipelines, and mentor dashboards.\n\nProject Intake Details\nProblem: Learning programs lacked progress visibility and engagement tooling.\nSolution: Designed a structured portal with assessment and analytics modules.\nOutcome: Higher completion rates and better learner outcomes.\nDuration: 11 weeks\nComplexity: Enterprise"
+  },
+  {
+    title: "SMB Invoicing Toolkit",
+    category: ProjectCategory.OTHER,
+    pricingType: PricingType.FREE,
+    price: null,
+    currency: "USD",
+    techStack: ["Vue", "Node.js", "SQLite", "PDF"],
+    industries: ["SMB", "Productivity"],
+    shortDescription: "Simple invoicing toolkit for small businesses with branded templates and payment reminders.",
+    longDescription:
+      "Created a lightweight invoicing toolkit for small teams managing cashflow and recurring billing reminders.\n\nProject Intake Details\nProblem: Small businesses needed a no-friction invoicing workflow.\nSolution: Delivered quick invoice generation with reminder automations.\nOutcome: Faster billing cycles and improved payment follow-up.\nDuration: 4 weeks\nComplexity: Lightweight"
+  },
+  {
+    title: "Property Marketplace Experience",
+    category: ProjectCategory.WEB_APP,
+    pricingType: PricingType.FIXED,
+    price: 7100,
+    currency: "USD",
+    techStack: ["React", "Node.js", "PostgreSQL", "Mapbox"],
+    industries: ["Real Estate", "Marketplace"],
+    shortDescription: "Real estate marketplace with location search, agent matching, and booking workflows.",
+    longDescription:
+      "Developed a property discovery experience with rich listing media and guided booking journeys.\n\nProject Intake Details\nProblem: Listings were hard to compare and inquiry flows were weak.\nSolution: Built map-first discovery with clear conversion funnels.\nOutcome: Higher inquiry intent and improved lead quality.\nDuration: 8 weeks\nComplexity: Production-grade"
+  },
+  {
+    title: "Fraud Signals AI Engine",
+    category: ProjectCategory.AI_ML,
+    pricingType: PricingType.CONTACT,
+    price: null,
+    currency: "USD",
+    techStack: ["Python", "Kafka", "PostgreSQL", "Feature Store"],
+    industries: ["FinTech", "Security"],
+    shortDescription: "Real-time anomaly and fraud scoring pipeline with explainable decision insights.",
+    longDescription:
+      "Built a fraud detection engine processing streaming events and generating explainable risk decisions.\n\nProject Intake Details\nProblem: Fraud checks were delayed and lacked decision transparency.\nSolution: Implemented real-time scoring with feature tracing.\nOutcome: Faster detection and more auditable risk decisions.\nDuration: 12 weeks\nComplexity: Advanced"
   }
 ];
 
@@ -155,13 +269,13 @@ function getSupabaseClients() {
   };
 }
 
-async function ensureSupabaseUser(clients, developer) {
+async function ensureSupabaseUser(clients, account) {
   if (!clients) {
     return null;
   }
 
   const signInAttempt = await clients.anon.auth.signInWithPassword({
-    email: developer.email,
+    email: account.email,
     password: SEED_PASSWORD
   });
 
@@ -170,13 +284,13 @@ async function ensureSupabaseUser(clients, developer) {
   }
 
   const createAttempt = await clients.admin.auth.admin.createUser({
-    email: developer.email,
+    email: account.email,
     password: SEED_PASSWORD,
     email_confirm: true,
     user_metadata: {
-      fullName: developer.fullName,
-      username: developer.username,
-      role: UserRole.DEVELOPER
+      fullName: account.fullName,
+      username: account.username,
+      role: account.role
     }
   });
 
@@ -185,11 +299,11 @@ async function ensureSupabaseUser(clients, developer) {
   }
 
   const listAttempt = await clients.admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  const existing = listAttempt.data?.users?.find((candidate) => candidate.email?.toLowerCase() === developer.email.toLowerCase());
+  const existing = listAttempt.data?.users?.find((candidate) => candidate.email?.toLowerCase() === account.email.toLowerCase());
 
   if (!existing) {
     throw new Error(
-      `Failed to create or locate Supabase user for ${developer.email}: ${createAttempt.error?.message ?? "unknown auth error"}`
+      `Failed to create or locate Supabase user for ${account.email}: ${createAttempt.error?.message ?? "unknown auth error"}`
     );
   }
 
@@ -197,17 +311,64 @@ async function ensureSupabaseUser(clients, developer) {
     password: SEED_PASSWORD,
     email_confirm: true,
     user_metadata: {
-      fullName: developer.fullName,
-      username: developer.username,
-      role: UserRole.DEVELOPER
+      fullName: account.fullName,
+      username: account.username,
+      role: account.role
     }
   });
 
   if (updateAttempt.error) {
-    throw new Error(`Failed to update Supabase user ${developer.email}: ${updateAttempt.error.message}`);
+    throw new Error(`Failed to update Supabase user ${account.email}: ${updateAttempt.error.message}`);
   }
 
   return existing.id;
+}
+
+async function upsertAdminProfile(admin, supabaseUserId) {
+  const existingByEmail = await prisma.user.findUnique({ where: { email: admin.email } });
+  const userId = supabaseUserId ?? existingByEmail?.id;
+
+  if (!userId) {
+    throw new Error(
+      `Cannot seed user ${admin.email} without Supabase configuration. Set SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY.`
+    );
+  }
+
+  return prisma.user.upsert({
+    where: { email: admin.email },
+    update: {
+      username: admin.username,
+      fullName: admin.fullName,
+      role: UserRole.ADMIN,
+      title: "Platform Administrator",
+      bio: "Platform administrator account for moderation and operational control.",
+      skills: ["Moderation", "Operations", "Governance"],
+      primaryStack: "Administration",
+      experienceLevel: ExperienceLevel.SENIOR,
+      availabilityStatus: AvailabilityStatus.AVAILABLE,
+      location: "Remote",
+      contactEmail: admin.email,
+      publicEmailEnabled: false,
+      isVerified: true
+    },
+    create: {
+      id: userId,
+      email: admin.email,
+      username: admin.username,
+      fullName: admin.fullName,
+      role: UserRole.ADMIN,
+      title: "Platform Administrator",
+      bio: "Platform administrator account for moderation and operational control.",
+      skills: ["Moderation", "Operations", "Governance"],
+      primaryStack: "Administration",
+      experienceLevel: ExperienceLevel.SENIOR,
+      availabilityStatus: AvailabilityStatus.AVAILABLE,
+      location: "Remote",
+      contactEmail: admin.email,
+      publicEmailEnabled: false,
+      isVerified: true
+    }
+  });
 }
 
 async function upsertDeveloperProfile(developer, supabaseUserId) {
@@ -264,12 +425,14 @@ async function upsertDeveloperProfile(developer, supabaseUserId) {
 }
 
 async function upsertProjectsForDeveloper(developer, userId, developerIndex) {
-  const upserts = projectTemplates.map((template, index) => {
+  const projects = [];
+
+  for (const [index, template] of projectTemplates.entries()) {
     const title = `${template.title} ${index + 1} by ${developer.fullName.split(" ")[0]}`;
     const slug = slugify(`${developer.username}-${template.title}-${index + 1}`);
     const visuals = buildProjectVisuals(developerIndex + 1, index + 1, template.category);
 
-    return prisma.project.upsert({
+    const project = await prisma.project.upsert({
       where: { slug },
       update: {
         title,
@@ -313,31 +476,28 @@ async function upsertProjectsForDeveloper(developer, userId, developerIndex) {
         demoUrl: `https://demo.${developer.username}.${index + 1}.example.com`
       }
     });
-  });
+    projects.push(project);
+  }
 
-  const projects = await Promise.all(upserts);
+  for (const [index, project] of projects.entries()) {
+    const visuals = buildProjectVisuals(developerIndex + 1, index + 1, project.category);
 
-  await Promise.all(
-    projects.map(async (project, index) => {
-      const visuals = buildProjectVisuals(developerIndex + 1, index + 1, project.category);
+    await prisma.projectMedia.deleteMany({
+      where: {
+        projectId: project.id,
+        type: "SCREENSHOT"
+      }
+    });
 
-      await prisma.projectMedia.deleteMany({
-        where: {
-          projectId: project.id,
-          type: "SCREENSHOT"
-        }
-      });
-
-      await prisma.projectMedia.createMany({
-        data: visuals.screenshotUrls.map((url, order) => ({
-          projectId: project.id,
-          type: "SCREENSHOT",
-          url,
-          order
-        }))
-      });
-    })
-  );
+    await prisma.projectMedia.createMany({
+      data: visuals.screenshotUrls.map((url, order) => ({
+        projectId: project.id,
+        type: "SCREENSHOT",
+        url,
+        order
+      }))
+    });
+  }
 }
 
 async function main() {
@@ -351,14 +511,19 @@ async function main() {
     const supabaseUserId = await ensureSupabaseUser(supabaseClients, developer);
     const user = await upsertDeveloperProfile(developer, supabaseUserId);
     await upsertProjectsForDeveloper(developer, user.id, developerIndex);
-    console.log(`[seed] Seeded developer ${developer.email} with 5 projects.`);
+    console.log(`[seed] Seeded developer ${developer.email} with ${projectTemplates.length} projects.`);
   }
 
+  const adminSupabaseUserId = await ensureSupabaseUser(supabaseClients, ADMIN_SEED);
+  await upsertAdminProfile(ADMIN_SEED, adminSupabaseUserId);
+  console.log(`[seed] Seeded admin ${ADMIN_SEED.email}.`);
+
   const totalDevelopers = await prisma.user.count({ where: { role: UserRole.DEVELOPER } });
+  const totalAdmins = await prisma.user.count({ where: { role: UserRole.ADMIN } });
   const totalProjects = await prisma.project.count();
 
-  console.log(`[seed] Done. Developers in DB: ${totalDevelopers}. Projects in DB: ${totalProjects}.`);
-  console.log(`[seed] Shared password used for seeded developer accounts: ${SEED_PASSWORD}`);
+  console.log(`[seed] Done. Developers in DB: ${totalDevelopers}. Admins in DB: ${totalAdmins}. Projects in DB: ${totalProjects}.`);
+  console.log(`[seed] Shared password used for seeded accounts: ${SEED_PASSWORD}`);
 }
 
 main()

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { Code2, Eye, EyeOff, Globe, Lock, Mail } from "lucide-react";
 
 import { AppRole, getGithubOAuthRedirect, getGoogleOAuthRedirect, login, resendVerification } from "@/lib/api";
@@ -20,8 +20,6 @@ function getRedirectPath(role: AppRole): string {
   return "/developers/dashboard";
 }
 
-type RoleChoice = "DEVELOPER" | "CLIENT";
-
 type FieldErrors = {
   email?: string;
   password?: string;
@@ -37,34 +35,13 @@ export default function LoginPage() {
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attemptedEmail, setAttemptedEmail] = useState("");
-  const [selectedRole, setSelectedRole] = useState<RoleChoice>(() => {
-    if (typeof window === "undefined") {
-      return "DEVELOPER";
-    }
-    const storedRole = window.localStorage.getItem("login.role");
-    return storedRole === "CLIENT" || storedRole === "DEVELOPER"
-      ? storedRole
-      : "DEVELOPER";
-  });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-
-  useEffect(() => {
-    window.localStorage.setItem("login.role", selectedRole);
-  }, [selectedRole]);
 
   const oauthQueryError = useMemo(() => searchParams.get("oauthError")?.trim() ?? null, [searchParams]);
   const oauthQueryNotice = useMemo(() => searchParams.get("oauthNotice")?.trim() ?? null, [searchParams]);
 
   const visibleError = generalError ?? oauthQueryError;
   const visibleNotice = notice ?? (visibleError ? null : oauthQueryNotice);
-
-  const primaryCta = useMemo(
-    () =>
-      selectedRole === "DEVELOPER"
-        ? "Continue as Developer"
-        : "Find Developers",
-    [selectedRole],
-  );
 
   const requiresVerification = useMemo(
     () => (generalError ?? "").toLowerCase().includes("verify your email"),
@@ -140,7 +117,7 @@ export default function LoginPage() {
     setNotice(null);
 
     try {
-      const next = getRedirectPath(selectedRole);
+      const next = "/dashboard";
       const redirect = provider === "google"
         ? await getGoogleOAuthRedirect({ next, intent: "oauth-login" })
         : await getGithubOAuthRedirect({ next, intent: "oauth-login" });
@@ -179,37 +156,12 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="grid min-h-[680px] place-items-center p-6 sm:p-10">
-          <div className="w-full max-w-[420px]">
+        <section className="grid min-h-170 place-items-center p-6 sm:p-10">
+          <div className="w-full max-w-105">
             <p className="text-sm font-medium text-slate-500">Access your workspace</p>
             <h2 className="mt-2 text-[30px] font-semibold leading-tight text-slate-900">
               Continue building opportunities
             </h2>
-
-            <div className="mt-6 grid grid-cols-2 rounded-xl border border-[#E5E7EB] bg-white p-1">
-              <button
-                type="button"
-                onClick={() => setSelectedRole("DEVELOPER")}
-                className={`rounded-[10px] px-3 py-2 text-sm font-medium transition ${
-                  selectedRole === "DEVELOPER"
-                    ? "bg-[#4F46E5] text-white"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                Developer
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedRole("CLIENT")}
-                className={`rounded-[10px] px-3 py-2 text-sm font-medium transition ${
-                  selectedRole === "CLIENT"
-                    ? "bg-[#4F46E5] text-white"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                Client
-              </button>
-            </div>
 
             {visibleError ? (
               <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -327,12 +279,12 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={pending}
-                className="inline-flex h-12 w-full items-center justify-center rounded-[12px] bg-[#4F46E5] px-3 text-[15px] font-medium text-white transition hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-80"
+                className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#4F46E5] px-3 text-[15px] font-medium text-white transition hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-80"
               >
                 {pending ? (
                   <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                 ) : (
-                  primaryCta
+                  "Enter your dashboard"
                 )}
               </button>
             </form>

@@ -131,6 +131,9 @@ model User {
   threadParticipantsB Thread[] @relation("ThreadParticipantB")
   sentHireRequests   HireRequest[] @relation("HireRequestClient")
   receivedHireRequests HireRequest[] @relation("HireRequestDeveloper")
+
+  @@index([githubVerifiedAt], map: "idx_user_github_verified_at")
+  @@index([role, experienceLevel, availabilityStatus], map: "idx_user_role_experience_availability")
 }
 
 model AuthActionToken {
@@ -238,6 +241,14 @@ model Project {
   @@index([status, isFeatured])
   @@index([authorId])
   @@index([category])
+  @@index([status, deletedAt, createdAt])
+  @@index([status, deletedAt, likeCount])
+  @@index([status, deletedAt, viewCount])
+  @@index([status, deletedAt, price])
+  @@index([status, deletedAt, category, pricingType])
+  @@index([qualityScore(sort: Desc)], map: "idx_project_quality_score_desc")
+  @@index([techStack], type: Gin, map: "idx_project_techstack_gin")
+  @@index([industries], type: Gin, map: "idx_project_industries_gin")
 }
 
 model ProjectMedia {
@@ -282,6 +293,9 @@ model Thread {
 
   @@index([participantAId])
   @@index([participantBId])
+  @@index([participantAId, updatedAt(sort: Desc)], map: "idx_thread_participant_a_updated_desc")
+  @@index([participantBId, updatedAt(sort: Desc)], map: "idx_thread_participant_b_updated_desc")
+  @@index([participantAId, participantBId, updatedAt(sort: Desc)], map: "idx_thread_pair_updated_desc")
 }
 
 model HireRequest {
@@ -312,6 +326,8 @@ model HireRequest {
   @@index([status, createdAt])
   @@index([projectId])
   @@index([threadId])
+  @@index([clientId, status, createdAt(sort: Desc)], map: "idx_hirerequest_client_status_created_desc")
+  @@index([developerId, status, createdAt(sort: Desc)], map: "idx_hirerequest_developer_status_created_desc")
 }
 
 model Message {
@@ -377,6 +393,8 @@ model Notification {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+  @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notification_user_read_created_desc")
+  @@index([userId, type, isRead], map: "idx_notification_user_type_read")
 }
 
 model Saved {
@@ -387,6 +405,7 @@ model Saved {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@id([userId, projectId])
+  @@index([userId, createdAt(sort: Desc)], map: "idx_saved_user_created_desc")
 }
 
 model ProjectLike {
@@ -398,4 +417,5 @@ model ProjectLike {
 
   @@id([userId, projectId])
   @@index([projectId])
+  @@index([userId, createdAt(sort: Desc)], map: "idx_projectlike_user_created_desc")
 }

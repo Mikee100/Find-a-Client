@@ -547,6 +547,71 @@ export interface UnreadNotificationsCount {
   unread: number;
 }
 
+export interface AdminSystemUser {
+  id: string;
+  role: AppRole;
+  email: string;
+  username: string;
+  fullName: string;
+  avatarUrl: string | null;
+  title?: string | null;
+  location: string | null;
+  isVerified: boolean;
+  createdAt: string;
+  projectsCount?: number;
+  hireRequestsCount?: number;
+}
+
+export interface AdminUsersOverview {
+  developers: AdminSystemUser[];
+  clients: AdminSystemUser[];
+}
+
+export interface AdminUserDetail extends AdminSystemUser {
+  updatedAt: string;
+  counts: {
+    projects: number;
+    sentHireRequests: number;
+    receivedHireRequests: number;
+    sentMessages: number;
+  };
+  accountState: {
+    disabled: boolean;
+    bannedUntil: string | null;
+    lastSignInAt: string | null;
+  };
+}
+
+export interface AdminPerformanceRecentRequest {
+  method: string;
+  path: string;
+  statusCode: number;
+  durationMs: number;
+  happenedAt: string;
+}
+
+export interface AdminPerformanceSummary {
+  routeCount: number;
+  totalRequests: number;
+  totalErrors: number;
+  errorRate: number;
+  averageLatencyMs: number;
+  recentRequests: AdminPerformanceRecentRequest[];
+}
+
+export interface AdminPerformanceRouteMetric {
+  method: string;
+  path: string;
+  count: number;
+  errorCount: number;
+  errorRate: number;
+  averageLatencyMs: number;
+  maxLatencyMs: number;
+  p95LatencyMs: number;
+  lastStatusCode: number;
+  lastCalledAt: string;
+}
+
 export interface ProfileCompleteness {
   percentage: number;
   completedFields: number;
@@ -696,12 +761,22 @@ async function requestJson<TResponse, TBody = unknown>(
     });
   };
 
-  const response = await send();
+  let response: Response;
+  try {
+    response = await send();
+  } catch {
+    throw new Error("Unable to reach the server. Confirm backend is running on http://localhost:4311.");
+  }
 
   if (response.status === 401 && allowRetryOn401 && path !== "/auth/refresh") {
     const refreshed = await refreshSession();
     if (refreshed) {
-      const retryResponse = await send();
+      let retryResponse: Response;
+      try {
+        retryResponse = await send();
+      } catch {
+        throw new Error("Unable to reach the server. Confirm backend is running on http://localhost:4311.");
+      }
       if (!retryResponse.ok) {
         throw new Error(await parseError(retryResponse));
       }
@@ -1275,6 +1350,46 @@ export async function readNotification(id: string): Promise<{ updated: number }>
   return requestJson<{ updated: number }, Record<string, never>>("PUT", `/notifications/${encodeURIComponent(id)}/read`, {
     body: {}
   });
+}
+
+export async function getAdminUsersOverview(): Promise<AdminUsersOverview> {
+  return requestJson<AdminUsersOverview>("GET", "/admin/users");
+}
+
+export async function getAdminUserDetail(userId: string): Promise<AdminUserDetail> {
+  return requestJson<AdminUserDetail>("GET", `/admin/users/${encodeURIComponent(userId)}`);
+}
+
+export async function setAdminUserAccess(userId: string, disabled: boolean): Promise<AdminUserDetail> {
+  return requestJson<AdminUserDetail, { disabled: boolean }>("PATCH", `/admin/users/${encodeURIComponent(userId)}/access`, {
+    body: { disabled }
+  });
+}
+
+export async function setAdminUserPassword(userId: string, newPassword: string): Promise<AdminUserDetail> {
+  return requestJson<AdminUserDetail, { newPassword: string }>("PATCH", `/admin/users/${encodeURIComponent(userId)}/password`, {
+    body: { newPassword }
+  });
+}
+
+export async function setAdminUserRole(userId: string, role: "DEVELOPER" | "CLIENT"): Promise<AdminUserDetail> {
+  return requestJson<AdminUserDetail, { role: "DEVELOPER" | "CLIENT" }>("PATCH", `/admin/users/${encodeURIComponent(userId)}/role`, {
+    body: { role }
+  });
+}
+
+export async function setAdminUserVerification(userId: string, isVerified: boolean): Promise<AdminUserDetail> {
+  return requestJson<AdminUserDetail, { isVerified: boolean }>("PATCH", `/admin/users/${encodeURIComponent(userId)}/verification`, {
+    body: { isVerified }
+  });
+}
+
+export async function getAdminPerformanceSummary(): Promise<AdminPerformanceSummary> {
+  return requestJson<AdminPerformanceSummary>("GET", "/admin/performance/summary");
+}
+
+export async function getAdminPerformanceRoutes(): Promise<AdminPerformanceRouteMetric[]> {
+  return requestJson<AdminPerformanceRouteMetric[]>("GET", "/admin/performance/routes");
 }
 
 export async function uploadMediaFile(file: File, options?: UploadMediaOptions): Promise<{ url: string; publicId: string }> {
