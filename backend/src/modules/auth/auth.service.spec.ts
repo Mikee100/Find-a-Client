@@ -28,7 +28,15 @@ describe("AuthService", () => {
         };
         return map[key];
       }),
-      get: jest.fn(() => "15m")
+      get: jest.fn((key: string, defaultValue?: string) => {
+        const map: Record<string, string> = {
+          REDIS_URL: "",
+          JWT_ACCESS_EXPIRES_IN: "15m",
+          JWT_REFRESH_EXPIRES_IN: "7d"
+        };
+
+        return map[key] ?? defaultValue;
+      })
     } as unknown as ConfigService;
     const jwt = { signAsync: jest.fn() } as unknown as JwtService;
     const notifications = {
