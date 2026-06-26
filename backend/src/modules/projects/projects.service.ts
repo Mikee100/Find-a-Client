@@ -15,6 +15,36 @@ import { UpdateProjectDto } from "src/modules/projects/dto/update-project.dto";
 @Injectable()
 export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
+  private readonly listProjectSelect = {
+    id: true,
+    slug: true,
+    title: true,
+    shortDescription: true,
+    roleInProject: true,
+    repositoryUrl: true,
+    category: true,
+    techStack: true,
+    pricingType: true,
+    price: true,
+    currency: true,
+    thumbnailUrl: true,
+    backgroundUrl: true,
+    likeCount: true,
+    viewCount: true,
+    inquiryCount: true,
+    qualityScore: true,
+    createdAt: true,
+    author: {
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        avatarUrl: true,
+        availabilityStatus: true,
+        location: true
+      }
+    }
+  } as const;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -236,6 +266,7 @@ export class ProjectsService {
         this.prisma.project.findMany({
           where,
           orderBy,
+          select: this.listProjectSelect,
           take: limit,
           skip: (page - 1) * limit
         }),
@@ -277,6 +308,7 @@ export class ProjectsService {
     const items = await this.prisma.project.findMany({
       where,
       orderBy,
+      select: this.listProjectSelect,
       take: limit + 1,
       cursor: query.cursor ? { id: query.cursor } : undefined,
       skip: query.cursor ? 1 : 0
@@ -309,10 +341,14 @@ export class ProjectsService {
   /**
    * Gets project details by slug and increments view count.
    */
-  async getBySlug(slug: string) {
+  async getBySlug(slug: string, options?: { trackView?: boolean }) {
     const project = await this.prisma.project.findUnique({ where: { slug }, include: { author: true, media: true } });
     if (!project || project.deletedAt) {
       throw new NotFoundException("Project not found");
+    }
+
+    if (options?.trackView === false) {
+      return project;
     }
 
     const nextViewCount = project.viewCount + 1;

@@ -26,6 +26,7 @@ import { ReviewsModule } from "src/modules/reviews/reviews.module";
 import { SearchModule } from "src/modules/search/search.module";
 import { UsersModule } from "src/modules/users/users.module";
 import { PrismaModule } from "src/prisma/prisma.module";
+import { PlatformModule } from "src/modules/platform/platform.module";
 
 @Module({
   controllers: [HealthController],
@@ -44,6 +45,7 @@ import { PrismaModule } from "src/prisma/prisma.module";
     CacheModule,
     PerformanceModule,
     PrismaModule,
+    PlatformModule,
     AuthModule,
     UsersModule,
     ProjectsModule,

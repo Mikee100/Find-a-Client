@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import FullPageLoader from "@/components/ui/full-page-loader";
 import { AppRole, completeOAuthSession, getAuthSession } from "@/lib/api";
+import { syncSupabaseBrowserSession } from "@/lib/supabase-auth-session";
 
 function getDefaultRedirect(role: AppRole): string {
   if (role === "ADMIN") {
@@ -53,6 +54,25 @@ function readOAuthAccessToken(searchParams: URLSearchParams): string | null {
   return hashParams.get("access_token")?.trim() ?? null;
 }
 
+function readOAuthRefreshToken(searchParams: URLSearchParams): string | null {
+  const queryToken = searchParams.get("refresh_token")?.trim();
+  if (queryToken) {
+    return queryToken;
+  }
+
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  if (!hash) {
+    return null;
+  }
+
+  const hashParams = new URLSearchParams(hash);
+  return hashParams.get("refresh_token")?.trim() ?? null;
+}
+
 export default function OAuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -71,11 +91,16 @@ export default function OAuthCallbackPage() {
       const safeNext = readSafeNextPath(searchParams.get("next"));
       const intent = searchParams.get("intent");
       const oauthAccessToken = readOAuthAccessToken(searchParams);
+      const oauthRefreshToken = readOAuthRefreshToken(searchParams);
 
       try {
         let resolvedRole: AppRole | null = null;
 
         if (oauthAccessToken) {
+          await syncSupabaseBrowserSession({
+            accessToken: oauthAccessToken,
+            refreshToken: oauthRefreshToken
+          });
           const oauthSession = await completeOAuthSession(oauthAccessToken);
           resolvedRole = oauthSession.role;
         } else {

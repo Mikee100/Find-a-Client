@@ -148,6 +148,8 @@ interface RegisterResponse {
 
 interface LoginResponse {
   role: AppRole;
+  supabaseAccessToken?: string | null;
+  supabaseRefreshToken?: string | null;
 }
 
 interface OAuthSessionResponse {
@@ -381,6 +383,14 @@ export interface ProjectListItem {
   inquiryCount: number;
   qualityScore: number;
   createdAt: string;
+  author?: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl: string | null;
+    availabilityStatus: "AVAILABLE" | "BUSY" | "NOT_ACCEPTING_WORK";
+    location: string | null;
+  };
 }
 
 export interface ProjectDetail {
@@ -1134,8 +1144,21 @@ export async function listProjectsPaginated(params: ListProjectsParams = {}): Pr
   };
 }
 
-export async function getProjectBySlug(slug: string): Promise<ProjectDetail> {
-  return requestJson<ProjectDetail>("GET", `/projects/${slug}`);
+export async function getProjectBySlug(
+  slug: string,
+  options?: { trackView?: boolean }
+): Promise<ProjectDetail> {
+  const searchParams = new URLSearchParams();
+  if (options?.trackView === false) {
+    searchParams.set("trackView", "false");
+  }
+
+  const queryString = searchParams.toString();
+  const path = queryString
+    ? `/projects/${encodeURIComponent(slug)}?${queryString}`
+    : `/projects/${encodeURIComponent(slug)}`;
+
+  return requestJson<ProjectDetail>("GET", path);
 }
 
 export async function getSavedProjects(): Promise<SavedProjectEntry[]> {

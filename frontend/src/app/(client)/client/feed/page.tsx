@@ -493,28 +493,6 @@ export default function ClientFeedPage() {
     return Array.from({ length: end - adjustedStart + 1 }, (_, index) => adjustedStart + index);
   }, [currentPage, totalPages]);
 
-  useEffect(() => {
-    const slugsToLoad = visibleProjects
-      .map((project) => project.slug)
-      .filter((slug) => !(slug in projectDetails));
-
-    if (!slugsToLoad.length) {
-      return;
-    }
-
-    void (async () => {
-      const loaded = await Promise.allSettled(slugsToLoad.map((slug) => getProjectBySlug(slug)));
-      setProjectDetails((previous) => {
-        const next = { ...previous };
-        loaded.forEach((result, index) => {
-          const slug = slugsToLoad[index];
-          next[slug] = result.status === "fulfilled" ? result.value : null;
-        });
-        return next;
-      });
-    })();
-  }, [projectDetails, visibleProjects]);
-
   function toggleSavedProject(id: string) {
     setSavedProjectIds((previous) => {
       const next = new Set(previous);
@@ -596,10 +574,15 @@ export default function ClientFeedPage() {
   async function onViewDeveloper(project: ProjectListItem, detail: ProjectDetail | null | undefined) {
     try {
       setOpeningDeveloperProjectId(project.id);
-      let resolvedDetail = detail;
+      const cachedUsername = project.author?.username;
+      if (cachedUsername) {
+        router.push(`/developers/${cachedUsername}`);
+        return;
+      }
 
+      let resolvedDetail = detail;
       if (!resolvedDetail) {
-        resolvedDetail = await getProjectBySlug(project.slug);
+        resolvedDetail = await getProjectBySlug(project.slug, { trackView: false });
         setProjectDetails((previous) => ({
           ...previous,
           [project.slug]: resolvedDetail || null
@@ -621,19 +604,42 @@ export default function ClientFeedPage() {
   }
 
   async function onHireDeveloper(project: ProjectListItem, detail: ProjectDetail | null | undefined) {
-    if (!detail?.author?.id) {
-      setActionMessage("Developer profile is still loading.");
-      return;
-    }
-
     try {
       setHiringProjectId(project.id);
+
+      const cachedAuthorId = project.author?.id;
+      const cachedAuthorUsername = project.author?.username;
+
+      if (cachedAuthorId && cachedAuthorUsername) {
+        const params = new URLSearchParams({
+          projectId: project.id,
+          projectSlug: project.slug,
+          projectTitle: project.title
+        });
+        router.push(`/hire/${cachedAuthorUsername}?${params.toString()}`);
+        return;
+      }
+
+      let resolvedDetail = detail;
+      if (!resolvedDetail) {
+        resolvedDetail = await getProjectBySlug(project.slug, { trackView: false });
+        setProjectDetails((previous) => ({
+          ...previous,
+          [project.slug]: resolvedDetail || null
+        }));
+      }
+
+      if (!resolvedDetail?.author?.id || !resolvedDetail.author.username) {
+        setActionMessage("Developer profile is unavailable for this project.");
+        return;
+      }
+
       const params = new URLSearchParams({
         projectId: project.id,
         projectSlug: project.slug,
         projectTitle: project.title
       });
-      router.push(`/hire/${detail.author.username}?${params.toString()}`);
+      router.push(`/hire/${resolvedDetail.author.username}?${params.toString()}`);
     } catch (caughtError) {
       setActionMessage(caughtError instanceof Error ? caughtError.message : "Unable to start hiring conversation.");
     } finally {
@@ -776,8 +782,8 @@ export default function ClientFeedPage() {
                 <div className="space-y-4">
                   {visibleProjects.map((project) => {
                     const detail = projectDetails[project.slug];
-                    const avatarLabel = detail?.author.fullName || "Developer";
-                    const heroUrl = detail?.thumbnailUrl || detail?.backgroundUrl;
+                    const avatarLabel = detail?.author.fullName || project.author?.fullName || "Developer";
+                    const heroUrl = detail?.thumbnailUrl || detail?.backgroundUrl || project.thumbnailUrl || project.backgroundUrl;
                     const techStack = (detail?.techStack && detail.techStack.length > 0
                       ? detail.techStack
                       : project.techStack || []).slice(0, 6);

@@ -51,6 +51,7 @@ export class NotificationsService {
   private async invalidateNotificationsCache(userId: string) {
     await Promise.all([
       this.cacheService.invalidateNamespace(`notifications-list:${userId}`),
+      this.cacheService.invalidateNamespace(`notifications-unread-count:${userId}`),
       this.cacheService.invalidateNamespace(`developer-dashboard:${userId}`)
     ]);
   }
@@ -289,6 +290,12 @@ export class NotificationsService {
    * Returns unread notification count for the authenticated user.
    */
   async unreadCount(userId: string): Promise<{ unread: number }> {
+    const cacheKey = await this.cacheService.composeKey(`notifications-unread-count:${userId}`, "value");
+    const cached = await this.cacheService.get<{ unread: number }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const unread = await this.prisma.notification.count({
       where: {
         userId,
@@ -296,7 +303,9 @@ export class NotificationsService {
       }
     });
 
-    return { unread };
+    const payload = { unread };
+    await this.cacheService.set(cacheKey, payload, 10);
+    return payload;
   }
 
   /**

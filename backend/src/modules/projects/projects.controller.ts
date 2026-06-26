@@ -32,8 +32,9 @@ export class ProjectsController {
 
   @Public()
   @Get(":slug")
-  getOne(@Param("slug") slug: string) {
-    return this.projectsService.getBySlug(slug);
+  getOne(@Param("slug") slug: string, @Query("trackView") trackView?: string) {
+    const shouldTrackView = trackView !== "false";
+    return this.projectsService.getBySlug(slug, { trackView: shouldTrackView });
   }
 
   @Put(":slug")

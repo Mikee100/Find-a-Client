@@ -7,6 +7,7 @@ import { Code2, Eye, EyeOff, Globe, Lock, Mail } from "lucide-react";
 
 import { AppRole, getGithubOAuthRedirect, getGoogleOAuthRedirect, login, resendVerification } from "@/lib/api";
 import BrandLogo from "@/components/ui/brand-logo";
+import { syncSupabaseBrowserSession } from "@/lib/supabase-auth-session";
 
 function getRedirectPath(role: AppRole): string {
   if (role === "ADMIN") {
@@ -18,6 +19,23 @@ function getRedirectPath(role: AppRole): string {
   }
 
   return "/developers/dashboard";
+}
+
+function readSafeRedirectPath(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim();
+  if (!normalized.startsWith("/")) {
+    return null;
+  }
+
+  if (normalized.startsWith("//")) {
+    return null;
+  }
+
+  return normalized;
 }
 
 type FieldErrors = {
@@ -80,7 +98,12 @@ export default function LoginPage() {
     try {
       setAttemptedEmail(email);
       const result = await login({ email, password });
-      router.push(getRedirectPath(result.role));
+      await syncSupabaseBrowserSession({
+        accessToken: result.supabaseAccessToken,
+        refreshToken: result.supabaseRefreshToken
+      });
+      const redirectPath = readSafeRedirectPath(searchParams.get("redirect"));
+      router.push(redirectPath ?? getRedirectPath(result.role));
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Login failed";
