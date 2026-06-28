@@ -29,7 +29,7 @@ import {
 import ClientSidebar from "@/features/shared/client-sidebar";
 
 type JobsListMode = "BEST_MATCHES" | "MOST_RECENT" | "SAVED";
-type FeedSortBy = "newest" | "popular" | "price_asc" | "price_desc";
+type FeedSortBy = "best_matches" | "newest" | "popular" | "price_asc" | "price_desc";
 
 type FeedFilters = {
   category: "ALL" | ProjectCategory;
@@ -44,7 +44,7 @@ type FeedFilters = {
 const DEFAULT_FEED_FILTERS: FeedFilters = {
   category: "ALL",
   pricingType: "ALL",
-  sortBy: "newest",
+  sortBy: "best_matches",
   minPrice: "",
   maxPrice: "",
   techStack: "",
@@ -301,12 +301,7 @@ export default function ClientFeedPage() {
       return [...filteredProjects].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
     }
 
-    const ranked = [...filteredProjects];
-    return ranked.sort((left, right) => {
-      const leftScore = left.likeCount * 2 + left.viewCount * 0.6;
-      const rightScore = right.likeCount * 2 + right.viewCount * 0.6;
-      return rightScore - leftScore;
-    });
+    return filteredProjects;
   }, [filteredProjects, jobsListMode, savedProjectIds]);
 
   useEffect(() => {
@@ -358,7 +353,7 @@ export default function ClientFeedPage() {
     let count = 0;
     if (appliedFilters.category !== "ALL") count += 1;
     if (appliedFilters.pricingType !== "ALL") count += 1;
-    if (appliedFilters.sortBy !== "newest") count += 1;
+    if (appliedFilters.sortBy !== "best_matches") count += 1;
     if (appliedFilters.minPrice.trim()) count += 1;
     if (appliedFilters.maxPrice.trim()) count += 1;
     if (parseCommaList(appliedFilters.techStack).length) count += 1;
@@ -493,28 +488,6 @@ export default function ClientFeedPage() {
     return Array.from({ length: end - adjustedStart + 1 }, (_, index) => adjustedStart + index);
   }, [currentPage, totalPages]);
 
-  useEffect(() => {
-    const slugsToLoad = visibleProjects
-      .map((project) => project.slug)
-      .filter((slug) => !(slug in projectDetails));
-
-    if (!slugsToLoad.length) {
-      return;
-    }
-
-    void (async () => {
-      const loaded = await Promise.allSettled(slugsToLoad.map((slug) => getProjectBySlug(slug)));
-      setProjectDetails((previous) => {
-        const next = { ...previous };
-        loaded.forEach((result, index) => {
-          const slug = slugsToLoad[index];
-          next[slug] = result.status === "fulfilled" ? result.value : null;
-        });
-        return next;
-      });
-    })();
-  }, [projectDetails, visibleProjects]);
-
   function toggleSavedProject(id: string) {
     setSavedProjectIds((previous) => {
       const next = new Set(previous);
@@ -596,10 +569,15 @@ export default function ClientFeedPage() {
   async function onViewDeveloper(project: ProjectListItem, detail: ProjectDetail | null | undefined) {
     try {
       setOpeningDeveloperProjectId(project.id);
-      let resolvedDetail = detail;
+      const cachedUsername = project.author?.username;
+      if (cachedUsername) {
+        router.push(`/developers/${cachedUsername}`);
+        return;
+      }
 
+      let resolvedDetail = detail;
       if (!resolvedDetail) {
-        resolvedDetail = await getProjectBySlug(project.slug);
+        resolvedDetail = await getProjectBySlug(project.slug, { trackView: false });
         setProjectDetails((previous) => ({
           ...previous,
           [project.slug]: resolvedDetail || null
@@ -621,19 +599,42 @@ export default function ClientFeedPage() {
   }
 
   async function onHireDeveloper(project: ProjectListItem, detail: ProjectDetail | null | undefined) {
-    if (!detail?.author?.id) {
-      setActionMessage("Developer profile is still loading.");
-      return;
-    }
-
     try {
       setHiringProjectId(project.id);
+
+      const cachedAuthorId = project.author?.id;
+      const cachedAuthorUsername = project.author?.username;
+
+      if (cachedAuthorId && cachedAuthorUsername) {
+        const params = new URLSearchParams({
+          projectId: project.id,
+          projectSlug: project.slug,
+          projectTitle: project.title
+        });
+        router.push(`/hire/${cachedAuthorUsername}?${params.toString()}`);
+        return;
+      }
+
+      let resolvedDetail = detail;
+      if (!resolvedDetail) {
+        resolvedDetail = await getProjectBySlug(project.slug, { trackView: false });
+        setProjectDetails((previous) => ({
+          ...previous,
+          [project.slug]: resolvedDetail || null
+        }));
+      }
+
+      if (!resolvedDetail?.author?.id || !resolvedDetail.author.username) {
+        setActionMessage("Developer profile is unavailable for this project.");
+        return;
+      }
+
       const params = new URLSearchParams({
         projectId: project.id,
         projectSlug: project.slug,
         projectTitle: project.title
       });
-      router.push(`/hire/${detail.author.username}?${params.toString()}`);
+      router.push(`/hire/${resolvedDetail.author.username}?${params.toString()}`);
     } catch (caughtError) {
       setActionMessage(caughtError instanceof Error ? caughtError.message : "Unable to start hiring conversation.");
     } finally {
@@ -776,8 +777,8 @@ export default function ClientFeedPage() {
                 <div className="space-y-4">
                   {visibleProjects.map((project) => {
                     const detail = projectDetails[project.slug];
-                    const avatarLabel = detail?.author.fullName || "Developer";
-                    const heroUrl = detail?.thumbnailUrl || detail?.backgroundUrl;
+                    const avatarLabel = detail?.author.fullName || project.author?.fullName || "Developer";
+                    const heroUrl = detail?.thumbnailUrl || detail?.backgroundUrl || project.thumbnailUrl || project.backgroundUrl;
                     const techStack = (detail?.techStack && detail.techStack.length > 0
                       ? detail.techStack
                       : project.techStack || []).slice(0, 6);
@@ -1107,6 +1108,7 @@ export default function ClientFeedPage() {
                   onChange={(event) => setDraftFilters((prev) => ({ ...prev, sortBy: event.target.value as FeedSortBy }))}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                 >
+                  <option value="best_matches">Best Matches</option>
                   <option value="newest">Newest</option>
                   <option value="popular">Popular</option>
                   <option value="price_asc">Price: Low to High</option>

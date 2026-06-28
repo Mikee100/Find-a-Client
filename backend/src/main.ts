@@ -4,6 +4,7 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
+import * as compression from "compression";
 import { AppModule } from "src/app.module";
 
 if (!(globalThis as { WebSocket?: unknown }).WebSocket) {
@@ -52,6 +53,7 @@ async function bootstrap(): Promise<void> {
   });
 
   app.use(helmet());
+  app.use(compression());
 
   app.enableCors({
     origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {

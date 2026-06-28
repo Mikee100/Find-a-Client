@@ -10,6 +10,7 @@ type SidebarLink = {
 
 const LINKS: SidebarLink[] = [
   { href: "/client/feed", label: "Discover Projects" },
+  { href: "/client/ai-lab", label: "AI Lab" },
   { href: "/client/likes", label: "Liked Projects" },
   { href: "/client/messages", label: "Messages" },
   { href: "/client/hire-requests", label: "Hire Requests" }

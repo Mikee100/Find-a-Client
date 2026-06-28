@@ -56,6 +56,9 @@ Critical variables:
 - `AUTH_VERIFY_EMAIL_PATH`, `AUTH_RESET_PASSWORD_PATH`
 - `FRONTEND_URL`
 - `FRONTEND_URLS` (optional comma-separated origins, e.g. `https://find-a-client.vercel.app,https://preview.example.com`)
+- `AI_PROVIDER` (`heuristic` or `gemini`)
+- `GEMINI_API_KEY` (required when `AI_PROVIDER=gemini`)
+- `GEMINI_MODEL` (optional, default `gemini-2.5-flash`)
 
 ## Local Development
 
@@ -184,8 +187,63 @@ Implemented modules and endpoints:
 - Notifications: list/read-all/dispatch + email dispatch for high-priority types
 - Search: query endpoint with category/tech filtering
 - Admin: moderation and featured toggle
+- AI:
+	- `POST /ai/match/client-to-developers` (brief-to-ranked-developers matching)
+	- `POST /ai/match/profile-improvements` (developer profile optimization suggestions)
+	- `POST /ai/assist/proposal-template` (proposal draft generation from brief)
 
 The codebase is designed for iterative hardening on top of this baseline.
+
+## AI Endpoints Quick Start
+
+All AI endpoints require authenticated requests.
+
+### Enable Gemini provider
+
+Set these in backend `.env`:
+
+```env
+AI_PROVIDER="gemini"
+GEMINI_API_KEY="your-real-gemini-key"
+GEMINI_MODEL="gemini-2.5-flash"
+```
+
+If Gemini is unavailable or misconfigured, the AI service automatically falls back to the built-in heuristic output.
+
+### Match client brief to developers
+
+`POST /ai/match/client-to-developers`
+
+Request body example:
+
+```json
+{
+	"brief": "Need a SaaS dashboard with Next.js, NestJS, Postgres and Stripe subscriptions",
+	"requiredSkills": ["next", "nestjs", "postgres"],
+	"limit": 3
+}
+```
+
+### Get profile improvement suggestions
+
+`POST /ai/match/profile-improvements`
+
+No request body required.
+
+### Generate proposal template
+
+`POST /ai/assist/proposal-template`
+
+Request body example:
+
+```json
+{
+	"brief": "Build an MVP for a client intake and appointment platform",
+	"projectType": "web application",
+	"timelinePreference": "6 weeks",
+	"budgetRange": "$6k-$10k"
+}
+```
 
 ## Security Hardening Notes
 

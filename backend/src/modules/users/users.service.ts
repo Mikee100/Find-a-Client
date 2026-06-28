@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { CacheService } from "src/common/cache/cache.service";
+import { HIRE_REQUEST_STATUS } from "src/common/constants/domain-enums.constant";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SearchDevelopersDto } from "src/modules/users/dto/search-developers.dto";
 import { UpdateUserDto } from "src/modules/users/dto/update-user.dto";
@@ -21,6 +22,15 @@ export class UsersService {
 
   private async invalidateDeveloperDashboardCache(userId: string) {
     await this.cacheService.invalidateNamespace(`developer-dashboard:${userId}`);
+  }
+
+  private clamp(value: number, min = 0, max = 100) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  private decayedFreshnessScore(date: Date, halfLifeDays = 21) {
+    const ageInDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+    return this.clamp(Math.round(100 * Math.exp(-Math.max(0, ageInDays) / halfLifeDays)));
   }
 
   async getProfileCompleteness(userId: string) {
@@ -402,11 +412,31 @@ export class UsersService {
             id: true,
             likeCount: true,
             viewCount: true,
-            createdAt: true
+            inquiryCount: true,
+            averageRating: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        },
+        receivedHireRequests: {
+          select: {
+            status: true,
+            createdAt: true,
+            updatedAt: true
           }
         }
       }
     });
+
+    const respondedStatuses = new Set<string>([
+      HIRE_REQUEST_STATUS.REVIEWING,
+      HIRE_REQUEST_STATUS.PROPOSAL_SENT,
+      HIRE_REQUEST_STATUS.NEGOTIATING,
+      HIRE_REQUEST_STATUS.ACCEPTED,
+      HIRE_REQUEST_STATUS.REJECTED
+    ]);
+    const recentActivityWindowMs = 1000 * 60 * 60 * 24 * 30;
+    const recentProjectWindowMs = 1000 * 60 * 60 * 24 * 45;
 
     const ranked = users
       .map((user) => {
@@ -444,15 +474,58 @@ export class UsersService {
 
         const totalLikes = user.projects.reduce((sum, project) => sum + project.likeCount, 0);
         const totalViews = user.projects.reduce((sum, project) => sum + project.viewCount, 0);
-        const projectEngagement = Math.min(100, totalLikes * 2 + Math.floor(totalViews / 10));
-        const projectCountBoost = Math.min(20, user.projects.length * 4);
+        const totalInquiries = user.projects.reduce((sum, project) => sum + project.inquiryCount, 0);
+        const reviewableProjects = user.projects.filter((project) => project.averageRating > 0);
+        const weightedRating = reviewableProjects.length
+          ? reviewableProjects.reduce((sum, project) => {
+              const weight = 1 + project.inquiryCount * 0.5 + project.likeCount * 0.25;
+              return sum + project.averageRating * weight;
+            }, 0) /
+            reviewableProjects.reduce((sum, project) => sum + (1 + project.inquiryCount * 0.5 + project.likeCount * 0.25), 0)
+          : 0;
 
-        const score = Math.round(
-          completeness * 0.45 +
-            (normalizedSkills.length ? (skillMatches / normalizedSkills.length) * 100 : 70) * 0.35 +
-            projectEngagement * 0.15 +
-            projectCountBoost * 0.05
+        const responseTotal = user.receivedHireRequests.length;
+        const responses = user.receivedHireRequests.filter((item) => respondedStatuses.has(item.status)).length;
+        const bayesianResponseRate = (responses + 3) / (responseTotal + 5);
+        const responseRateScore = this.clamp(Math.round(bayesianResponseRate * 100));
+
+        const freshnessSource = user.projects.length
+          ? user.projects.reduce((latest, project) =>
+              project.updatedAt.getTime() > latest.getTime() ? project.updatedAt : latest
+            , user.updatedAt)
+          : user.updatedAt;
+        const freshnessScore = this.decayedFreshnessScore(freshnessSource, 24);
+
+        const reviewConfidence = this.clamp(reviewableProjects.length / 4, 0, 1);
+        const reviewQualityScore = this.clamp(
+          Math.round(((weightedRating / 5) * 100) * reviewConfidence + 68 * (1 - reviewConfidence))
         );
+
+        const now = Date.now();
+        const recentProjects = user.projects.filter((project) => now - project.updatedAt.getTime() <= recentProjectWindowMs).length;
+        const recentResponses = user.receivedHireRequests.filter(
+          (item) => respondedStatuses.has(item.status) && now - item.updatedAt.getTime() <= recentActivityWindowMs
+        ).length;
+
+        const activityScore = this.clamp(
+          Math.round(
+            recentProjects * 18 +
+              recentResponses * 15 +
+              Math.min(25, totalInquiries * 4) +
+              Math.min(18, totalLikes * 1.5) +
+              Math.min(14, totalViews / 30)
+          )
+        );
+
+        const relevanceScore = normalizedSkills.length ? (skillMatches / normalizedSkills.length) * 100 : 70;
+        const weightedSignalsScore =
+          freshnessScore * 0.15 +
+          responseRateScore * 0.3 +
+          reviewQualityScore * 0.25 +
+          completeness * 0.15 +
+          activityScore * 0.15;
+
+        const score = Math.round(weightedSignalsScore * 0.8 + relevanceScore * 0.2);
 
         if (!queryMatch) {
           return null;
@@ -480,13 +553,23 @@ export class UsersService {
             completeness,
             skillMatches,
             requestedSkills: normalizedSkills.length,
-            projectEngagement
+            freshness: freshnessScore,
+            responseRate: responseRateScore,
+            reviewQuality: reviewQualityScore,
+            activity: activityScore,
+            relevance: Math.round(relevanceScore),
+            weightedSignals: Math.round(weightedSignalsScore)
           },
           updatedAt: user.updatedAt
         };
       })
       .filter((item) => item !== null)
-      .sort((a, b) => b.score - a.score || b.projectCount - a.projectCount)
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          (b.scoreBreakdown.activity as number) - (a.scoreBreakdown.activity as number) ||
+          b.projectCount - a.projectCount
+      )
       .slice(0, limit);
 
     await this.cacheService.set(cacheKey, ranked, 120);

@@ -25,6 +25,11 @@ export interface TokenPair {
   refreshToken: string;
 }
 
+export interface LoginResult extends TokenPair {
+  supabaseAccessToken: string | null;
+  supabaseRefreshToken: string | null;
+}
+
 export interface AuthRequestContext {
   ipAddress?: string;
   userAgent?: string;
@@ -189,7 +194,7 @@ export class AuthService {
   /**
    * Logs in with Supabase Auth and returns app JWT tokens.
    */
-  async login(dto: LoginDto, context: AuthRequestContext = {}): Promise<TokenPair> {
+  async login(dto: LoginDto, context: AuthRequestContext = {}): Promise<LoginResult> {
     this.assertSupabaseConfigured();
     await this.assertRateLimit("login", `${context.ipAddress ?? "unknown"}:${dto.email.toLowerCase()}`, 8, 60_000);
 
@@ -234,7 +239,11 @@ export class AuthService {
 
     const tokenPair = await this.issueTokens(user.id, user.email, user.role);
     await this.logAuthEvent("login_success", true, context, { userId: user.id, email: user.email });
-    return tokenPair;
+    return {
+      ...tokenPair,
+      supabaseAccessToken: data.session?.access_token ?? null,
+      supabaseRefreshToken: data.session?.refresh_token ?? null
+    };
   }
 
   /**
@@ -714,7 +723,7 @@ export class AuthService {
   }
 
   private buildActionUrl(path: string, token: string): string {
-    const frontendUrl = this.configService.get<string>("FRONTEND_URL", "http://localhost:3000").replace(/\/+$/, "");
+    const frontendUrl = this.configService.get<string>("FRONTEND_URL", "http://localhost:3060").replace(/\/+$/, "");
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     return `${frontendUrl}${normalizedPath}?token=${encodeURIComponent(token)}`;
   }

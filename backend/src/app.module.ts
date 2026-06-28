@@ -15,6 +15,7 @@ import { ApiPerformanceInterceptor } from "src/common/performance/api-performanc
 import { PerformanceModule } from "src/common/performance/performance.module";
 import { ResponseTransformInterceptor } from "src/common/interceptors/response-transform.interceptor";
 import { AdminModule } from "src/modules/admin/admin.module";
+import { AiModule } from "src/modules/ai/ai.module";
 import { AuthModule } from "src/modules/auth/auth.module";
 import { HealthController } from "src/modules/health.controller";
 import { HireRequestsModule } from "src/modules/hire-requests/hire-requests.module";
@@ -26,6 +27,7 @@ import { ReviewsModule } from "src/modules/reviews/reviews.module";
 import { SearchModule } from "src/modules/search/search.module";
 import { UsersModule } from "src/modules/users/users.module";
 import { PrismaModule } from "src/prisma/prisma.module";
+import { PlatformModule } from "src/modules/platform/platform.module";
 
 @Module({
   controllers: [HealthController],
@@ -44,6 +46,8 @@ import { PrismaModule } from "src/prisma/prisma.module";
     CacheModule,
     PerformanceModule,
     PrismaModule,
+    PlatformModule,
+    AiModule,
     AuthModule,
     UsersModule,
     ProjectsModule,

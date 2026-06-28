@@ -419,3 +419,359 @@ model ProjectLike {
   @@index([projectId])
   @@index([userId, createdAt(sort: Desc)], map: "idx_projectlike_user_created_desc")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADEERA BUSINESS OS — Platform Engine Data Model
+// ─────────────────────────────────────────────────────────────────────────────
+// Architecture: one shared entity table, capability-driven engine execution,
+// blueprint-defined vertical language. No per-vertical entity tables.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Blueprint ─────────────────────────────────────────────────────────────────
+
+/// System-level or tenant-level blueprint definition.
+/// Stores the full vertical configuration as JSON — entity types, capabilities,
+/// engine config, creation workflows, navigation, and language overrides.
+model Blueprint {
+  id          String   @id @default(uuid()) @db.Uuid
+  vertical    String   @unique                   // 'RESTAURANT' | 'FASHION' | 'SPA' | ...
+  version     Int      @default(1)
+  displayName String   @db.VarChar(100)
+  schema      Json                               // Full BlueprintSchema JSON object
+  isSystem    Boolean  @default(true)            // System blueprints are read-only
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenants     Tenant[]
+
+  @@index([vertical])
+  @@map("Blueprint")
+}
+
+/// Tracks blueprint version migrations for safe tenant upgrades.
+model BlueprintMigration {
+  id              String   @id @default(uuid()) @db.Uuid
+  blueprintId     String   @db.Uuid
+  fromVersion     Int
+  toVersion       Int
+  migrationNotes  String?
+  script          Json?                          // Declarative field mapping / transform rules
+  breakingChange  Boolean  @default(false)
+  releasedAt      DateTime @default(now())
+
+  @@index([blueprintId, toVersion])
+  @@map("BlueprintMigration")
+}
+
+// ── Tenant ────────────────────────────────────────────────────────────────────
+
+/// Root isolation boundary for the multi-tenant OS.
+/// Every platform object is scoped to a Tenant.
+model Tenant {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String   @db.VarChar(255)
+  slug              String   @unique @db.VarChar(100)  // URL-safe handle
+  blueprintId       String   @db.Uuid
+  blueprintVersion  Int      @default(1)
+  blueprintOverrides Json?                         // Superadmin capability/policy overrides
+  status            String   @default("ACTIVE") @db.VarChar(20) // ACTIVE | SUSPENDED | TRIAL
+  timezone          String   @default("UTC") @db.VarChar(60)
+  currency          String   @default("USD") @db.Char(3)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id])
+  entities    Entity[]
+  taxClasses  TaxClass[]
+  sales       Sale[]
+
+  @@index([blueprintId])
+  @@index([status])
+  @@map("Tenant")
+}
+
+// ── Entity (Universal Business Object) ───────────────────────────────────────
+
+/// All sellable/bookable/trackable objects across every vertical live here.
+/// entityType distinguishes domain objects per blueprint:
+///   Restaurant → 'MENU_ITEM' | 'INGREDIENT' | 'MODIFIER' | 'COMBO'
+///   Fashion    → 'PRODUCT'   | 'BUNDLE'
+///   Spa        → 'SERVICE'   | 'PRODUCT'
+///   etc.
+/// Engines operate on this table — they never need to know the entityType.
+model Entity {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  entityType  String    @db.VarChar(60)           // e.g. 'MENU_ITEM', 'PRODUCT', 'SERVICE'
+  name        String    @db.VarChar(255)
+  status      String    @default("DRAFT") @db.VarChar(20) // DRAFT | ACTIVE | ARCHIVED
+  taxClass    String?   @db.VarChar(60)
+  basePrice   Decimal?  @db.Decimal(14, 4)
+  currency    String?   @db.Char(3)
+  branchScope String[]  @db.Uuid                  // Empty = all branches
+  tags        String[]
+  sortOrder   Int       @default(0)
+  createdBy   String    @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?                            // Soft delete
+
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  extension       EntityExtension?
+  variants        EntityVariant[]
+  capabilityFlags EntityCapabilityFlag[]
+  recipeLines          RecipeLine[]          @relation("RecipeEntity")
+  recipesAsIngredient  RecipeLine[]          @relation("IngredientEntity")
+  inventoryStock       InventoryStock[]
+  salelines            SaleLine[]
+  priceRules           EntityPriceRule[]
+
+  @@index([tenantId, entityType], map: "idx_entity_tenant_type")
+  @@index([tenantId, status],     map: "idx_entity_tenant_status")
+  @@index([tags],                 type: Gin, map: "idx_entity_tags_gin")
+  @@map("Entity")
+}
+
+// ── EntityExtension ───────────────────────────────────────────────────────────
+
+/// Vertical-specific fields for each entity.
+/// Promoted typed columns cover fields used by ≥2 verticals.
+/// The payload JSON column absorbs genuinely vertical-specific attributes.
+/// Fields promoted from payload to typed columns do not break existing tenants.
+model EntityExtension {
+  entityId    String  @id @db.Uuid
+  blueprintId String  @db.VarChar(60)             // Vertical identifier string for fast lookup
+
+  // ── Inventory Engine fields (Restaurant + Fashion + Pharmacy) ──
+  trackInventory    Boolean  @default(false)
+  stockUnit         String?  @db.VarChar(30)       // 'kg' | 'unit' | 'ml' | 'piece'
+  reorderPoint      Decimal? @db.Decimal(10, 3)
+  reorderQty        Decimal? @db.Decimal(10, 3)
+
+  // ── Variant Engine fields (Fashion + Pharmacy) ──
+  hasVariants       Boolean  @default(false)
+
+  // ── Booking Engine fields (Spa + Hotel + Clinic) ──
+  requiresBooking   Boolean  @default(false)
+  durationMinutes   Int?
+  requiresStaff     Boolean  @default(false)
+
+  // ── Kitchen Engine fields (Restaurant) ──
+  generatesKitchenTicket Boolean @default(false)
+  prepStation            String? @db.VarChar(60)
+
+  // ── Recipe/BOM Engine fields (Restaurant + Manufacturing) ──
+  isRecipeBased     Boolean  @default(false)
+
+  // ── Open extension payload — genuinely vertical-specific attributes ──
+  payload           Json     @default("{}")
+
+  updatedAt         DateTime @updatedAt
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([blueprintId], map: "idx_ext_blueprint")
+  @@map("EntityExtension")
+}
+
+// ── EntityCapabilityFlag ──────────────────────────────────────────────────────
+
+/// Per-entity capability overrides.
+/// Resolution order:
+///   1. Blueprint default (all entities of this type get this capability)
+///   2. EntityExtension typed field (structural override)
+///   3. EntityCapabilityFlag OVERRIDE record (operator-level exception)
+model EntityCapabilityFlag {
+  entityId    String  @db.Uuid
+  capability  String  @db.VarChar(80)             // See CAPABILITY constants
+  enabled     Boolean @default(true)
+  source      String  @default("BLUEPRINT") @db.VarChar(20) // BLUEPRINT | OVERRIDE
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@id([entityId, capability])
+  @@map("EntityCapabilityFlag")
+}
+
+// ── EntityVariant (Fashion / Pharmacy / Hardware) ─────────────────────────────
+
+/// SKU-level variant for entities with CAN_HAVE_VARIANTS capability.
+model EntityVariant {
+  id            String   @id @default(uuid()) @db.Uuid
+  entityId      String   @db.Uuid
+  tenantId      String   @db.Uuid
+  sku           String?  @unique @db.VarChar(100)
+  barcode       String?  @db.VarChar(100)
+  attributes    Json     @default("{}")            // {"size": "L", "color": "Navy"}
+  priceOverride Decimal? @db.Decimal(14, 4)
+  costPrice     Decimal? @db.Decimal(14, 4)
+  weightGrams   Int?
+  status        String   @default("ACTIVE") @db.VarChar(20)
+  createdAt     DateTime @default(now())
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  inventoryStock  InventoryStock[]
+
+  @@index([entityId],   map: "idx_variant_entity")
+  @@index([attributes], type: Gin, map: "idx_variant_attrs_gin")
+  @@map("EntityVariant")
+}
+
+// ── RecipeLine (Restaurant / Manufacturing BOM) ───────────────────────────────
+
+/// Links a menu item / manufactured product (entityId) to its ingredient entities.
+/// Used by the Inventory Engine's deductByRecipe() method.
+model RecipeLine {
+  id           String   @id @default(uuid()) @db.Uuid
+  entityId     String   @db.Uuid                  // The menu item / product
+  ingredientId String   @db.Uuid                  // The ingredient entity
+  quantity     Decimal  @db.Decimal(10, 4)
+  unit         String   @db.VarChar(30)
+  wasteFactor  Decimal  @default(0) @db.Decimal(5, 2) // % added for expected waste
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  entity      Entity @relation("RecipeEntity",     fields: [entityId],     references: [id], onDelete: Cascade)
+  ingredient  Entity @relation("IngredientEntity", fields: [ingredientId], references: [id])
+
+  @@index([entityId], map: "idx_recipe_entity")
+  @@map("RecipeLine")
+}
+
+// ── InventoryStock ────────────────────────────────────────────────────────────
+
+/// Real-time stock levels per entity/variant/branch.
+/// Written by the Inventory Engine on every stock movement.
+model InventoryStock {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityId  String   @db.Uuid
+  variantId String?  @db.Uuid
+  branchId  String   @db.Uuid
+  onHand    Float    @default(0)
+  reserved  Float    @default(0)                  // Allocated to pending orders
+  unit      String   @db.VarChar(30)
+  updatedAt DateTime @updatedAt
+
+  entity  Entity         @relation(fields: [entityId],  references: [id], onDelete: Cascade)
+  variant EntityVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@unique([entityId, variantId, branchId], map: "uq_stock_entity_variant_branch")
+  @@index([entityId],           map: "idx_stock_entity")
+  @@index([branchId, onHand],   map: "idx_stock_branch_onhand")
+  @@map("InventoryStock")
+}
+
+// ── InventoryMovement ─────────────────────────────────────────────────────────
+
+/// Immutable audit log of every stock change.
+model InventoryMovement {
+  id          String   @id @default(uuid()) @db.Uuid
+  entityId    String   @db.Uuid
+  variantId   String?  @db.Uuid
+  branchId    String   @db.Uuid
+  quantity    Float                               // Positive = in, Negative = out
+  unit        String   @db.VarChar(30)
+  reason      String   @db.VarChar(30)           // SALE | WASTE | TRANSFER | DAMAGE | RECIPE | COUNT
+  referenceId String?  @db.Uuid                  // SaleId, PurchaseOrderId, etc.
+  notes       String?
+  operatorId  String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  @@index([entityId, createdAt], map: "idx_movement_entity_created")
+  @@index([branchId, reason],    map: "idx_movement_branch_reason")
+  @@map("InventoryMovement")
+}
+
+// ── Sale ──────────────────────────────────────────────────────────────────────
+
+/// A committed sale transaction. Written exclusively by SalesEngine.commitSale().
+model Sale {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  branchId       String   @db.Uuid
+  operatorId     String   @db.Uuid
+  subtotal       Decimal  @db.Decimal(14, 4)
+  totalTax       Decimal  @db.Decimal(14, 4)
+  grandTotal     Decimal  @db.Decimal(14, 4)
+  currency       String   @db.Char(3)
+  paymentMethod  String   @db.VarChar(20)         // CASH | CARD | WALLET | SPLIT
+  amountTendered Decimal  @db.Decimal(14, 4)
+  change         Decimal  @db.Decimal(14, 4) @default(0)
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime @default(now())
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id])
+  lines   SaleLine[]
+
+  @@index([tenantId, createdAt],           map: "idx_sale_tenant_created")
+  @@index([tenantId, branchId, createdAt], map: "idx_sale_tenant_branch_created")
+  @@index([voidedAt],                      map: "idx_sale_voided")
+  @@map("Sale")
+}
+
+/// A line item within a Sale.
+model SaleLine {
+  id        String   @id @default(uuid()) @db.Uuid
+  saleId    String   @db.Uuid
+  entityId  String   @db.Uuid
+  variantId String?  @db.Uuid
+  quantity  Float
+  unitPrice Decimal  @db.Decimal(14, 4)
+  taxAmount Decimal  @db.Decimal(14, 4)
+  lineTotal Decimal  @db.Decimal(14, 4)
+
+  sale    Sale   @relation(fields: [saleId],   references: [id], onDelete: Cascade)
+  entity  Entity @relation(fields: [entityId], references: [id])
+
+  @@index([saleId],   map: "idx_saleline_sale")
+  @@index([entityId], map: "idx_saleline_entity")
+  @@map("SaleLine")
+}
+
+// ── EntityPriceRule ───────────────────────────────────────────────────────────
+
+/// Pricing rules per entity — used by PricingEngine strategies.
+/// Stores time-window rules, markdown rules, staff-tier prices, etc.
+model EntityPriceRule {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityId  String   @db.Uuid
+  ruleType  String   @db.VarChar(40)              // 'TIME_WINDOW' | 'MARKDOWN' | 'STAFF_TIER'
+  params    Json                                   // Rule-specific parameters
+  priority  Int      @default(0)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime @default(now())
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([entityId, priority], map: "idx_pricerule_entity_priority")
+  @@map("EntityPriceRule")
+}
+
+// ── TaxClass ──────────────────────────────────────────────────────────────────
+
+/// Tenant-configured tax classes. Used by TaxEngine.
+model TaxClass {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @db.Uuid
+  name             String   @db.VarChar(60)        // e.g. 'FOOD_STANDARD', 'APPAREL_STANDARD'
+  rate             Decimal  @db.Decimal(5, 2)      // e.g. 16.00 = 16%
+  inclusive        Boolean  @default(false)         // Tax included in price?
+  appliesToChannel String[]                         // Empty = all channels
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name], map: "uq_taxclass_tenant_name")
+  @@index([tenantId],        map: "idx_taxclass_tenant")
+  @@map("TaxClass")
+}
+
+// ── Relation disambiguation for RecipeLine ────────────────────────────────────
+// Prisma requires explicit relation names when a model has multiple FK refs
+// to the same table. RecipeLine references Entity twice:
+//   entityId     → "RecipeEntity"
+//   ingredientId → "IngredientEntity"
+// The Entity model's recipeLines field uses @relation("RecipeEntity").
+// Add a recipesAsIngredient relation on Entity if needed for reverse navigation.

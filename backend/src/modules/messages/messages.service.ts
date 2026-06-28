@@ -137,27 +137,35 @@ export class MessagesService {
       orderBy: { updatedAt: "desc" }
     });
 
-    const unreadByThread = await Promise.all(
-      threads.map(async (thread) => {
-        const unreadCount = await this.prisma.message.count({
-          where: {
-            threadId: thread.id,
-            isRead: false,
-            senderId: { not: userId }
-          }
-        });
+    const threadIds = threads.map((thread) => thread.id);
+    const unreadByThread =
+      threadIds.length > 0
+        ? await this.prisma.message.groupBy({
+            by: ["threadId"],
+            where: {
+              threadId: { in: threadIds },
+              isRead: false,
+              senderId: { not: userId }
+            },
+            _count: {
+              threadId: true
+            }
+          })
+        : [];
 
-        return {
-          thread,
-          unreadCount,
-          partnerId: thread.participantAId === userId ? thread.participantBId : thread.participantAId
-        };
-      })
+    const unreadCountByThreadId = new Map<string, number>(
+      unreadByThread.map((row) => [row.threadId, row._count.threadId])
     );
 
-    const consolidated = new Map<string, { thread: (typeof unreadByThread)[number]["thread"]; unreadCount: number }>();
+    const unreadByThreadWithContext = threads.map((thread) => ({
+      thread,
+      unreadCount: unreadCountByThreadId.get(thread.id) ?? 0,
+      partnerId: thread.participantAId === userId ? thread.participantBId : thread.participantAId
+    }));
 
-    for (const item of unreadByThread) {
+    const consolidated = new Map<string, { thread: (typeof threads)[number]; unreadCount: number }>();
+
+    for (const item of unreadByThreadWithContext) {
       const current = consolidated.get(item.partnerId);
       const itemTimestamp = new Date(item.thread.messages[0]?.createdAt ?? item.thread.updatedAt).getTime();
 

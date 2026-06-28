@@ -121,14 +121,18 @@ export class AuthController {
   @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post("login")
   async login(@Body() dto: LoginDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    const tokenPair = await this.authService.login(dto, {
+    const loginResult = await this.authService.login(dto, {
       ipAddress: request.ip,
       userAgent: this.readUserAgent(request),
       identifier: dto.email
     });
-    this.applyAuthCookies(response, tokenPair.accessToken, tokenPair.refreshToken);
-    const role = this.authService.getRoleFromAccessToken(tokenPair.accessToken);
-    return { role };
+    this.applyAuthCookies(response, loginResult.accessToken, loginResult.refreshToken);
+    const role = this.authService.getRoleFromAccessToken(loginResult.accessToken);
+    return {
+      role,
+      supabaseAccessToken: loginResult.supabaseAccessToken,
+      supabaseRefreshToken: loginResult.supabaseRefreshToken
+    };
   }
 
   @Public()

@@ -30,10 +30,18 @@ export class ProjectsController {
     return this.projectsService.list(query);
   }
 
+  @Roles(USER_ROLE.ADMIN)
+  @Get("admin/list")
+  listForAdmin(@Query() query: ListProjectsDto, @Query("rankingDebug") rankingDebug?: string) {
+    const includeRankingDebug = rankingDebug === "true" || rankingDebug === "1";
+    return this.projectsService.list(query, { includeRankingDebug });
+  }
+
   @Public()
   @Get(":slug")
-  getOne(@Param("slug") slug: string) {
-    return this.projectsService.getBySlug(slug);
+  getOne(@Param("slug") slug: string, @Query("trackView") trackView?: string) {
+    const shouldTrackView = trackView !== "false";
+    return this.projectsService.getBySlug(slug, { trackView: shouldTrackView });
   }
 
   @Put(":slug")
