@@ -15,6 +15,7 @@ import { ApiPerformanceInterceptor } from "src/common/performance/api-performanc
 import { PerformanceModule } from "src/common/performance/performance.module";
 import { ResponseTransformInterceptor } from "src/common/interceptors/response-transform.interceptor";
 import { AdminModule } from "src/modules/admin/admin.module";
+import { AiModule } from "src/modules/ai/ai.module";
 import { AuthModule } from "src/modules/auth/auth.module";
 import { HealthController } from "src/modules/health.controller";
 import { HireRequestsModule } from "src/modules/hire-requests/hire-requests.module";
@@ -46,6 +47,7 @@ import { PlatformModule } from "src/modules/platform/platform.module";
     PerformanceModule,
     PrismaModule,
     PlatformModule,
+    AiModule,
     AuthModule,
     UsersModule,
     ProjectsModule,

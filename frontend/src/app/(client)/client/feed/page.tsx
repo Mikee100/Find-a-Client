@@ -29,7 +29,7 @@ import {
 import ClientSidebar from "@/features/shared/client-sidebar";
 
 type JobsListMode = "BEST_MATCHES" | "MOST_RECENT" | "SAVED";
-type FeedSortBy = "newest" | "popular" | "price_asc" | "price_desc";
+type FeedSortBy = "best_matches" | "newest" | "popular" | "price_asc" | "price_desc";
 
 type FeedFilters = {
   category: "ALL" | ProjectCategory;
@@ -44,7 +44,7 @@ type FeedFilters = {
 const DEFAULT_FEED_FILTERS: FeedFilters = {
   category: "ALL",
   pricingType: "ALL",
-  sortBy: "newest",
+  sortBy: "best_matches",
   minPrice: "",
   maxPrice: "",
   techStack: "",
@@ -301,12 +301,7 @@ export default function ClientFeedPage() {
       return [...filteredProjects].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
     }
 
-    const ranked = [...filteredProjects];
-    return ranked.sort((left, right) => {
-      const leftScore = left.likeCount * 2 + left.viewCount * 0.6;
-      const rightScore = right.likeCount * 2 + right.viewCount * 0.6;
-      return rightScore - leftScore;
-    });
+    return filteredProjects;
   }, [filteredProjects, jobsListMode, savedProjectIds]);
 
   useEffect(() => {
@@ -358,7 +353,7 @@ export default function ClientFeedPage() {
     let count = 0;
     if (appliedFilters.category !== "ALL") count += 1;
     if (appliedFilters.pricingType !== "ALL") count += 1;
-    if (appliedFilters.sortBy !== "newest") count += 1;
+    if (appliedFilters.sortBy !== "best_matches") count += 1;
     if (appliedFilters.minPrice.trim()) count += 1;
     if (appliedFilters.maxPrice.trim()) count += 1;
     if (parseCommaList(appliedFilters.techStack).length) count += 1;
@@ -1113,6 +1108,7 @@ export default function ClientFeedPage() {
                   onChange={(event) => setDraftFilters((prev) => ({ ...prev, sortBy: event.target.value as FeedSortBy }))}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
                 >
+                  <option value="best_matches">Best Matches</option>
                   <option value="newest">Newest</option>
                   <option value="popular">Popular</option>
                   <option value="price_asc">Price: Low to High</option>

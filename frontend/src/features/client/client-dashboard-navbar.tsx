@@ -24,6 +24,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/client/feed", label: "Discover", match: (pathname) => pathname === "/client/feed" || pathname === "/client/dashboard" },
+  { href: "/client/ai-lab", label: "AI Lab", match: (pathname) => pathname.startsWith("/client/ai-lab") },
   { href: "/client/likes", label: "Liked", match: (pathname) => pathname === "/client/likes" },
   { href: "/client/messages", label: "Messages", match: (pathname) => pathname.startsWith("/client/messages") },
   { href: "/client/hire-requests", label: "Hire Requests", match: (pathname) => pathname.startsWith("/client/hire-requests") }

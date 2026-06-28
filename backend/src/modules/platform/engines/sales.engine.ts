@@ -133,7 +133,7 @@ export class SalesEngine implements ISalesEngine {
         select: { entityType: true },
       });
 
-      if (caps[CAPABILITY.CAN_CONSUME_INGREDIENTS]) {
+      if (caps?.[CAPABILITY.CAN_CONSUME_INGREDIENTS]) {
         // Recipe-based: deduct ingredient stock
         const result = await this.inventoryEngine.deductByRecipe(
           line.entityId,
@@ -144,7 +144,7 @@ export class SalesEngine implements ISalesEngine {
           throw new BadRequestException(`Insufficient ingredient stock for item ${line.entityId}.`);
         }
         events.push('RECIPE_DEDUCTED');
-      } else if (caps[CAPABILITY.CAN_TRACK_INVENTORY]) {
+      } else if (caps?.[CAPABILITY.CAN_TRACK_INVENTORY]) {
         // SKU-based: deduct entity/variant stock directly
         const result = await this.inventoryEngine.deductStock([
           {
@@ -165,7 +165,7 @@ export class SalesEngine implements ISalesEngine {
       }
 
       // ── Step 4: Kitchen ticket ───────────────────────────────────────────
-      if (caps[CAPABILITY.CAN_GENERATE_KITCHEN_TICKET]) {
+      if (caps?.[CAPABILITY.CAN_GENERATE_KITCHEN_TICKET]) {
         this.eventEmitter.emit('kitchen.ticket.requested', {
           tenantId: cart.tenantId,
           branchId: cart.branchId,
@@ -180,7 +180,7 @@ export class SalesEngine implements ISalesEngine {
       }
 
       // ── Step 5: Work order ───────────────────────────────────────────────
-      if (caps[CAPABILITY.CAN_GENERATE_WORK_ORDER]) {
+      if (caps?.[CAPABILITY.CAN_GENERATE_WORK_ORDER]) {
         this.eventEmitter.emit('work.order.created', {
           tenantId: cart.tenantId,
           branchId: cart.branchId,
@@ -269,7 +269,7 @@ export class SalesEngine implements ISalesEngine {
     }));
 
     // Restock where applicable
-    const capMaps = await this.resolveCapabilityMaps({ tenantId: sale.tenantId, branchId: sale.branchId, lines: returnLines } as Cart);
+    const capMaps = await this.resolveCapabilityMaps({ tenantId: sale.tenantId, lines: returnLines });
     const restockedLines: ReturnLine[] = [];
 
     for (const line of returnLines) {
@@ -296,7 +296,7 @@ export class SalesEngine implements ISalesEngine {
 
     return {
       voided: true,
-      refundAmount: sale.grandTotal,
+      refundAmount: Number(sale.grandTotal),
       restockedLines,
     };
   }
@@ -307,9 +307,10 @@ export class SalesEngine implements ISalesEngine {
    * Resolves capability maps for all unique entities in a cart.
    * Batches DB lookups to avoid N+1.
    */
-  private async resolveCapabilityMaps(
-    cart: Pick<Cart, 'tenantId' | 'lines'>,
-  ): Promise<Record<string, Record<string, boolean>>> {
+  private async resolveCapabilityMaps(cart: {
+    tenantId: string;
+    lines: Array<{ entityId: string }>;
+  }): Promise<Record<string, Record<string, boolean>>> {
     const uniqueEntityIds = [...new Set(cart.lines.map((l) => l.entityId))];
 
     // Batch-fetch all entity types
@@ -326,7 +327,11 @@ export class SalesEngine implements ISalesEngine {
     const flagOverrideMap: Record<string, Record<string, boolean>> = {};
     for (const flag of flagOverrides) {
       flagOverrideMap[flag.entityId] ??= {};
-      flagOverrideMap[flag.entityId][flag.capability] = flag.enabled;
+      const entityFlagMap = flagOverrideMap[flag.entityId];
+      if (!entityFlagMap) {
+        continue;
+      }
+      entityFlagMap[flag.capability] = flag.enabled;
     }
 
     const result: Record<string, Record<string, boolean>> = {};

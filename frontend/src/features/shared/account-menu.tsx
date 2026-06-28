@@ -27,10 +27,25 @@ export default function AccountMenu({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [showSignOutNotice, setShowSignOutNotice] = useState(false);
 
   useEffect(() => {
     void getAuthSession().then(setSession).catch(() => setSession(null));
   }, []);
+
+  useEffect(() => {
+    if (pendingSignOut || !showSignOutNotice) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowSignOutNotice(false);
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [pendingSignOut, showSignOutNotice]);
 
   useEffect(() => {
     function onDocumentClick(event: MouseEvent) {
@@ -70,6 +85,7 @@ export default function AccountMenu({
     <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen((prev) => !prev)}
+        disabled={pendingSignOut}
         className={
           compact
             ? "flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
@@ -77,6 +93,7 @@ export default function AccountMenu({
         }
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-busy={pendingSignOut || showSignOutNotice}
       >
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-bold text-white">
           {initials}
@@ -111,6 +128,7 @@ export default function AccountMenu({
             <button
               onClick={() => {
                 setOpen(false);
+                setShowSignOutNotice(true);
                 onSignOut();
               }}
               disabled={pendingSignOut}
@@ -122,6 +140,7 @@ export default function AccountMenu({
               <button
                 onClick={() => {
                   setOpen(false);
+                  setShowSignOutNotice(true);
                   onSignOutEverywhere();
                 }}
                 disabled={pendingSignOut}
@@ -130,6 +149,18 @@ export default function AccountMenu({
                 {pendingSignOut ? "Signing out..." : "Sign out everywhere"}
               </button>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {showSignOutNotice ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/85 backdrop-blur-sm" role="status" aria-live="polite">
+          <div className="inline-flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-5 py-4 shadow-[0_20px_55px_rgba(15,23,42,0.15)]">
+            <span
+              className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-800"
+              aria-hidden
+            />
+            <div className="text-sm font-semibold text-neutral-800">Signing you out...</div>
           </div>
         </div>
       ) : null}

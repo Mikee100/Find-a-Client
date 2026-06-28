@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Cog, LayoutDashboard, Settings, ShieldCheck, Users } from "lucide-react";
+import {
+  BarChart3,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Cog,
+  LayoutDashboard,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  Users
+} from "lucide-react";
 
 import BrandLogo from "@/components/ui/brand-logo";
 import FullPageLoader from "@/components/ui/full-page-loader";
@@ -30,6 +41,7 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   },
   { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { label: "Performance", href: "/admin/performance", icon: ShieldCheck },
+  { label: "Ranking Debug", href: "/admin/ranking-debug", icon: SlidersHorizontal },
   { label: "Configurations", href: "/admin/configurations", icon: Cog },
   { label: "Settings", href: "/admin/settings", icon: Settings }
 ];

@@ -46,7 +46,7 @@ export class EntityService {
     // 2. Validate required fields from blueprint
     const requiredFields = blueprint.requiredFields?.[dto.entityType as EntityType] ?? [];
     for (const field of requiredFields) {
-      const value = (dto as Record<string, unknown>)[field];
+      const value = (dto as unknown as Record<string, unknown>)[field];
       if (value === undefined || value === null || value === '') {
         throw new BadRequestException(this.buildValidationMessage(field, dto.entityType, blueprint.vertical));
       }

@@ -723,7 +723,7 @@ export class AuthService {
   }
 
   private buildActionUrl(path: string, token: string): string {
-    const frontendUrl = this.configService.get<string>("FRONTEND_URL", "http://localhost:3000").replace(/\/+$/, "");
+    const frontendUrl = this.configService.get<string>("FRONTEND_URL", "http://localhost:3060").replace(/\/+$/, "");
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     return `${frontendUrl}${normalizedPath}?token=${encodeURIComponent(token)}`;
   }

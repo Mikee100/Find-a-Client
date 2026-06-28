@@ -310,13 +310,107 @@ export interface SearchDevelopersParams {
   limit?: number;
 }
 
+export interface AiClientMatchPayload {
+  brief: string;
+  projectType?: string;
+  requiredSkills?: string[];
+  limit?: number;
+  includeReasoning?: boolean;
+}
+
+export interface AiClientMatchResponse {
+  brief: string;
+  briefAnalysis: {
+    projectType: string;
+    detectedSkills: string[];
+    confidence: number;
+  };
+  matches: Array<{
+    rank: number;
+    fitScore: number;
+    reason: string;
+    nextMessageSuggestion: string;
+    developer: {
+      id: string;
+      username: string;
+      fullName: string;
+      title: string | null;
+      primaryStack: string | null;
+      skills: string[];
+    };
+    scoreBreakdown: Record<string, number>;
+  }>;
+  meta: {
+    model: string;
+    provider?: string;
+    fallbackUsed?: boolean;
+    fallbackReason?: string | null;
+    generatedAt: string;
+    includeReasoning: boolean;
+  };
+}
+
+export interface AiProfileImprovementsResponse {
+  profileCompleteness: {
+    percentage: number;
+    completedFields: number;
+    totalFields: number;
+    missingFields: string[];
+    nextAction: string | null;
+  };
+  suggestions: Array<{
+    priority: "high" | "medium" | "low";
+    action: string;
+    impact: string;
+  }>;
+  summary: {
+    strongestSignal: string;
+    biggestGap: string | null;
+    estimatedDiscoveryLift: string;
+  };
+  meta: {
+    model: string;
+    provider?: string;
+    fallbackUsed?: boolean;
+    fallbackReason?: string | null;
+    generatedAt: string;
+  };
+}
+
+export interface AiProposalTemplatePayload {
+  brief: string;
+  projectType?: string;
+  budgetRange?: string;
+  timelinePreference?: string;
+  skills?: string[];
+}
+
+export interface AiProposalTemplateResponse {
+  proposal: {
+    opening: string;
+    skillsHighlight: string[];
+    approach: string[];
+    timeline: string;
+    budget: string;
+    clarifyingQuestion: string;
+    closing: string;
+  };
+  meta: {
+    model: string;
+    provider?: string;
+    fallbackUsed?: boolean;
+    fallbackReason?: string | null;
+    generatedAt: string;
+  };
+}
+
 export interface ListProjectsParams {
   category?: ProjectCategory;
   techStack?: string[];
   industries?: string[];
   pricingType?: PricingType;
   search?: string;
-  sortBy?: "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc";
+  sortBy?: "best_matches" | "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc";
   minPrice?: string;
   maxPrice?: string;
   cursor?: string;
@@ -334,6 +428,27 @@ export interface CursorPageMeta {
 
 export interface PaginatedProjectList {
   items: ProjectListItem[];
+  meta: CursorPageMeta;
+}
+
+export interface ProjectRankingBreakdown {
+  freshness: number;
+  quality: number;
+  completeness: number;
+  activity: number;
+  featuredBoost: number;
+  weightedSignals: number;
+}
+
+export interface AdminRankedProjectListItem extends ProjectListItem {
+  score: number;
+  scoreBreakdown: ProjectRankingBreakdown;
+  updatedAt?: string;
+  industries?: string[];
+}
+
+export interface AdminPaginatedRankedProjects {
+  items: AdminRankedProjectListItem[];
   meta: CursorPageMeta;
 }
 
@@ -1021,6 +1136,24 @@ export async function getProfileCompleteness(): Promise<ProfileCompleteness> {
   return requestJson<ProfileCompleteness>("GET", "/users/me/completeness");
 }
 
+export async function getAiClientMatches(payload: AiClientMatchPayload): Promise<AiClientMatchResponse> {
+  return requestJson<AiClientMatchResponse, AiClientMatchPayload>("POST", "/ai/match/client-to-developers", {
+    body: payload
+  });
+}
+
+export async function getAiProfileImprovements(): Promise<AiProfileImprovementsResponse> {
+  return requestJson<AiProfileImprovementsResponse, Record<string, never>>("POST", "/ai/match/profile-improvements", {
+    body: {}
+  });
+}
+
+export async function getAiProposalTemplate(payload: AiProposalTemplatePayload): Promise<AiProposalTemplateResponse> {
+  return requestJson<AiProposalTemplateResponse, AiProposalTemplatePayload>("POST", "/ai/assist/proposal-template", {
+    body: payload
+  });
+}
+
 export async function createProject(payload: CreateProjectPayload): Promise<ProjectResponse> {
   return requestJson<ProjectResponse, CreateProjectPayload>("POST", "/projects", { body: payload });
 }
@@ -1130,6 +1263,72 @@ export async function listProjectsPaginated(params: ListProjectsParams = {}): Pr
   const payload = (await response.json()) as
     | { success?: boolean; data?: ProjectListItem[]; meta?: CursorPageMeta }
     | ProjectListItem[];
+
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      meta: { hasNext: false }
+    };
+  }
+
+  return {
+    items: Array.isArray(payload.data) ? payload.data : [],
+    meta: payload.meta ?? { hasNext: false }
+  };
+}
+
+export async function getAdminRankedProjects(params: ListProjectsParams = {}): Promise<AdminPaginatedRankedProjects> {
+  const searchParams = new URLSearchParams();
+
+  if (params.category) {
+    searchParams.set("category", params.category);
+  }
+  if (params.techStack?.length) {
+    params.techStack.forEach((value) => searchParams.append("techStack", value));
+  }
+  if (params.industries?.length) {
+    params.industries.forEach((value) => searchParams.append("industries", value));
+  }
+  if (params.pricingType) {
+    searchParams.set("pricingType", params.pricingType);
+  }
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+  if (params.sortBy) {
+    searchParams.set("sortBy", params.sortBy);
+  }
+  if (params.minPrice?.trim()) {
+    searchParams.set("minPrice", params.minPrice.trim());
+  }
+  if (params.maxPrice?.trim()) {
+    searchParams.set("maxPrice", params.maxPrice.trim());
+  }
+  if (params.cursor) {
+    searchParams.set("cursor", params.cursor);
+  }
+  if (params.page) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+  searchParams.set("rankingDebug", "true");
+
+  const queryString = searchParams.toString();
+  const path = queryString ? `/projects/admin/list?${queryString}` : "/projects/admin/list?rankingDebug=true";
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    credentials: "include"
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const payload = (await response.json()) as
+    | { success?: boolean; data?: AdminRankedProjectListItem[]; meta?: CursorPageMeta }
+    | AdminRankedProjectListItem[];
 
   if (Array.isArray(payload)) {
     return {

@@ -173,18 +173,27 @@ export class InventoryEngine implements IInventoryEngine {
   }
 
   async receiveStock(lines: StockReceiptLine[]): Promise<void> {
-    await this.prisma.$transaction(
-      lines.map((line) =>
-        this.prisma.inventoryStock.upsert({
+    await this.prisma.$transaction(async (tx) => {
+      for (const line of lines) {
+        const existing = await tx.inventoryStock.findFirst({
           where: {
-            entityId_variantId_branchId: {
-              entityId: line.entityId,
-              variantId: line.variantId ?? null,
-              branchId: line.branchId,
-            },
+            entityId: line.entityId,
+            variantId: line.variantId ?? null,
+            branchId: line.branchId,
           },
-          update: { onHand: { increment: line.quantity } },
-          create: {
+          select: { id: true },
+        });
+
+        if (existing) {
+          await tx.inventoryStock.update({
+            where: { id: existing.id },
+            data: { onHand: { increment: line.quantity } },
+          });
+          continue;
+        }
+
+        await tx.inventoryStock.create({
+          data: {
             entityId: line.entityId,
             variantId: line.variantId ?? null,
             branchId: line.branchId,
@@ -192,15 +201,15 @@ export class InventoryEngine implements IInventoryEngine {
             reserved: 0,
             unit: 'unit',
           },
-        }),
-      ),
-    );
+        });
+      }
+    });
 
     // Record movements
     await this.prisma.inventoryMovement.createMany({
       data: lines.map((line) => ({
         entityId: line.entityId,
-        variantId: line.variantId ?? null,
+        variantId: line.variantId ?? undefined,
         branchId: line.branchId,
         quantity: line.quantity,
         unit: line.unit ?? 'unit',
@@ -211,26 +220,35 @@ export class InventoryEngine implements IInventoryEngine {
   }
 
   async adjustStock(adjustment: StockAdjustment): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.inventoryStock.upsert({
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.inventoryStock.findFirst({
         where: {
-          entityId_variantId_branchId: {
-            entityId: adjustment.entityId,
-            variantId: adjustment.variantId ?? null,
-            branchId: adjustment.branchId,
-          },
-        },
-        update: { onHand: { increment: adjustment.quantity } },
-        create: {
           entityId: adjustment.entityId,
           variantId: adjustment.variantId ?? null,
           branchId: adjustment.branchId,
-          onHand: Math.max(0, adjustment.quantity),
-          reserved: 0,
-          unit: adjustment.unit,
         },
-      }),
-      this.prisma.inventoryMovement.create({
+        select: { id: true },
+      });
+
+      if (existing) {
+        await tx.inventoryStock.update({
+          where: { id: existing.id },
+          data: { onHand: { increment: adjustment.quantity } },
+        });
+      } else {
+        await tx.inventoryStock.create({
+          data: {
+            entityId: adjustment.entityId,
+            variantId: adjustment.variantId ?? null,
+            branchId: adjustment.branchId,
+            onHand: Math.max(0, adjustment.quantity),
+            reserved: 0,
+            unit: adjustment.unit,
+          },
+        });
+      }
+
+      await tx.inventoryMovement.create({
         data: {
           entityId: adjustment.entityId,
           variantId: adjustment.variantId ?? null,
@@ -241,8 +259,8 @@ export class InventoryEngine implements IInventoryEngine {
           notes: adjustment.notes ?? null,
           operatorId: adjustment.operatorId,
         },
-      }),
-    ]);
+      });
+    });
 
     this.logger.log(
       `Stock adjusted: entity=${adjustment.entityId} qty=${adjustment.quantity} reason=${adjustment.reason}`,

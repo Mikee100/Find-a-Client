@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import AdminShell from "@/features/admins/admin-shell";
 
 export default function AdminDashboardPage() {
@@ -11,6 +12,14 @@ export default function AdminDashboardPage() {
           <p className="mt-2 text-neutral-600">
             Admin workspace scaffold is ready. Add moderation, approvals, and platform controls here.
           </p>
+          <div className="mt-4">
+            <Link
+              href="/admin/ranking-debug"
+              className="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Open ranking debug
+            </Link>
+          </div>
         </section>
       </section>
     </AdminShell>

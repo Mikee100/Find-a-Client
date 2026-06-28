@@ -26,7 +26,7 @@ export class ListProjectsDto {
 
   @IsOptional()
   @IsString({ message: "Sort value must be a string." })
-  sortBy?: "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc";
+  sortBy?: "best_matches" | "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc";
 
   @IsOptional()
   @IsNumberString({}, { message: "Min price must be numeric." })
@@ -47,4 +47,8 @@ export class ListProjectsDto {
   @IsOptional()
   @IsNumberString({}, { message: "Limit must be numeric." })
   limit?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false", "1", "0"], { message: "Ranking debug flag is invalid." })
+  rankingDebug?: string;
 }

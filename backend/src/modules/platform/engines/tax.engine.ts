@@ -8,6 +8,7 @@ import type {
   TaxClass,
   TaxedCart,
   CartLine,
+  ChannelType,
 } from './engine.interfaces';
 
 /**
@@ -53,7 +54,7 @@ export class TaxEngine implements ITaxEngine {
       name: c.name,
       rate: Number(c.rate),
       inclusive: c.inclusive,
-      appliesToChannel: c.appliesToChannel as string[] | null,
+      appliesToChannel: c.appliesToChannel as ChannelType[] | null,
     }));
 
     await this.cache.set(cacheKey, result, this.CACHE_TTL);

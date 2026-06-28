@@ -56,19 +56,19 @@ export interface BlueprintSchema {
    * Default capabilities per entity type.
    * Engine execution is gated on these — no vertical-specific code in engines.
    */
-  capabilities: Record<EntityType, Partial<Record<Capability, boolean>>>;
+  capabilities: Partial<Record<EntityType, Partial<Record<Capability, boolean>>>>;
 
   /** Guided multi-step creation flow per entity type */
-  creationWorkflow?: Record<
+  creationWorkflow?: Partial<Record<
     EntityType,
     {
       mode: 'WIZARD' | 'QUICK_ADD';
       steps: BlueprintCreationStep[];
     }
-  >;
+  >>;
 
   /** Fields that must be present before entity can transition from DRAFT */
-  requiredFields?: Record<EntityType, string[]>;
+  requiredFields?: Partial<Record<EntityType, string[]>>;
 
   /** Navigation items rendered by the frontend shell */
   navigation?: {

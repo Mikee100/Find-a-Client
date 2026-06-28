@@ -15,8 +15,15 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EntityService } from './entity.service';
 import { CreateEntityDto } from './dto/create-entity.dto';
 import { UpdateEntityDto } from './dto/update-entity.dto';
+import type { EntityType } from '../blueprints/blueprint-registry.constants';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
-import type { JwtPayload } from 'src/types/jwt-payload.type';
+
+type JwtPayload = {
+  sub: string;
+  tenantId: string;
+  email?: string;
+  role?: string;
+};
 
 /**
  * Entity Controller — single router for all business entities across all verticals.
@@ -67,7 +74,7 @@ export class EntityController {
       'The frontend renders exactly what this returns — no hardcoded forms.',
   })
   getWorkflow(@CurrentUser() user: JwtPayload, @Param('entityType') entityType: string) {
-    return this.entityService.getCreationWorkflow(user.tenantId, entityType as any);
+    return this.entityService.getCreationWorkflow(user.tenantId, entityType as EntityType);
   }
 
   @Get(':id')

@@ -126,7 +126,12 @@ export class PricingEngine implements IPricingEngine {
 
     for (const window of windows) {
       const days = window.day.split('-').map((d) => d.trim().toUpperCase());
-      const matchesDay = days.length === 1 ? days[0] === dayName : this.dayInRange(dayName, days[0], days[1]);
+      const fromDay = days[0];
+      const toDay = days[1];
+      const matchesDay =
+        days.length === 1
+          ? fromDay === dayName
+          : Boolean(fromDay && toDay && this.dayInRange(dayName, fromDay, toDay));
       const matchesTime = timeStr >= window.from && timeStr <= window.to;
 
       if (matchesDay && matchesTime && window.discountPct) {

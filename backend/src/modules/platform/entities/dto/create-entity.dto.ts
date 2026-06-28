@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsBoolean, ValidateNested, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsBoolean, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -6,15 +6,15 @@ export class RecipeLineDto {
   @ApiProperty({ description: 'Ingredient entity ID' })
   @IsString()
   @IsNotEmpty()
-  ingredientId: string;
+  ingredientId!: string;
 
   @ApiProperty()
   @IsNumber()
-  quantity: number;
+  quantity!: number;
 
   @ApiProperty({ example: 'g' })
   @IsString()
-  unit: string;
+  unit!: string;
 
   @ApiPropertyOptional({ description: 'Waste factor as a percentage, e.g. 5 = 5%' })
   @IsOptional()
@@ -39,7 +39,7 @@ export class VariantDto {
   barcode?: string;
 
   @ApiProperty({ description: 'Variant attributes, e.g. { size: "L", color: "Navy" }' })
-  attributes: Record<string, string>;
+  attributes!: Record<string, string>;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -123,12 +123,12 @@ export class CreateEntityDto {
   })
   @IsString()
   @IsNotEmpty()
-  entityType: string;
+  entityType!: string;
 
   @ApiProperty({ example: 'Classic Cheeseburger' })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @ApiPropertyOptional({ example: 'FOOD_STANDARD' })
   @IsOptional()

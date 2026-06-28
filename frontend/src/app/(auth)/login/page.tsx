@@ -43,6 +43,10 @@ type FieldErrors = {
   password?: string;
 };
 
+const fieldShellClass = "flex h-12 items-center rounded-xl border border-slate-300/90 bg-slate-50 px-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition focus-within:border-indigo-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/15";
+const fieldInputClass = "h-full w-full bg-transparent px-2 text-[15px] text-slate-900 placeholder:text-slate-400 outline-none";
+const fieldIconClass = "ml-2 h-4 w-4 text-slate-400";
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -230,15 +234,15 @@ export default function LoginPage() {
                 >
                   Email
                 </label>
-                <div className="flex h-12 items-center rounded-[10px] border border-[#E5E7EB] bg-white transition focus-within:border-[#4F46E5] focus-within:ring-2 focus-within:ring-[#4F46E5]/20">
-                  <Mail className="ml-3 h-4 w-4 text-slate-400" />
+                <div className={fieldShellClass}>
+                  <Mail className={fieldIconClass} />
                   <input
                     id="email"
                     name="email"
                     type="email"
                     autoComplete="email"
                     required
-                    className="w-full bg-transparent px-3 text-sm outline-none"
+                    className={fieldInputClass}
                     placeholder="name@company.com"
                   />
                 </div>
@@ -254,8 +258,8 @@ export default function LoginPage() {
                 >
                   Password
                 </label>
-                <div className="flex h-12 items-center rounded-[10px] border border-[#E5E7EB] bg-white transition focus-within:border-[#4F46E5] focus-within:ring-2 focus-within:ring-[#4F46E5]/20">
-                  <Lock className="ml-3 h-4 w-4 text-slate-400" />
+                <div className={fieldShellClass}>
+                  <Lock className={fieldIconClass} />
                   <input
                     id="password"
                     name="password"
@@ -263,13 +267,13 @@ export default function LoginPage() {
                     autoComplete="current-password"
                     minLength={8}
                     required
-                    className="w-full bg-transparent px-3 text-sm outline-none"
+                    className={fieldInputClass}
                     placeholder="Enter password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className="mr-2 rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    className="mr-1 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (

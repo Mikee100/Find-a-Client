@@ -24,16 +24,22 @@ export class ProjectsService {
     repositoryUrl: true,
     category: true,
     techStack: true,
+    industries: true,
     pricingType: true,
     price: true,
     currency: true,
     thumbnailUrl: true,
     backgroundUrl: true,
+    demoUrl: true,
+    videoUrl: true,
     likeCount: true,
     viewCount: true,
     inquiryCount: true,
     qualityScore: true,
+    averageRating: true,
     createdAt: true,
+    updatedAt: true,
+    isFeatured: true,
     author: {
       select: {
         id: true,
@@ -83,6 +89,70 @@ export class ProjectsService {
     }
 
     return [...variants];
+  }
+
+  private clamp(value: number, min = 0, max = 100) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  private decayedFreshnessScore(date: Date, halfLifeDays = 18) {
+    const ageInDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+    return this.clamp(Math.round(100 * Math.exp(-Math.max(0, ageInDays) / halfLifeDays)));
+  }
+
+  private computeProjectRanking(project: {
+    title: string;
+    shortDescription: string;
+    techStack: string[];
+    industries: string[];
+    likeCount: number;
+    viewCount: number;
+    inquiryCount: number;
+    qualityScore: number;
+    averageRating?: number | null;
+    thumbnailUrl?: string | null;
+    backgroundUrl?: string | null;
+    demoUrl?: string | null;
+    videoUrl?: string | null;
+    updatedAt: Date;
+    isFeatured?: boolean;
+  }) {
+    const freshness = this.decayedFreshnessScore(project.updatedAt, 16);
+    const normalizedQualityModel = project.qualityScore <= 1 ? project.qualityScore * 100 : project.qualityScore;
+    const reviewQuality = ((project.averageRating ?? 0) / 5) * 100;
+    const quality = this.clamp(Math.round(reviewQuality * 0.35 + normalizedQualityModel * 0.65));
+
+    const completenessChecks = [
+      Boolean(project.title.trim()),
+      Boolean(project.shortDescription.trim()),
+      project.techStack.length > 0,
+      project.industries.length > 0,
+      Boolean(project.thumbnailUrl),
+      Boolean(project.backgroundUrl),
+      Boolean(project.demoUrl || project.videoUrl)
+    ];
+    const completeness = Math.round((completenessChecks.filter(Boolean).length / completenessChecks.length) * 100);
+
+    const activity = this.clamp(
+      Math.round(project.inquiryCount * 10 + project.likeCount * 3.5 + project.viewCount / 30)
+    );
+
+    const weightedSignals =
+      freshness * 0.25 + quality * 0.3 + completeness * 0.2 + activity * 0.25;
+    const featuredBoost = project.isFeatured ? 8 : 0;
+    const score = Math.round(this.clamp(weightedSignals + featuredBoost));
+
+    return {
+      score,
+      scoreBreakdown: {
+        freshness,
+        quality,
+        completeness,
+        activity,
+        featuredBoost,
+        weightedSignals: Math.round(weightedSignals)
+      }
+    };
   }
 
   private computeQualityScore(likeCount: number, viewCount: number, inquiryCount: number, averageRating: number): number {
@@ -145,9 +215,13 @@ export class ProjectsService {
   /**
    * Lists projects with filter and cursor pagination.
    */
-  async list(query: ListProjectsDto) {
+  async list(query: ListProjectsDto, options?: { includeRankingDebug?: boolean }) {
     const startedAt = Date.now();
-    const cacheKey = await this.cacheService.composeKey("projects-list", JSON.stringify(query));
+    const includeRankingDebug = options?.includeRankingDebug ?? false;
+    const cacheKey = await this.cacheService.composeKey(
+      "projects-list",
+      JSON.stringify({ query, includeRankingDebug })
+    );
     const cached = await this.cacheService.get<{
       success: true;
       data: unknown[];
@@ -259,7 +333,11 @@ export class ProjectsService {
           ? { price: "asc" }
           : query.sortBy === "price_desc"
             ? { price: "desc" }
-            : { createdAt: "desc" };
+            : query.sortBy === "best_matches"
+              ? { updatedAt: "desc" }
+              : { createdAt: "desc" };
+
+    const useBestMatchesRanking = query.sortBy === "best_matches";
 
     if (page !== null) {
       const [items, totalItems] = await this.prisma.$transaction([
@@ -273,15 +351,36 @@ export class ProjectsService {
         this.prisma.project.count({ where })
       ]);
 
+      const rankedItems = items.map((item) => ({
+        ...item,
+        ...this.computeProjectRanking(item)
+      }));
+
+      const responseItems = useBestMatchesRanking
+        ? [...rankedItems].sort(
+            (a, b) =>
+              b.score - a.score || b.inquiryCount - a.inquiryCount || b.likeCount - a.likeCount || b.viewCount - a.viewCount
+          )
+        : rankedItems;
+
       const totalPages = totalItems > 0 ? Math.ceil(totalItems / limit) : 1;
       const hasNext = page < totalPages;
 
+      const responseData = includeRankingDebug
+        ? responseItems
+        : responseItems.map((item) => {
+            const sanitized = { ...item };
+            delete (sanitized as { score?: number }).score;
+            delete (sanitized as { scoreBreakdown?: unknown }).scoreBreakdown;
+            return sanitized;
+          });
+
       const payload = {
         success: true,
-        data: items,
+        data: responseData,
         meta: {
           hasNext,
-          nextCursor: hasNext ? items[items.length - 1]?.id : undefined,
+          nextCursor: hasNext ? responseData[responseData.length - 1]?.id : undefined,
           page,
           totalPages,
           totalItems
@@ -314,7 +413,27 @@ export class ProjectsService {
       skip: query.cursor ? 1 : 0
     });
 
-    const { data, meta } = buildPagination(items, limit);
+    const rankedItems = items.map((item) => ({
+      ...item,
+      ...this.computeProjectRanking(item)
+    }));
+
+    const itemsForPagination = useBestMatchesRanking
+      ? [...rankedItems].sort(
+          (a, b) => b.score - a.score || b.inquiryCount - a.inquiryCount || b.likeCount - a.likeCount || b.viewCount - a.viewCount
+        )
+      : rankedItems;
+
+    const responseItems = includeRankingDebug
+      ? itemsForPagination
+      : itemsForPagination.map((item) => {
+          const sanitized = { ...item };
+          delete (sanitized as { score?: number }).score;
+          delete (sanitized as { scoreBreakdown?: unknown }).scoreBreakdown;
+          return sanitized;
+        });
+
+    const { data, meta } = buildPagination(responseItems, limit);
     const payload = {
       success: true,
       data,
