@@ -36,9 +36,54 @@ function originMatchesPattern(origin: string, pattern: string): boolean {
   return regex.test(origin);
 }
 
+type ListenError = NodeJS.ErrnoException & { code?: string };
+
+async function listenWithFallback(
+  app: Awaited<ReturnType<typeof NestFactory.create>>,
+  candidatePorts: number[],
+  host: string,
+): Promise<number> {
+  for (let index = 0; index < candidatePorts.length; index += 1) {
+    const port = candidatePorts[index];
+    if (port === undefined) {
+      continue;
+    }
+
+    try {
+      await app.listen(port, host);
+      const address = app.getHttpServer()?.address();
+      if (address && typeof address === "object" && "port" in address) {
+        return Number(address.port);
+      }
+
+      return port;
+    } catch (error) {
+      const listenError = error as ListenError;
+      const isRetriable = listenError.code === "EACCES" || listenError.code === "EADDRINUSE";
+
+      if (!isRetriable || index === candidatePorts.length - 1) {
+        throw error;
+      }
+
+      const nextPort = candidatePorts[index + 1];
+      console.warn(
+        `[startup] Port ${port} unavailable on ${host} (${listenError.code ?? "UNKNOWN"}). Retrying on ${nextPort ?? "next available"}...`
+      );
+    }
+  }
+
+  throw new Error("Failed to bind server to an available port");
+}
+
 async function bootstrap(): Promise<void> {
   const quietStartupLogs = process.env.QUIET_STARTUP_LOGS !== "false";
-  const fallbackOriginPatterns = ["http://localhost:3060", "https://find-a-client.vercel.app"];
+  const fallbackOriginPatterns = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3060",
+    "http://127.0.0.1:3060",
+    "https://find-a-client.vercel.app"
+  ];
   const allowedOriginPatterns = [
     ...(process.env.FRONTEND_URLS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
     process.env.FRONTEND_URL?.trim() ?? "",
@@ -94,10 +139,15 @@ async function bootstrap(): Promise<void> {
   });
 
   const port = Number(process.env.PORT ?? 4000);
-  await app.listen(port);
+  const isProduction = process.env.NODE_ENV === "production";
+  const host = process.env.HOST?.trim() || "0.0.0.0";
+  const candidatePorts = isProduction
+    ? [port]
+    : Array.from(new Set([port, 4000, 5000, 8080, 0].filter((value) => value >= 0)));
+  const listeningPort = await listenWithFallback(app, candidatePorts, host);
 
   console.log("[startup] Nest started successfully");
-  console.log(`[startup] Listening on http://localhost:${port}`);
+  console.log(`[startup] Listening on http://${host === "0.0.0.0" ? "localhost" : host}:${listeningPort}`);
 }
 
 void bootstrap();

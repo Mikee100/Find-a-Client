@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { UserRole } from "@prisma/client";
 import { CacheService } from "src/common/cache/cache.service";
 import { HIRE_REQUEST_STATUS } from "src/common/constants/domain-enums.constant";
 import { PrismaService } from "src/prisma/prisma.service";
@@ -7,10 +8,64 @@ import { UpdateUserDto } from "src/modules/users/dto/update-user.dto";
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService
   ) {}
+
+  private isDatabaseUnavailableError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes("can't reach database server") ||
+      message.includes("database is temporarily unavailable") ||
+      message.includes("connection")
+    );
+  }
+
+  private buildFallbackProfile(userId: string) {
+    return {
+      id: userId,
+      email: "",
+      username: "developer",
+      fullName: "Developer",
+      avatarUrl: null,
+      title: null,
+      role: UserRole.DEVELOPER,
+      bio: null,
+      skills: [],
+      primaryStack: null,
+      experienceLevel: "MID" as const,
+      availabilityStatus: "AVAILABLE" as const,
+      location: null,
+      contactEmail: null,
+      publicEmailEnabled: false,
+      educationEntries: [],
+      certificationEntries: [],
+      languageEntries: [],
+      phoneNumber: null,
+      websiteUrl: null,
+      githubUrl: null,
+      githubUsername: null,
+      githubVerifiedAt: null,
+      linkedinUrl: null
+    };
+  }
+
+  private buildFallbackCompleteness() {
+    return {
+      percentage: 0,
+      completedFields: 0,
+      totalFields: 0,
+      missingFields: [],
+      nextAction: null
+    };
+  }
 
   private async invalidateDiscoveryCaches() {
     await Promise.all([
@@ -171,13 +226,30 @@ export class UsersService {
       return cached;
     }
 
-    const [profile, savedProjects, myProjects, completeness, recommendedProjects, notifications, threads] =
+    let usedFallbackData = false;
+
+    const safe = async <T>(label: string, query: Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await query;
+      } catch (error) {
+        if (!this.isDatabaseUnavailableError(error)) {
+          throw error;
+        }
+
+        usedFallbackData = true;
+        this.logger.warn(`Dashboard query fallback: ${label} unavailable for user ${userId}`);
+        return fallback;
+      }
+    };
+
+    const profile = await safe("profile", this.getMe(userId), this.buildFallbackProfile(userId));
+
+    const [savedProjects, myProjects, completeness, recommendedProjects, notifications, threads] =
       await Promise.all([
-        this.getMe(userId),
-        this.getSavedProjects(userId),
-        this.getMyProjects(userId),
-        this.getProfileCompleteness(userId),
-        this.prisma.project.findMany({
+        safe("saved-projects", this.getSavedProjects(userId), []),
+        safe("my-projects", this.getMyProjects(userId), []),
+        safe("profile-completeness", this.getProfileCompleteness(userId), this.buildFallbackCompleteness()),
+        safe("recommended-projects", this.prisma.project.findMany({
           where: {
             status: "PUBLISHED",
             deletedAt: null
@@ -204,13 +276,13 @@ export class UsersService {
             qualityScore: true,
             createdAt: true
           }
-        }),
-        this.prisma.notification.findMany({
+        }), []),
+        safe("notifications", this.prisma.notification.findMany({
           where: { userId },
           orderBy: [{ isRead: "asc" }, { createdAt: "desc" }],
           take: 20
-        }),
-        this.prisma.thread.findMany({
+        }), []),
+        safe("threads", this.prisma.thread.findMany({
           where: { OR: [{ participantAId: userId }, { participantBId: userId }] },
           include: {
             participantA: {
@@ -241,14 +313,17 @@ export class UsersService {
               take: 1
             }
           },
-          orderBy: { updatedAt: "desc" }
-        })
+          orderBy: { updatedAt: "desc" },
+          take: 40
+        }), [])
       ]);
 
     const threadIds = threads.map((thread) => thread.id);
     const unreadByThread =
       threadIds.length > 0
-        ? await this.prisma.message.groupBy({
+        ? await safe(
+            "thread-unread-counts",
+            this.prisma.message.groupBy({
             by: ["threadId"],
             where: {
               threadId: { in: threadIds },
@@ -258,7 +333,9 @@ export class UsersService {
             _count: {
               threadId: true
             }
-          })
+            }),
+            []
+          )
         : [];
 
     const unreadCountByThreadId = new Map<string, number>(
@@ -305,7 +382,7 @@ export class UsersService {
       recommendedProjects
     };
 
-    await this.cacheService.set(cacheKey, payload, 10);
+    await this.cacheService.set(cacheKey, payload, usedFallbackData ? 5 : 30);
     return payload;
   }
 
@@ -628,11 +705,28 @@ export class UsersService {
    * Lists bookmarked projects for a user.
    */
   async getSavedProjects(userId: string) {
-    return this.prisma.saved.findMany({
+    const rows = await this.prisma.saved.findMany({
       where: { userId },
-      include: { project: true },
+      take: 30,
+      select: {
+        userId: true,
+        projectId: true,
+        project: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            status: true
+          }
+        }
+      },
       orderBy: { createdAt: "desc" }
     });
+
+    return rows.map((row) => ({
+      id: `${row.userId}:${row.projectId}`,
+      project: row.project
+    }));
   }
 
   /**
@@ -703,6 +797,7 @@ export class UsersService {
         authorId: userId,
         deletedAt: null
       },
+      take: 24,
       orderBy: {
         createdAt: "desc"
       },
