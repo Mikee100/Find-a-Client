@@ -1,4 +1,10 @@
-import sanitizeHtml from "sanitize-html";
+import * as sanitizeHtmlModule from "sanitize-html";
+
+type SanitizeHtmlFn = (dirty: string, options?: Record<string, unknown>) => string;
+
+const sanitizeHtml =
+  (sanitizeHtmlModule as unknown as { default?: SanitizeHtmlFn }).default ??
+  (sanitizeHtmlModule as unknown as SanitizeHtmlFn);
 
 export const sanitizeInput = (value: string): string =>
   sanitizeHtml(value, {

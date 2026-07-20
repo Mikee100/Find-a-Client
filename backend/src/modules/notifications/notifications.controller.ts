@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Put, Query } from "@nestjs/common";
 import { CurrentUser, CurrentUserPayload } from "src/common/decorators/current-user.decorator";
+import { Public } from "src/common/decorators/public.decorator";
 import { DispatchNotificationDto } from "src/modules/notifications/dto/dispatch-notification.dto";
 import { NotificationsService } from "src/modules/notifications/notifications.service";
 
@@ -12,13 +13,32 @@ export class NotificationsController {
     return this.notificationsService.list(user.sub, cursor, Number(limit ?? 20));
   }
 
+  @Get("unread-count")
+  unreadCount(@CurrentUser() user: CurrentUserPayload) {
+    return this.notificationsService.unreadCount(user.sub);
+  }
+
   @Put("read-all")
   readAll(@CurrentUser() user: CurrentUserPayload) {
     return this.notificationsService.readAll(user.sub);
   }
 
+  @Put(":id/read")
+  readOne(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.notificationsService.readOne(user.sub, id);
+  }
+
   @Post("dispatch")
   dispatch(@Body() dto: DispatchNotificationDto) {
     return this.notificationsService.dispatch(dto.userId, dto.type, dto.payload);
+  }
+
+  @Public()
+  @Post("webhooks/resend")
+  handleResendWebhook(
+    @Body() payload: Record<string, unknown>,
+    @Headers("x-webhook-secret") secretHeader?: string
+  ) {
+    return this.notificationsService.processResendWebhook(payload, secretHeader);
   }
 }

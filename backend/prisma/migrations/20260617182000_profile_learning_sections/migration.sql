@@ -1,0 +1,4 @@
+ALTER TABLE "User"
+ADD COLUMN "educationEntries" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "certificationEntries" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "languageEntries" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

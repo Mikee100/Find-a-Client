@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Find a Client",
   description: "Auth starter for the Find a Client platform",
+  icons: {
+    icon: "/brand-logo.png",
+    shortcut: "/brand-logo.png",
+    apple: "/brand-logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -24,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>{children}</body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

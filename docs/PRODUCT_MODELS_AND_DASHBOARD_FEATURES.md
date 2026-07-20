@@ -7,7 +7,6 @@ This document defines the core platform entities and dashboard feature set for F
 ### Developer side
 - Profile: bio, skills, hourly rate, availability.
 - Project: title, description, tech stack, live URL, repository URL, media.
-- Testimonial: client feedback attached to a developer profile or project.
 - Availability: open, not open, part-time.
 - ConversationThread: discussion between a client and developer.
 

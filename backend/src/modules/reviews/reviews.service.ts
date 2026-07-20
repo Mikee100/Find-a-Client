@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 import { PrismaService } from "src/prisma/prisma.service";
 import { sanitizeInput } from "src/common/utils/sanitize.util";
 import { CreateReviewDto } from "src/modules/reviews/dto/create-review.dto";
@@ -12,7 +12,7 @@ export class ReviewsService {
    * Creates one review per client per project.
    */
   async create(projectSlug: string, reviewerId: string, role: UserRole, dto: CreateReviewDto) {
-    if (role !== UserRole.CLIENT) {
+    if (role !== USER_ROLE.CLIENT) {
       throw new ForbiddenException("Only clients can review");
     }
 
@@ -21,10 +21,38 @@ export class ReviewsService {
       throw new NotFoundException("Project not found");
     }
 
+    const milestone = await this.prisma.milestone.findUnique({
+      where: { id: dto.milestoneId },
+      include: {
+        hireRequest: true
+      }
+    });
+
+    if (!milestone) {
+      throw new NotFoundException("Milestone not found");
+    }
+
+    if (milestone.status !== "RELEASED") {
+      throw new BadRequestException("Reviews are allowed only for released milestones");
+    }
+
+    if (milestone.hireRequest.clientId !== reviewerId) {
+      throw new ForbiddenException("You can only review milestones you funded as a client");
+    }
+
+    if (project.authorId !== milestone.hireRequest.developerId) {
+      throw new BadRequestException("Review project does not match the milestone developer");
+    }
+
+    if (milestone.hireRequest.projectId && milestone.hireRequest.projectId !== project.id) {
+      throw new BadRequestException("Review project does not match the milestone project");
+    }
+
     const review = await this.prisma.review.create({
       data: {
         projectId: project.id,
         reviewerId,
+        milestoneId: milestone.id,
         rating: dto.rating,
         comment: dto.comment ? sanitizeInput(dto.comment) : null
       }

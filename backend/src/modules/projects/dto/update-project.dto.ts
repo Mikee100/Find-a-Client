@@ -1,14 +1,15 @@
 import {
 	IsArray,
-	IsEnum,
+	IsIn,
 	IsNumber,
 	IsOptional,
 	IsString,
 	IsUrl,
 	Length,
+	Min,
 	MaxLength
 } from "class-validator";
-import { PricingType, ProjectCategory, ProjectStatus } from "@prisma/client";
+import { PRICING_TYPE, PROJECT_CATEGORY, PROJECT_STATUS, PricingType, ProjectCategory, ProjectStatus } from "src/common/constants/domain-enums.constant";
 
 export class UpdateProjectDto {
 	@IsOptional()
@@ -23,14 +24,24 @@ export class UpdateProjectDto {
 
 	@IsOptional()
 	@IsString({ message: "Long description must be a string." })
+	@Length(30, 5000, { message: "Long description must be between 30 and 5000 characters." })
 	longDescription?: string;
 
 	@IsOptional()
-	@IsEnum(ProjectCategory, { message: "Category is invalid." })
+	@IsString({ message: "Role in project must be a string." })
+	@Length(2, 120, { message: "Role in project must be between 2 and 120 characters." })
+	roleInProject?: string;
+
+	@IsOptional()
+	@IsUrl({}, { message: "Repository URL is invalid." })
+	repositoryUrl?: string | null;
+
+	@IsOptional()
+	@IsIn(Object.values(PROJECT_CATEGORY), { message: "Category is invalid." })
 	category?: ProjectCategory;
 
 	@IsOptional()
-	@IsEnum(ProjectStatus, { message: "Status is invalid." })
+	@IsIn(Object.values(PROJECT_STATUS), { message: "Status is invalid." })
 	status?: ProjectStatus;
 
 	@IsOptional()
@@ -44,14 +55,40 @@ export class UpdateProjectDto {
 	industries?: string[];
 
 	@IsOptional()
-	@IsEnum(PricingType, { message: "Pricing type is invalid." })
+	@IsIn(Object.values(PRICING_TYPE), { message: "Pricing type is invalid." })
 	pricingType?: PricingType;
 
 	@IsOptional()
 	@IsNumber({}, { message: "Price must be a number." })
+	@Min(0, { message: "Price must be 0 or more." })
 	price?: number;
 
 	@IsOptional()
+	@IsString({ message: "Currency must be a string." })
+	@Length(3, 3, { message: "Currency must be a 3-letter ISO code." })
+	@IsIn(["USD", "EUR", "GBP", "CAD", "AUD", "NGN", "KES", "ZAR"], {
+		message: "Currency is not supported."
+	})
+	currency?: string;
+
+	@IsOptional()
 	@IsUrl({}, { message: "Demo URL is invalid." })
-	demoUrl?: string;
+	demoUrl?: string | null;
+
+	@IsOptional()
+	@IsUrl({}, { message: "Thumbnail URL is invalid." })
+	thumbnailUrl?: string | null;
+
+	@IsOptional()
+	@IsUrl({}, { message: "Background image URL is invalid." })
+	backgroundUrl?: string | null;
+
+	@IsOptional()
+	@IsUrl({}, { message: "Video URL is invalid." })
+	videoUrl?: string | null;
+
+	@IsOptional()
+	@IsArray({ message: "Screenshots must be an array." })
+	@IsUrl({}, { each: true, message: "Each screenshot URL must be valid." })
+	screenshots?: string[];
 }

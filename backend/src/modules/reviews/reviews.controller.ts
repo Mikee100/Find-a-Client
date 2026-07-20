@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { USER_ROLE, UserRole } from "src/common/constants/user-role.constant";
 import { CurrentUser, CurrentUserPayload } from "src/common/decorators/current-user.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { CreateReviewDto } from "src/modules/reviews/dto/create-review.dto";
@@ -10,7 +10,7 @@ export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
   @Post()
-  @Roles(UserRole.CLIENT)
+  @Roles(USER_ROLE.CLIENT)
   create(@Param("slug") slug: string, @CurrentUser() user: CurrentUserPayload, @Body() dto: CreateReviewDto) {
     return this.reviewsService.create(slug, user.sub, user.role as UserRole, dto);
   }

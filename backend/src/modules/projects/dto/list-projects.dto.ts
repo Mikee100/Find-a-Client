@@ -1,9 +1,9 @@
-import { IsArray, IsEnum, IsNumberString, IsOptional, IsString } from "class-validator";
-import { PricingType, ProjectCategory } from "@prisma/client";
+import { IsArray, IsIn, IsNumberString, IsOptional, IsString } from "class-validator";
+import { PRICING_TYPE, PROJECT_CATEGORY, PricingType, ProjectCategory } from "src/common/constants/domain-enums.constant";
 
 export class ListProjectsDto {
   @IsOptional()
-  @IsEnum(ProjectCategory, { message: "Category is invalid." })
+  @IsIn(Object.values(PROJECT_CATEGORY), { message: "Category is invalid." })
   category?: ProjectCategory;
 
   @IsOptional()
@@ -17,7 +17,7 @@ export class ListProjectsDto {
   industries?: string[];
 
   @IsOptional()
-  @IsEnum(PricingType, { message: "Pricing type is invalid." })
+  @IsIn(Object.values(PRICING_TYPE), { message: "Pricing type is invalid." })
   pricingType?: PricingType;
 
   @IsOptional()
@@ -26,7 +26,7 @@ export class ListProjectsDto {
 
   @IsOptional()
   @IsString({ message: "Sort value must be a string." })
-  sortBy?: "newest" | "popular" | "price_asc" | "price_desc";
+  sortBy?: "best_matches" | "newest" | "oldest" | "popular" | "most_viewed" | "price_asc" | "price_desc";
 
   @IsOptional()
   @IsNumberString({}, { message: "Min price must be numeric." })
@@ -41,6 +41,14 @@ export class ListProjectsDto {
   cursor?: string;
 
   @IsOptional()
+  @IsNumberString({}, { message: "Page must be numeric." })
+  page?: string;
+
+  @IsOptional()
   @IsNumberString({}, { message: "Limit must be numeric." })
   limit?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false", "1", "0"], { message: "Ranking debug flag is invalid." })
+  rankingDebug?: string;
 }

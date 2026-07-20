@@ -52,19 +52,114 @@ enum NotificationType {
   DEAL_INTEREST
 }
 
+enum ExperienceLevel {
+  JUNIOR
+  MID
+  SENIOR
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  NOT_ACCEPTING_WORK
+}
+
+enum HireRequestStatus {
+  PENDING
+  REVIEWING
+  PROPOSAL_SENT
+  NEGOTIATING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum AuthActionTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum EmailDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  BOUNCED
+  REJECTED
+  FAILED
+}
+
+enum MilestoneStatus {
+  PENDING
+  FUNDED
+  IN_PROGRESS
+  SUBMITTED
+  RELEASED
+  DISPUTED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  REQUIRES_PAYMENT_METHOD
+  REQUIRES_CONFIRMATION
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
+}
+
+enum PayoutStatus {
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  CANCELED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_RELEASE
+  RESOLVED_REFUND
+  CANCELED
+}
+
+enum DisputeRaisedBy {
+  CLIENT
+  DEVELOPER
+  SYSTEM
+}
+
 model User {
   id            String     @id @default(uuid()) @db.Uuid
   email         String     @unique
   username      String     @unique
   fullName      String
   avatarUrl     String?
+  title         String?    @db.VarChar(120)
   bio           String?
   role          UserRole   @default(DEVELOPER)
   skills        String[]
+  primaryStack  String?    @db.VarChar(80)
+  experienceLevel ExperienceLevel @default(MID)
+  availabilityStatus AvailabilityStatus @default(AVAILABLE)
   location      String?
+  contactEmail  String?
+  publicEmailEnabled Boolean @default(false)
+  educationEntries String[]  @default([])
+  certificationEntries String[] @default([])
+  languageEntries String[] @default([])
+  phoneNumber   String?
   websiteUrl    String?
   githubUrl     String?
+  githubUsername String?   @db.VarChar(120)
+  githubVerifiedAt DateTime?
   linkedinUrl   String?
+  stripeAccountId String?  @unique @db.VarChar(120)
+  stripeChargesEnabled Boolean @default(false)
+  stripePayoutsEnabled Boolean @default(false)
+  stripeDetailsSubmitted Boolean @default(false)
   isVerified    Boolean    @default(false)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -74,9 +169,81 @@ model User {
   sentMessages  Message[]  @relation("MessageSender")
   notifications Notification[]
   savedProjects Saved[]
+  likedProjects ProjectLike[]
+  refreshSession RefreshSession?
+  authAuditLogs  AuthAuditLog[]
+  authActionTokens AuthActionToken[]
 
   threadParticipantsA Thread[] @relation("ThreadParticipantA")
   threadParticipantsB Thread[] @relation("ThreadParticipantB")
+  sentHireRequests   HireRequest[] @relation("HireRequestClient")
+  receivedHireRequests HireRequest[] @relation("HireRequestDeveloper")
+  payouts       Payout[]
+
+  @@index([githubVerifiedAt], map: "idx_user_github_verified_at")
+  @@index([role, experienceLevel, availabilityStatus], map: "idx_user_role_experience_availability")
+}
+
+model AuthActionToken {
+  id         String              @id @default(uuid()) @db.Uuid
+  userId     String              @db.Uuid
+  tokenType  AuthActionTokenType
+  tokenHash  String              @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime            @default(now())
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tokenType, createdAt])
+  @@index([tokenType, expiresAt])
+}
+
+model RefreshSession {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @unique @db.Uuid
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+model AuthAuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  email      String?
+  event      String
+  ipAddress  String?
+  userAgent  String?
+  success    Boolean
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
+}
+
+model EmailDeliveryLog {
+  id           String              @id @default(uuid()) @db.Uuid
+  provider     String
+  messageId    String?
+  toEmail      String
+  subject      String
+  templateKey  String?
+  status       EmailDeliveryStatus @default(QUEUED)
+  eventType    String?
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([messageId])
+  @@index([toEmail, createdAt])
+  @@index([status, createdAt])
 }
 
 model Project {
@@ -85,6 +252,8 @@ model Project {
   title             String
   shortDescription  String            @db.VarChar(160)
   longDescription   String
+  roleInProject     String?           @db.VarChar(120)
+  repositoryUrl     String?
   category          ProjectCategory
   status            ProjectStatus     @default(DRAFT)
   techStack         String[]
@@ -95,12 +264,15 @@ model Project {
   isFeatured        Boolean           @default(false)
   viewCount         Int               @default(0)
   likeCount         Int               @default(0)
+  inquiryCount      Int               @default(0)
   authorId          String            @db.Uuid
   author            User              @relation(fields: [authorId], references: [id])
+  backgroundUrl     String?
   thumbnailUrl      String?
   demoUrl           String?
   videoUrl          String?
   averageRating     Float             @default(0)
+  qualityScore      Float             @default(0)
   deletedAt         DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -109,12 +281,22 @@ model Project {
   questions         Question[]
   reviews           Review[]
   savedBy           Saved[]
+  likedBy           ProjectLike[]
   threads           Thread[]
+  hireRequests      HireRequest[]
   searchDocument    Unsupported("tsvector")?
 
   @@index([status, isFeatured])
   @@index([authorId])
   @@index([category])
+  @@index([status, deletedAt, createdAt])
+  @@index([status, deletedAt, likeCount])
+  @@index([status, deletedAt, viewCount])
+  @@index([status, deletedAt, price])
+  @@index([status, deletedAt, category, pricingType])
+  @@index([qualityScore(sort: Desc)], map: "idx_project_quality_score_desc")
+  @@index([techStack], type: Gin, map: "idx_project_techstack_gin")
+  @@index([industries], type: Gin, map: "idx_project_industries_gin")
 }
 
 model ProjectMedia {
@@ -153,11 +335,157 @@ model Thread {
   participantB   User      @relation("ThreadParticipantB", fields: [participantBId], references: [id])
   project        Project?  @relation(fields: [projectId], references: [id])
   messages       Message[]
+  hireRequests   HireRequest[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   @@index([participantAId])
   @@index([participantBId])
+  @@index([participantAId, updatedAt(sort: Desc)], map: "idx_thread_participant_a_updated_desc")
+  @@index([participantBId, updatedAt(sort: Desc)], map: "idx_thread_participant_b_updated_desc")
+  @@index([participantAId, participantBId, updatedAt(sort: Desc)], map: "idx_thread_pair_updated_desc")
+}
+
+model HireRequest {
+  id                   String            @id @default(uuid()) @db.Uuid
+  clientId             String            @db.Uuid
+  developerId          String            @db.Uuid
+  projectId            String?           @db.Uuid
+  threadId             String?           @db.Uuid
+  status               HireRequestStatus @default(PENDING)
+  brief                String
+  budgetAmount         Decimal?          @db.Decimal(10, 2)
+  budgetCurrency       String?           @db.VarChar(3)
+  timelineDays         Int?
+  proposalMessage      String?
+  proposalAmount       Decimal?          @db.Decimal(10, 2)
+  proposalCurrency     String?           @db.VarChar(3)
+  proposalTimelineDays Int?
+  proposedAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  client               User              @relation("HireRequestClient", fields: [clientId], references: [id], onDelete: Cascade)
+  developer            User              @relation("HireRequestDeveloper", fields: [developerId], references: [id], onDelete: Cascade)
+  project              Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  thread               Thread?           @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  milestones           Milestone[]
+
+  @@index([clientId, createdAt])
+  @@index([developerId, createdAt])
+  @@index([status, createdAt])
+  @@index([projectId])
+  @@index([threadId])
+  @@index([clientId, status, createdAt(sort: Desc)], map: "idx_hirerequest_client_status_created_desc")
+  @@index([developerId, status, createdAt(sort: Desc)], map: "idx_hirerequest_developer_status_created_desc")
+}
+
+model Milestone {
+  id            String          @id @default(uuid()) @db.Uuid
+  hireRequestId String          @db.Uuid
+  title         String          @db.VarChar(160)
+  amount        Decimal         @db.Decimal(12, 2)
+  currency      String          @db.Char(3)
+  status        MilestoneStatus @default(PENDING)
+  dueDate       DateTime?
+  fundedAt      DateTime?
+  submittedAt   DateTime?
+  releasedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  hireRequest   HireRequest     @relation(fields: [hireRequestId], references: [id], onDelete: Cascade)
+  payments      Payment[]
+  payouts       Payout[]
+  disputes      Dispute[]
+  reviews       Review[]
+  events        MilestoneEvent[]
+
+  @@unique([hireRequestId], map: "ux_milestone_hire_request_single_v1")
+  @@index([status, createdAt], map: "idx_milestone_status_created")
+  @@index([hireRequestId, status], map: "idx_milestone_hire_status")
+}
+
+model Payment {
+  id                    String        @id @default(uuid()) @db.Uuid
+  milestoneId           String        @db.Uuid
+  stripePaymentIntentId String        @unique @db.VarChar(120)
+  amount                Decimal       @db.Decimal(12, 2)
+  feeAmount             Decimal       @default(0) @db.Decimal(12, 2)
+  currency              String        @db.Char(3)
+  status                PaymentStatus @default(REQUIRES_CONFIRMATION)
+  idempotencyKey        String?       @db.VarChar(120)
+  providerPayload       Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  milestone             Milestone     @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([milestoneId, createdAt], map: "idx_payment_milestone_created")
+  @@index([status, createdAt], map: "idx_payment_status_created")
+  @@index([idempotencyKey], map: "idx_payment_idempotency")
+}
+
+model Payout {
+  id               String       @id @default(uuid()) @db.Uuid
+  milestoneId      String       @db.Uuid
+  developerId      String       @db.Uuid
+  stripeTransferId String?      @unique @db.VarChar(120)
+  amount           Decimal      @db.Decimal(12, 2)
+  currency         String       @db.Char(3)
+  status           PayoutStatus @default(PENDING)
+  providerPayload  Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  milestone        Milestone    @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  developer        User         @relation(fields: [developerId], references: [id], onDelete: Cascade)
+
+  @@index([developerId, createdAt], map: "idx_payout_developer_created")
+  @@index([status, createdAt], map: "idx_payout_status_created")
+  @@index([milestoneId], map: "idx_payout_milestone")
+}
+
+model Dispute {
+  id               String          @id @default(uuid()) @db.Uuid
+  milestoneId      String          @db.Uuid
+  raisedBy         DisputeRaisedBy
+  raisedByUserId   String?         @db.Uuid
+  reason           String
+  status           DisputeStatus   @default(OPEN)
+  resolution       String?
+  resolvedByUserId String?         @db.Uuid
+  resolvedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  milestone        Milestone       @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([milestoneId, status], map: "idx_dispute_milestone_status")
+  @@index([createdAt], map: "idx_dispute_created")
+}
+
+model MilestoneEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  milestoneId String   @db.Uuid
+  eventType   String   @db.VarChar(80)
+  actorUserId String?  @db.Uuid
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  milestone   Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([milestoneId, createdAt], map: "idx_milestone_event_created")
+}
+
+model StripeWebhookEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  stripeEventId String    @unique @db.VarChar(120)
+  type          String    @db.VarChar(80)
+  payload       Json
+  processedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([type, createdAt], map: "idx_stripe_webhook_event_type_created")
 }
 
 model Message {
@@ -169,8 +497,23 @@ model Message {
   createdAt DateTime @default(now())
   thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   sender    User     @relation("MessageSender", fields: [senderId], references: [id])
+  attachments MessageAttachment[]
 
   @@index([threadId, createdAt])
+}
+
+model MessageAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @db.Uuid
+  url       String
+  publicId  String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, createdAt])
 }
 
 model Question {
@@ -189,13 +532,13 @@ model Review {
   id         String   @id @default(uuid()) @db.Uuid
   projectId  String   @db.Uuid
   reviewerId String   @db.Uuid
+  milestoneId String  @unique @db.Uuid
   rating     Int
   comment    String?
   createdAt  DateTime @default(now())
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   reviewer   User     @relation(fields: [reviewerId], references: [id])
-
-  @@unique([projectId, reviewerId])
+  milestone  Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
@@ -208,6 +551,8 @@ model Notification {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+  @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notification_user_read_created_desc")
+  @@index([userId, type, isRead], map: "idx_notification_user_type_read")
 }
 
 model Saved {
@@ -218,4 +563,373 @@ model Saved {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@id([userId, projectId])
+  @@index([userId, createdAt(sort: Desc)], map: "idx_saved_user_created_desc")
 }
+
+model ProjectLike {
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([projectId])
+  @@index([userId, createdAt(sort: Desc)], map: "idx_projectlike_user_created_desc")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADEERA BUSINESS OS — Platform Engine Data Model
+// ─────────────────────────────────────────────────────────────────────────────
+// Architecture: one shared entity table, capability-driven engine execution,
+// blueprint-defined vertical language. No per-vertical entity tables.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Blueprint ─────────────────────────────────────────────────────────────────
+
+/// System-level or tenant-level blueprint definition.
+/// Stores the full vertical configuration as JSON — entity types, capabilities,
+/// engine config, creation workflows, navigation, and language overrides.
+model Blueprint {
+  id          String   @id @default(uuid()) @db.Uuid
+  vertical    String   @unique                   // 'RESTAURANT' | 'FASHION' | 'SPA' | ...
+  version     Int      @default(1)
+  displayName String   @db.VarChar(100)
+  schema      Json                               // Full BlueprintSchema JSON object
+  isSystem    Boolean  @default(true)            // System blueprints are read-only
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenants     Tenant[]
+
+  @@index([vertical])
+  @@map("Blueprint")
+}
+
+/// Tracks blueprint version migrations for safe tenant upgrades.
+model BlueprintMigration {
+  id              String   @id @default(uuid()) @db.Uuid
+  blueprintId     String   @db.Uuid
+  fromVersion     Int
+  toVersion       Int
+  migrationNotes  String?
+  script          Json?                          // Declarative field mapping / transform rules
+  breakingChange  Boolean  @default(false)
+  releasedAt      DateTime @default(now())
+
+  @@index([blueprintId, toVersion])
+  @@map("BlueprintMigration")
+}
+
+// ── Tenant ────────────────────────────────────────────────────────────────────
+
+/// Root isolation boundary for the multi-tenant OS.
+/// Every platform object is scoped to a Tenant.
+model Tenant {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String   @db.VarChar(255)
+  slug              String   @unique @db.VarChar(100)  // URL-safe handle
+  blueprintId       String   @db.Uuid
+  blueprintVersion  Int      @default(1)
+  blueprintOverrides Json?                         // Superadmin capability/policy overrides
+  status            String   @default("ACTIVE") @db.VarChar(20) // ACTIVE | SUSPENDED | TRIAL
+  timezone          String   @default("UTC") @db.VarChar(60)
+  currency          String   @default("USD") @db.Char(3)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id])
+  entities    Entity[]
+  taxClasses  TaxClass[]
+  sales       Sale[]
+
+  @@index([blueprintId])
+  @@index([status])
+  @@map("Tenant")
+}
+
+// ── Entity (Universal Business Object) ───────────────────────────────────────
+
+/// All sellable/bookable/trackable objects across every vertical live here.
+/// entityType distinguishes domain objects per blueprint:
+///   Restaurant → 'MENU_ITEM' | 'INGREDIENT' | 'MODIFIER' | 'COMBO'
+///   Fashion    → 'PRODUCT'   | 'BUNDLE'
+///   Spa        → 'SERVICE'   | 'PRODUCT'
+///   etc.
+/// Engines operate on this table — they never need to know the entityType.
+model Entity {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  entityType  String    @db.VarChar(60)           // e.g. 'MENU_ITEM', 'PRODUCT', 'SERVICE'
+  name        String    @db.VarChar(255)
+  status      String    @default("DRAFT") @db.VarChar(20) // DRAFT | ACTIVE | ARCHIVED
+  taxClass    String?   @db.VarChar(60)
+  basePrice   Decimal?  @db.Decimal(14, 4)
+  currency    String?   @db.Char(3)
+  branchScope String[]  @db.Uuid                  // Empty = all branches
+  tags        String[]
+  sortOrder   Int       @default(0)
+  createdBy   String    @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?                            // Soft delete
+
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  extension       EntityExtension?
+  variants        EntityVariant[]
+  capabilityFlags EntityCapabilityFlag[]
+  recipeLines          RecipeLine[]          @relation("RecipeEntity")
+  recipesAsIngredient  RecipeLine[]          @relation("IngredientEntity")
+  inventoryStock       InventoryStock[]
+  salelines            SaleLine[]
+  priceRules           EntityPriceRule[]
+
+  @@index([tenantId, entityType], map: "idx_entity_tenant_type")
+  @@index([tenantId, status],     map: "idx_entity_tenant_status")
+  @@index([tags],                 type: Gin, map: "idx_entity_tags_gin")
+  @@map("Entity")
+}
+
+// ── EntityExtension ───────────────────────────────────────────────────────────
+
+/// Vertical-specific fields for each entity.
+/// Promoted typed columns cover fields used by ≥2 verticals.
+/// The payload JSON column absorbs genuinely vertical-specific attributes.
+/// Fields promoted from payload to typed columns do not break existing tenants.
+model EntityExtension {
+  entityId    String  @id @db.Uuid
+  blueprintId String  @db.VarChar(60)             // Vertical identifier string for fast lookup
+
+  // ── Inventory Engine fields (Restaurant + Fashion + Pharmacy) ──
+  trackInventory    Boolean  @default(false)
+  stockUnit         String?  @db.VarChar(30)       // 'kg' | 'unit' | 'ml' | 'piece'
+  reorderPoint      Decimal? @db.Decimal(10, 3)
+  reorderQty        Decimal? @db.Decimal(10, 3)
+
+  // ── Variant Engine fields (Fashion + Pharmacy) ──
+  hasVariants       Boolean  @default(false)
+
+  // ── Booking Engine fields (Spa + Hotel + Clinic) ──
+  requiresBooking   Boolean  @default(false)
+  durationMinutes   Int?
+  requiresStaff     Boolean  @default(false)
+
+  // ── Kitchen Engine fields (Restaurant) ──
+  generatesKitchenTicket Boolean @default(false)
+  prepStation            String? @db.VarChar(60)
+
+  // ── Recipe/BOM Engine fields (Restaurant + Manufacturing) ──
+  isRecipeBased     Boolean  @default(false)
+
+  // ── Open extension payload — genuinely vertical-specific attributes ──
+  payload           Json     @default("{}")
+
+  updatedAt         DateTime @updatedAt
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([blueprintId], map: "idx_ext_blueprint")
+  @@map("EntityExtension")
+}
+
+// ── EntityCapabilityFlag ──────────────────────────────────────────────────────
+
+/// Per-entity capability overrides.
+/// Resolution order:
+///   1. Blueprint default (all entities of this type get this capability)
+///   2. EntityExtension typed field (structural override)
+///   3. EntityCapabilityFlag OVERRIDE record (operator-level exception)
+model EntityCapabilityFlag {
+  entityId    String  @db.Uuid
+  capability  String  @db.VarChar(80)             // See CAPABILITY constants
+  enabled     Boolean @default(true)
+  source      String  @default("BLUEPRINT") @db.VarChar(20) // BLUEPRINT | OVERRIDE
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@id([entityId, capability])
+  @@map("EntityCapabilityFlag")
+}
+
+// ── EntityVariant (Fashion / Pharmacy / Hardware) ─────────────────────────────
+
+/// SKU-level variant for entities with CAN_HAVE_VARIANTS capability.
+model EntityVariant {
+  id            String   @id @default(uuid()) @db.Uuid
+  entityId      String   @db.Uuid
+  tenantId      String   @db.Uuid
+  sku           String?  @unique @db.VarChar(100)
+  barcode       String?  @db.VarChar(100)
+  attributes    Json     @default("{}")            // {"size": "L", "color": "Navy"}
+  priceOverride Decimal? @db.Decimal(14, 4)
+  costPrice     Decimal? @db.Decimal(14, 4)
+  weightGrams   Int?
+  status        String   @default("ACTIVE") @db.VarChar(20)
+  createdAt     DateTime @default(now())
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  inventoryStock  InventoryStock[]
+
+  @@index([entityId],   map: "idx_variant_entity")
+  @@index([attributes], type: Gin, map: "idx_variant_attrs_gin")
+  @@map("EntityVariant")
+}
+
+// ── RecipeLine (Restaurant / Manufacturing BOM) ───────────────────────────────
+
+/// Links a menu item / manufactured product (entityId) to its ingredient entities.
+/// Used by the Inventory Engine's deductByRecipe() method.
+model RecipeLine {
+  id           String   @id @default(uuid()) @db.Uuid
+  entityId     String   @db.Uuid                  // The menu item / product
+  ingredientId String   @db.Uuid                  // The ingredient entity
+  quantity     Decimal  @db.Decimal(10, 4)
+  unit         String   @db.VarChar(30)
+  wasteFactor  Decimal  @default(0) @db.Decimal(5, 2) // % added for expected waste
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  entity      Entity @relation("RecipeEntity",     fields: [entityId],     references: [id], onDelete: Cascade)
+  ingredient  Entity @relation("IngredientEntity", fields: [ingredientId], references: [id])
+
+  @@index([entityId], map: "idx_recipe_entity")
+  @@map("RecipeLine")
+}
+
+// ── InventoryStock ────────────────────────────────────────────────────────────
+
+/// Real-time stock levels per entity/variant/branch.
+/// Written by the Inventory Engine on every stock movement.
+model InventoryStock {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityId  String   @db.Uuid
+  variantId String?  @db.Uuid
+  branchId  String   @db.Uuid
+  onHand    Float    @default(0)
+  reserved  Float    @default(0)                  // Allocated to pending orders
+  unit      String   @db.VarChar(30)
+  updatedAt DateTime @updatedAt
+
+  entity  Entity         @relation(fields: [entityId],  references: [id], onDelete: Cascade)
+  variant EntityVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@unique([entityId, variantId, branchId], map: "uq_stock_entity_variant_branch")
+  @@index([entityId],           map: "idx_stock_entity")
+  @@index([branchId, onHand],   map: "idx_stock_branch_onhand")
+  @@map("InventoryStock")
+}
+
+// ── InventoryMovement ─────────────────────────────────────────────────────────
+
+/// Immutable audit log of every stock change.
+model InventoryMovement {
+  id          String   @id @default(uuid()) @db.Uuid
+  entityId    String   @db.Uuid
+  variantId   String?  @db.Uuid
+  branchId    String   @db.Uuid
+  quantity    Float                               // Positive = in, Negative = out
+  unit        String   @db.VarChar(30)
+  reason      String   @db.VarChar(30)           // SALE | WASTE | TRANSFER | DAMAGE | RECIPE | COUNT
+  referenceId String?  @db.Uuid                  // SaleId, PurchaseOrderId, etc.
+  notes       String?
+  operatorId  String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  @@index([entityId, createdAt], map: "idx_movement_entity_created")
+  @@index([branchId, reason],    map: "idx_movement_branch_reason")
+  @@map("InventoryMovement")
+}
+
+// ── Sale ──────────────────────────────────────────────────────────────────────
+
+/// A committed sale transaction. Written exclusively by SalesEngine.commitSale().
+model Sale {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  branchId       String   @db.Uuid
+  operatorId     String   @db.Uuid
+  subtotal       Decimal  @db.Decimal(14, 4)
+  totalTax       Decimal  @db.Decimal(14, 4)
+  grandTotal     Decimal  @db.Decimal(14, 4)
+  currency       String   @db.Char(3)
+  paymentMethod  String   @db.VarChar(20)         // CASH | CARD | WALLET | SPLIT
+  amountTendered Decimal  @db.Decimal(14, 4)
+  change         Decimal  @db.Decimal(14, 4) @default(0)
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime @default(now())
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id])
+  lines   SaleLine[]
+
+  @@index([tenantId, createdAt],           map: "idx_sale_tenant_created")
+  @@index([tenantId, branchId, createdAt], map: "idx_sale_tenant_branch_created")
+  @@index([voidedAt],                      map: "idx_sale_voided")
+  @@map("Sale")
+}
+
+/// A line item within a Sale.
+model SaleLine {
+  id        String   @id @default(uuid()) @db.Uuid
+  saleId    String   @db.Uuid
+  entityId  String   @db.Uuid
+  variantId String?  @db.Uuid
+  quantity  Float
+  unitPrice Decimal  @db.Decimal(14, 4)
+  taxAmount Decimal  @db.Decimal(14, 4)
+  lineTotal Decimal  @db.Decimal(14, 4)
+
+  sale    Sale   @relation(fields: [saleId],   references: [id], onDelete: Cascade)
+  entity  Entity @relation(fields: [entityId], references: [id])
+
+  @@index([saleId],   map: "idx_saleline_sale")
+  @@index([entityId], map: "idx_saleline_entity")
+  @@map("SaleLine")
+}
+
+// ── EntityPriceRule ───────────────────────────────────────────────────────────
+
+/// Pricing rules per entity — used by PricingEngine strategies.
+/// Stores time-window rules, markdown rules, staff-tier prices, etc.
+model EntityPriceRule {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityId  String   @db.Uuid
+  ruleType  String   @db.VarChar(40)              // 'TIME_WINDOW' | 'MARKDOWN' | 'STAFF_TIER'
+  params    Json                                   // Rule-specific parameters
+  priority  Int      @default(0)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime @default(now())
+
+  entity  Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([entityId, priority], map: "idx_pricerule_entity_priority")
+  @@map("EntityPriceRule")
+}
+
+// ── TaxClass ──────────────────────────────────────────────────────────────────
+
+/// Tenant-configured tax classes. Used by TaxEngine.
+model TaxClass {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @db.Uuid
+  name             String   @db.VarChar(60)        // e.g. 'FOOD_STANDARD', 'APPAREL_STANDARD'
+  rate             Decimal  @db.Decimal(5, 2)      // e.g. 16.00 = 16%
+  inclusive        Boolean  @default(false)         // Tax included in price?
+  appliesToChannel String[]                         // Empty = all channels
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name], map: "uq_taxclass_tenant_name")
+  @@index([tenantId],        map: "idx_taxclass_tenant")
+  @@map("TaxClass")
+}
+
+// ── Relation disambiguation for RecipeLine ────────────────────────────────────
+// Prisma requires explicit relation names when a model has multiple FK refs
+// to the same table. RecipeLine references Entity twice:
+//   entityId     → "RecipeEntity"
+//   ingredientId → "IngredientEntity"
+// The Entity model's recipeLines field uses @relation("RecipeEntity").
+// Add a recipesAsIngredient relation on Entity if needed for reverse navigation.

@@ -1,8 +1,18 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Query, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { CurrentUser, CurrentUserPayload } from "src/common/decorators/current-user.decorator";
+import { messageAttachmentMulterOptions } from "src/common/utils/message-attachment-upload.util";
 import { CreateThreadDto } from "src/modules/messages/dto/create-thread.dto";
+import { SendMessageAttachmentDto } from "src/modules/messages/dto/send-message-attachment.dto";
 import { SendMessageDto } from "src/modules/messages/dto/send-message.dto";
 import { MessagesService } from "src/modules/messages/messages.service";
+
+interface UploadedAttachment {
+  buffer: Buffer;
+  mimetype: string;
+  size: number;
+  originalname: string;
+}
 
 @Controller("messages")
 export class MessagesController {
@@ -18,6 +28,11 @@ export class MessagesController {
     return this.messagesService.listThreads(user.sub);
   }
 
+  @Get("quick-replies")
+  quickReplies(@CurrentUser() user: CurrentUserPayload, @Query("threadId") threadId?: string) {
+    return this.messagesService.getQuickReplies(user.sub, threadId);
+  }
+
   @Get("threads/:id")
   getMessages(
     @CurrentUser() user: CurrentUserPayload,
@@ -31,6 +46,17 @@ export class MessagesController {
   @Post("threads/:id")
   sendMessage(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string, @Body() dto: SendMessageDto) {
     return this.messagesService.sendMessage(user.sub, id, dto);
+  }
+
+  @Post("threads/:id/attachments")
+  @UseInterceptors(FileInterceptor("file", messageAttachmentMulterOptions))
+  sendAttachment(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+    @UploadedFile() file: UploadedAttachment,
+    @Body() dto: SendMessageAttachmentDto
+  ) {
+    return this.messagesService.sendAttachment(user.sub, id, file, dto);
   }
 
   @Put("threads/:id/read")
