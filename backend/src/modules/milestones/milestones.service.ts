@@ -462,30 +462,31 @@ export class MilestonesService {
       }
     );
 
-    const updatedMilestone = await this.prisma.milestone.update({
-      where: { id: milestoneId },
-      data: {
-        status: "RELEASED" as MilestoneStatus,
-        releasedAt: new Date()
-      }
-    });
-
-    const payout = await this.prisma.payout.create({
-      data: {
-        milestoneId,
-        developerId: hireRequest.developerId,
-        amount: netAmount,
-        currency,
-        stripeTransferId: transfer.id,
-        status: "IN_TRANSIT" as PayoutStatus,
-        providerPayload: {
-          provider: "stripe",
-          idempotencyKey,
-          note: note ? sanitizeInput(note) : null,
-          transferCreatedAt: transfer.created
+    const [updatedMilestone, payout] = await this.prisma.$transaction([
+      this.prisma.milestone.update({
+        where: { id: milestoneId },
+        data: {
+          status: "RELEASED" as MilestoneStatus,
+          releasedAt: new Date()
         }
-      }
-    });
+      }),
+      this.prisma.payout.create({
+        data: {
+          milestoneId,
+          developerId: hireRequest.developerId,
+          amount: netAmount,
+          currency,
+          stripeTransferId: transfer.id,
+          status: "IN_TRANSIT" as PayoutStatus,
+          providerPayload: {
+            provider: "stripe",
+            idempotencyKey,
+            note: note ? sanitizeInput(note) : null,
+            transferCreatedAt: transfer.created
+          }
+        }
+      })
+    ]);
 
     await this.invalidateMilestoneCaches(hireRequest.clientId, hireRequest.developerId);
     await this.recordEvent(milestoneId, "TRANSFER_CREATED", null, {
@@ -1024,22 +1025,70 @@ export class MilestonesService {
     });
   }
 
+  /**
+   * Reconciliation backstop: createPayoutTransfer() calls Stripe then writes
+   * milestone+payout in one DB transaction. If the process dies after Stripe
+   * confirms the transfer but before that transaction commits, this event is
+   * the only record the transfer ever happened, so it must be able to
+   * backfill the missing milestone/payout state, not just confirm it.
+   */
   async applyTransferCreated(transfer: Stripe.Transfer) {
-    const payout = await this.prisma.payout.findUnique({
+    const existingPayout = await this.prisma.payout.findUnique({
       where: { stripeTransferId: transfer.id }
     });
 
-    if (!payout || payout.status === "IN_TRANSIT") {
+    if (existingPayout) {
+      await this.recordEvent(existingPayout.milestoneId, "TRANSFER_CONFIRMED", null, {
+        stripeTransferId: transfer.id
+      });
       return;
     }
 
-    await this.prisma.payout.update({
-      where: { id: payout.id },
-      data: { status: "IN_TRANSIT" as PayoutStatus }
+    const milestoneId = typeof transfer.metadata?.milestoneId === "string" ? transfer.metadata.milestoneId : null;
+    if (!milestoneId) {
+      return;
+    }
+
+    const milestone = await this.prisma.milestone.findUnique({
+      where: { id: milestoneId },
+      include: { hireRequest: true }
     });
 
-    await this.recordEvent(payout.milestoneId, "TRANSFER_CONFIRMED", null, {
-      stripeTransferId: transfer.id
+    if (!milestone || milestone.status === "RELEASED" || milestone.status === "REFUNDED") {
+      return;
+    }
+
+    const netAmount = transfer.amount / 100;
+
+    await this.prisma.$transaction([
+      this.prisma.milestone.update({
+        where: { id: milestoneId },
+        data: {
+          status: "RELEASED" as MilestoneStatus,
+          releasedAt: new Date()
+        }
+      }),
+      this.prisma.payout.create({
+        data: {
+          milestoneId,
+          developerId: milestone.hireRequest.developerId,
+          amount: netAmount,
+          currency: transfer.currency.toUpperCase(),
+          stripeTransferId: transfer.id,
+          status: "IN_TRANSIT" as PayoutStatus,
+          providerPayload: {
+            provider: "stripe",
+            backfilledFromWebhook: true,
+            transferCreatedAt: transfer.created
+          }
+        }
+      })
+    ]);
+
+    await this.invalidateMilestoneCaches(milestone.hireRequest.clientId, milestone.hireRequest.developerId);
+    await this.recordEvent(milestoneId, "TRANSFER_CONFIRMED", null, {
+      stripeTransferId: transfer.id,
+      backfilled: true
     });
   }
 
