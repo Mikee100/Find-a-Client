@@ -581,6 +581,10 @@ export class MilestonesService {
       throw new BadRequestException("Cannot dispute a closed milestone");
     }
 
+    if (milestone.status === "DISPUTED") {
+      throw new BadRequestException("This milestone already has an open dispute");
+    }
+
     const raisedBy: DisputeRaisedBy = isDeveloper
       ? "DEVELOPER"
       : isClient
@@ -1036,11 +1040,13 @@ export class MilestonesService {
   }
 
   /**
-   * Reconciliation backstop: createPayoutTransfer() calls Stripe then writes
-   * milestone+payout in one DB transaction. If the process dies after Stripe
-   * confirms the transfer but before that transaction commits, this event is
-   * the only record the transfer ever happened, so it must be able to
-   * backfill the missing milestone/payout state, not just confirm it.
+   * Confirms a payout as PAID once Stripe reports the transfer succeeded —
+   * without this, payouts would sit at IN_TRANSIT indefinitely. Also acts as
+   * a reconciliation backstop: createPayoutTransfer() calls Stripe then
+   * writes milestone+payout in one DB transaction, and if the process dies
+   * after Stripe confirms the transfer but before that transaction commits,
+   * this event is the only record the transfer ever happened, so it must be
+   * able to backfill the missing milestone/payout state, not just confirm it.
    */
   async applyTransferCreated(transfer: Stripe.Transfer) {
     const existingPayout = await this.prisma.payout.findUnique({
@@ -1048,6 +1054,13 @@ export class MilestonesService {
     });
 
     if (existingPayout) {
+      if (existingPayout.status !== "FAILED" && existingPayout.status !== "PAID") {
+        await this.prisma.payout.update({
+          where: { id: existingPayout.id },
+          data: { status: "PAID" as PayoutStatus }
+        });
+      }
+
       await this.recordEvent(existingPayout.milestoneId, "TRANSFER_CONFIRMED", null, {
         stripeTransferId: transfer.id
       });
@@ -1085,7 +1098,7 @@ export class MilestonesService {
           amount: netAmount,
           currency: transfer.currency.toUpperCase(),
           stripeTransferId: transfer.id,
-          status: "IN_TRANSIT" as PayoutStatus,
+          status: "PAID" as PayoutStatus,
           providerPayload: {
             provider: "stripe",
             backfilledFromWebhook: true,
