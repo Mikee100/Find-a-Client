@@ -400,7 +400,6 @@ model Milestone {
   reviews       Review[]
   events        MilestoneEvent[]
 
-  @@unique([hireRequestId], map: "ux_milestone_hire_request_single_v1")
   @@index([status, createdAt], map: "idx_milestone_status_created")
   @@index([hireRequestId, status], map: "idx_milestone_hire_status")
 }

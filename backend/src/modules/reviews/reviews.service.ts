@@ -9,7 +9,8 @@ export class ReviewsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Creates one review per client per project.
+   * Creates one review per released milestone. A hire request with multiple
+   * milestones (phased engagement) allows one review per released phase.
    */
   async create(projectSlug: string, reviewerId: string, role: UserRole, dto: CreateReviewDto) {
     if (role !== USER_ROLE.CLIENT) {
