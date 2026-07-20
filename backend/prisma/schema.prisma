@@ -88,6 +88,49 @@ enum EmailDeliveryStatus {
   FAILED
 }
 
+enum MilestoneStatus {
+  PENDING
+  FUNDED
+  IN_PROGRESS
+  SUBMITTED
+  RELEASED
+  DISPUTED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  REQUIRES_PAYMENT_METHOD
+  REQUIRES_CONFIRMATION
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
+}
+
+enum PayoutStatus {
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  CANCELED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_RELEASE
+  RESOLVED_REFUND
+  CANCELED
+}
+
+enum DisputeRaisedBy {
+  CLIENT
+  DEVELOPER
+  SYSTEM
+}
+
 model User {
   id            String     @id @default(uuid()) @db.Uuid
   email         String     @unique
@@ -113,6 +156,10 @@ model User {
   githubUsername String?   @db.VarChar(120)
   githubVerifiedAt DateTime?
   linkedinUrl   String?
+  stripeAccountId String?  @unique @db.VarChar(120)
+  stripeChargesEnabled Boolean @default(false)
+  stripePayoutsEnabled Boolean @default(false)
+  stripeDetailsSubmitted Boolean @default(false)
   isVerified    Boolean    @default(false)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -131,6 +178,7 @@ model User {
   threadParticipantsB Thread[] @relation("ThreadParticipantB")
   sentHireRequests   HireRequest[] @relation("HireRequestClient")
   receivedHireRequests HireRequest[] @relation("HireRequestDeveloper")
+  payouts       Payout[]
 
   @@index([githubVerifiedAt], map: "idx_user_github_verified_at")
   @@index([role, experienceLevel, availabilityStatus], map: "idx_user_role_experience_availability")
@@ -320,6 +368,7 @@ model HireRequest {
   developer            User              @relation("HireRequestDeveloper", fields: [developerId], references: [id], onDelete: Cascade)
   project              Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
   thread               Thread?           @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  milestones           Milestone[]
 
   @@index([clientId, createdAt])
   @@index([developerId, createdAt])
@@ -328,6 +377,115 @@ model HireRequest {
   @@index([threadId])
   @@index([clientId, status, createdAt(sort: Desc)], map: "idx_hirerequest_client_status_created_desc")
   @@index([developerId, status, createdAt(sort: Desc)], map: "idx_hirerequest_developer_status_created_desc")
+}
+
+model Milestone {
+  id            String          @id @default(uuid()) @db.Uuid
+  hireRequestId String          @db.Uuid
+  title         String          @db.VarChar(160)
+  amount        Decimal         @db.Decimal(12, 2)
+  currency      String          @db.Char(3)
+  status        MilestoneStatus @default(PENDING)
+  dueDate       DateTime?
+  fundedAt      DateTime?
+  submittedAt   DateTime?
+  releasedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  hireRequest   HireRequest     @relation(fields: [hireRequestId], references: [id], onDelete: Cascade)
+  payments      Payment[]
+  payouts       Payout[]
+  disputes      Dispute[]
+  reviews       Review[]
+  events        MilestoneEvent[]
+
+  @@unique([hireRequestId], map: "ux_milestone_hire_request_single_v1")
+  @@index([status, createdAt], map: "idx_milestone_status_created")
+  @@index([hireRequestId, status], map: "idx_milestone_hire_status")
+}
+
+model Payment {
+  id                    String        @id @default(uuid()) @db.Uuid
+  milestoneId           String        @db.Uuid
+  stripePaymentIntentId String        @unique @db.VarChar(120)
+  amount                Decimal       @db.Decimal(12, 2)
+  feeAmount             Decimal       @default(0) @db.Decimal(12, 2)
+  currency              String        @db.Char(3)
+  status                PaymentStatus @default(REQUIRES_CONFIRMATION)
+  idempotencyKey        String?       @db.VarChar(120)
+  providerPayload       Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  milestone             Milestone     @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([milestoneId, createdAt], map: "idx_payment_milestone_created")
+  @@index([status, createdAt], map: "idx_payment_status_created")
+  @@index([idempotencyKey], map: "idx_payment_idempotency")
+}
+
+model Payout {
+  id               String       @id @default(uuid()) @db.Uuid
+  milestoneId      String       @db.Uuid
+  developerId      String       @db.Uuid
+  stripeTransferId String?      @unique @db.VarChar(120)
+  amount           Decimal      @db.Decimal(12, 2)
+  currency         String       @db.Char(3)
+  status           PayoutStatus @default(PENDING)
+  providerPayload  Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  milestone        Milestone    @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  developer        User         @relation(fields: [developerId], references: [id], onDelete: Cascade)
+
+  @@index([developerId, createdAt], map: "idx_payout_developer_created")
+  @@index([status, createdAt], map: "idx_payout_status_created")
+  @@index([milestoneId], map: "idx_payout_milestone")
+}
+
+model Dispute {
+  id               String          @id @default(uuid()) @db.Uuid
+  milestoneId      String          @db.Uuid
+  raisedBy         DisputeRaisedBy
+  raisedByUserId   String?         @db.Uuid
+  reason           String
+  status           DisputeStatus   @default(OPEN)
+  resolution       String?
+  resolvedByUserId String?         @db.Uuid
+  resolvedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  milestone        Milestone       @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([milestoneId, status], map: "idx_dispute_milestone_status")
+  @@index([createdAt], map: "idx_dispute_created")
+}
+
+model MilestoneEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  milestoneId String   @db.Uuid
+  eventType   String   @db.VarChar(80)
+  actorUserId String?  @db.Uuid
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  milestone   Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([milestoneId, createdAt], map: "idx_milestone_event_created")
+}
+
+model StripeWebhookEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  stripeEventId String    @unique @db.VarChar(120)
+  type          String    @db.VarChar(80)
+  payload       Json
+  processedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([type, createdAt], map: "idx_stripe_webhook_event_type_created")
 }
 
 model Message {
@@ -374,13 +532,13 @@ model Review {
   id         String   @id @default(uuid()) @db.Uuid
   projectId  String   @db.Uuid
   reviewerId String   @db.Uuid
+  milestoneId String  @unique @db.Uuid
   rating     Int
   comment    String?
   createdAt  DateTime @default(now())
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   reviewer   User     @relation(fields: [reviewerId], references: [id])
-
-  @@unique([projectId, reviewerId])
+  milestone  Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 }
 
 model Notification {

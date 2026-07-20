@@ -15,6 +15,7 @@ import {
 import FullPageLoader from "@/components/ui/full-page-loader";
 import BackButton from "@/components/ui/back-button";
 import DeveloperDashboardNavbar from "@/features/developer/developer-dashboard-navbar";
+import DeveloperPayoutSection from "@/components/milestones/developer-payout-section";
 
 const LOCATION_OPTIONS = [
   "Lagos, Nigeria",
@@ -520,6 +521,8 @@ export default function DeveloperSettingsPage() {
               <p className="text-xs text-slate-500">@{profile?.username} · {profile?.role}</p>
             </div>
           </div>
+
+          {profile ? <DeveloperPayoutSection developerId={profile.id} /> : null}
 
           <form onSubmit={onSubmit} className="grid gap-4">
             <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">

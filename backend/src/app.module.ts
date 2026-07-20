@@ -21,7 +21,9 @@ import { HealthController } from "src/modules/health.controller";
 import { HireRequestsModule } from "src/modules/hire-requests/hire-requests.module";
 import { MediaModule } from "src/modules/media/media.module";
 import { MessagesModule } from "src/modules/messages/messages.module";
+import { MilestonesModule } from "src/modules/milestones/milestones.module";
 import { NotificationsModule } from "src/modules/notifications/notifications.module";
+import { PaymentsModule } from "src/modules/payments/payments.module";
 import { ProjectsModule } from "src/modules/projects/projects.module";
 import { ReviewsModule } from "src/modules/reviews/reviews.module";
 import { SearchModule } from "src/modules/search/search.module";
@@ -52,6 +54,8 @@ import { PlatformModule } from "src/modules/platform/platform.module";
     UsersModule,
     ProjectsModule,
     HireRequestsModule,
+    MilestonesModule,
+    PaymentsModule,
     MediaModule,
     MessagesModule,
     NotificationsModule,

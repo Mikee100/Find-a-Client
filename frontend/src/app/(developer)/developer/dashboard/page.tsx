@@ -26,7 +26,6 @@ import {
 import {
   CurrentUserProfile,
   getDeveloperDashboardData,
-  getAuthSession,
   logout,
   logoutEverywhere,
   MyProjectListItem,
@@ -74,12 +73,12 @@ const navItems: NavItem[] = [
   { label: "Portfolio", icon: FolderKanban, href: "/developer/projects" },
   { label: "Projects", icon: Briefcase, href: "/projects" },
   { label: "Messages", icon: MessageSquare, href: "/developer/messages" },
-  { label: "Analytics", icon: Zap, href: "/developer/dashboard#analytics" },
-  { label: "AI Match", icon: Sparkles, href: "/developer/dashboard#ai-match" },
-  { label: "Saved Projects", icon: Users, href: "/developer/dashboard#saved-clients" },
-  { label: "Notifications", icon: Bell, href: "/developer/dashboard#notifications" },
+  { label: "Analytics", icon: Zap, href: "/developer/analytics" },
+  { label: "AI Match", icon: Sparkles, href: "/developer/ai-match" },
+  { label: "Saved Projects", icon: Users, href: "/developer/saved-projects" },
+  { label: "Notifications", icon: Bell, href: "/developer/notifications" },
   { label: "Settings", icon: Settings, href: "/developers/settings" },
-  { label: "Help", icon: CircleHelp, href: "/developer/dashboard#help" },
+  { label: "Help", icon: CircleHelp, href: "/developer/help" },
 ];
 
 function formatTime(iso: string): string {
@@ -193,6 +192,137 @@ function AnimatedCard({
     >
       {children}
     </motion.div>
+  );
+}
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`animate-pulse rounded-xl bg-slate-200/70 ${className}`} />;
+}
+
+function DashboardSkeleton() {
+  return (
+    <>
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-6 lg:grid-cols-[1fr_210px]">
+          <div className="space-y-3">
+            <SkeletonBlock className="h-4 w-40" />
+            <SkeletonBlock className="h-9 w-64" />
+            <SkeletonBlock className="h-4 w-full max-w-2xl" />
+            <SkeletonBlock className="h-4 w-5/6" />
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <SkeletonBlock className="h-3 w-28" />
+            <div className="mt-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <SkeletonBlock className="h-4 w-28" />
+                <SkeletonBlock className="h-4 w-10" />
+              </div>
+              <SkeletonBlock className="h-1.5 w-full rounded-full" />
+              <SkeletonBlock className="h-3 w-4/5" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="flex gap-2 overflow-x-auto pb-1">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <article key={index} className="min-w-42.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+            <SkeletonBlock className="mb-2 h-3 w-24" />
+            <SkeletonBlock className="h-6 w-14" />
+            <SkeletonBlock className="mt-2 h-3 w-28" />
+          </article>
+        ))}
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <SkeletonBlock className="mb-4 h-5 w-28" />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <article key={index} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <SkeletonBlock className="h-32 w-full rounded-none" />
+                <div className="space-y-2 p-4">
+                  <SkeletonBlock className="h-4 w-3/4" />
+                  <SkeletonBlock className="h-3 w-full" />
+                  <SkeletonBlock className="h-3 w-2/3" />
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <SkeletonBlock className="mb-4 h-5 w-36" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <article key={index} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <SkeletonBlock className="h-4 w-2/3" />
+                <SkeletonBlock className="mt-2 h-3 w-full" />
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <section className="xl:col-span-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <SkeletonBlock className="mb-4 h-5 w-40" />
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <SkeletonBlock key={index} className="h-16 w-full" />
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <SkeletonBlock className="mb-3 h-5 w-20" />
+          <SkeletonBlock className="h-4 w-5/6" />
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+            <SkeletonBlock className="h-24 w-full" />
+            <SkeletonBlock className="h-24 w-full" />
+          </div>
+        </section>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <SkeletonBlock className="mb-4 h-5 w-32" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <SkeletonBlock key={index} className="h-16 w-full" />
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <SkeletonBlock className="mb-4 h-5 w-24" />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <SkeletonBlock key={index} className="h-28 w-full" />
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <SkeletonBlock className="mb-4 h-5 w-44" />
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <SkeletonBlock key={index} className="h-20 w-full" />
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <SkeletonBlock className="mb-2 h-5 w-16" />
+        <SkeletonBlock className="h-4 w-3/5" />
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <SkeletonBlock key={index} className="h-12 w-full" />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -842,6 +972,7 @@ function HelpSection() {
 export default function DeveloperDashboardPage() {
   const router = useRouter();
   const [hasSession, setHasSession] = useState<boolean | undefined>(undefined);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [pendingLogout, setPendingLogout] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
@@ -860,24 +991,19 @@ export default function DeveloperDashboardPage() {
   });
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void getAuthSession()
-        .then(() => setHasSession(true))
-        .catch(() => {
-          setHasSession(false);
-          router.replace("/login");
-        });
-    });
-  }, [router]);
-
-  useEffect(() => {
-    if (!hasSession) {
-      return;
-    }
+    let cancelled = false;
 
     async function loadDashboardData() {
+      setDashboardLoading(true);
       try {
+        const startedAt = performance.now();
         const dashboardData = await getDeveloperDashboardData();
+
+        if (cancelled) {
+          return;
+        }
+
+        setHasSession(true);
         setProfile(dashboardData.profile);
         setThreads(dashboardData.threads);
         setNotifications(dashboardData.notifications);
@@ -885,25 +1011,31 @@ export default function DeveloperDashboardPage() {
         setMyProjects(dashboardData.myProjects);
         setCompleteness(dashboardData.completeness);
         setRecommendedProjects(dashboardData.recommendedProjects);
+
+        if (process.env.NODE_ENV !== "production") {
+          const elapsedMs = Math.round(performance.now() - startedAt);
+          console.info(`[developer-dashboard] loaded in ${elapsedMs}ms`);
+        }
       } catch {
-        setProfile(null);
-        setThreads([]);
-        setNotifications([]);
-        setSavedProjects([]);
-        setMyProjects([]);
-        setRecommendedProjects([]);
-        setCompleteness({
-          percentage: 0,
-          completedFields: 0,
-          totalFields: 0,
-          missingFields: [],
-          nextAction: null
-        });
+        if (cancelled) {
+          return;
+        }
+
+        setHasSession(false);
+        router.replace("/login");
+      } finally {
+        if (!cancelled) {
+          setDashboardLoading(false);
+        }
       }
     }
 
     void loadDashboardData();
-  }, [hasSession]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   async function onLogout() {
     setPendingLogout(true);
@@ -1026,7 +1158,7 @@ export default function DeveloperDashboardPage() {
     return [...fromThreads, ...fromNotifications].slice(0, 6);
   }, [notifications, profile?.id, threads]);
 
-  if (!hasSession) {
+  if (hasSession === false) {
     return null;
   }
 
@@ -1055,50 +1187,56 @@ export default function DeveloperDashboardPage() {
           />
 
           <main className="space-y-6 p-4 sm:p-6">
-            <Hero
-              name={profile?.fullName ?? "Developer"}
-              unread={unreadNotifications}
-              profileViews={totalProjectViews}
-              messages={messageActivityCount}
-              completeness={completeness}
-            />
+            {dashboardLoading ? (
+              <DashboardSkeleton />
+            ) : (
+              <>
+                <Hero
+                  name={profile?.fullName ?? "Developer"}
+                  unread={unreadNotifications}
+                  profileViews={totalProjectViews}
+                  messages={messageActivityCount}
+                  completeness={completeness}
+                />
 
-            <section className="flex gap-2 overflow-x-auto pb-1">
-              <StatCard title="Project views" value={String(totalProjectViews)} trend="Live" subtitle="Across your portfolio" delay={0.05} />
-              <StatCard title="Messages" value={String(messageActivityCount)} trend="Live" subtitle={messageActivitySubtitle} delay={0.09} />
-              <StatCard title="Saved projects" value={String(savedProjects.length)} trend="Live" subtitle="In your shortlist" delay={0.13} />
-              <StatCard title="Published" value={String(publishedProjectCount)} trend="Live" subtitle="Visible to clients" delay={0.17} />
-              <StatCard title="Drafts" value={String(draftProjectCount)} trend="Live" subtitle="Not yet published" delay={0.21} />
-              <StatCard title="Project likes" value={String(totalProjectLikes)} trend="Live" subtitle="Engagement signal" delay={0.25} />
-            </section>
+                <section className="flex gap-2 overflow-x-auto pb-1">
+                  <StatCard title="Project views" value={String(totalProjectViews)} trend="Live" subtitle="Across your portfolio" delay={0.05} />
+                  <StatCard title="Messages" value={String(messageActivityCount)} trend="Live" subtitle={messageActivitySubtitle} delay={0.09} />
+                  <StatCard title="Saved projects" value={String(savedProjects.length)} trend="Live" subtitle="In your shortlist" delay={0.13} />
+                  <StatCard title="Published" value={String(publishedProjectCount)} trend="Live" subtitle="Visible to clients" delay={0.17} />
+                  <StatCard title="Drafts" value={String(draftProjectCount)} trend="Live" subtitle="Not yet published" delay={0.21} />
+                  <StatCard title="Project likes" value={String(totalProjectLikes)} trend="Live" subtitle="Engagement signal" delay={0.25} />
+                </section>
 
-            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <PortfolioGrid projects={myProjects} />
-              <MessagesPreview threads={threads} />
-            </div>
+                <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+                  <PortfolioGrid projects={myProjects} />
+                  <MessagesPreview threads={threads} />
+                </div>
 
-            <div className="grid gap-6 xl:grid-cols-3">
-              <div className="xl:col-span-2">
-                <ActivityFeed activities={activities} />
-              </div>
-              <AiMatchWidget recommendations={recommendationItems} completeness={completeness} />
-            </div>
+                <div className="grid gap-6 xl:grid-cols-3">
+                  <div className="xl:col-span-2">
+                    <ActivityFeed activities={activities} />
+                  </div>
+                  <AiMatchWidget recommendations={recommendationItems} completeness={completeness} />
+                </div>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <SavedClientsSection savedItems={savedProjects} />
-              <AnalyticsSection
-                totalProjectViews={totalProjectViews}
-                totalProjectLikes={totalProjectLikes}
-                threadCount={threads.length}
-                unreadMessages={unreadMessages}
-                unreadNotifications={unreadNotifications}
-                publishedProjectCount={publishedProjectCount}
-              />
-            </div>
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <SavedClientsSection savedItems={savedProjects} />
+                  <AnalyticsSection
+                    totalProjectViews={totalProjectViews}
+                    totalProjectLikes={totalProjectLikes}
+                    threadCount={threads.length}
+                    unreadMessages={unreadMessages}
+                    unreadNotifications={unreadNotifications}
+                    publishedProjectCount={publishedProjectCount}
+                  />
+                </div>
 
-            <RecommendedProjects recommendations={recommendationItems} />
+                <RecommendedProjects recommendations={recommendationItems} />
 
-            <HelpSection />
+                <HelpSection />
+              </>
+            )}
 
           </main>
         </div>

@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { ConfigService } from "@nestjs/config";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { WebSocket } from "ws";
@@ -26,6 +27,40 @@ export class MessagesService {
       }
     }
   } as const;
+
+  private isTransientDatabaseError(error: unknown): boolean {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return error.code === "P1001" || error.code === "P1002";
+    }
+
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return message.includes("can't reach database server") || message.includes("database is temporarily unavailable");
+  }
+
+  private async withDatabaseRetry<T>(operation: () => Promise<T>, label: string, retries = 2): Promise<T> {
+    let attempt = 0;
+
+    while (true) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.isTransientDatabaseError(error)) {
+          throw error;
+        }
+
+        if (attempt >= retries) {
+          throw new ServiceUnavailableException(`Messages service temporarily unavailable (${label}). Please try again.`);
+        }
+
+        attempt += 1;
+        await new Promise((resolve) => setTimeout(resolve, attempt * 120));
+      }
+    }
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -223,14 +258,18 @@ export class MessagesService {
    */
   async getThreadMessages(userId: string, threadId: string, cursor?: string, limit = 30) {
     await this.assertThreadParticipant(userId, threadId);
-    const messages = await this.prisma.message.findMany({
-      where: { threadId },
-      include: this.messageInclude,
-      orderBy: { createdAt: "desc" },
-      cursor: cursor ? { id: cursor } : undefined,
-      skip: cursor ? 1 : 0,
-      take: limit + 1
-    });
+    const messages = await this.withDatabaseRetry(
+      () =>
+        this.prisma.message.findMany({
+          where: { threadId },
+          include: this.messageInclude,
+          orderBy: { createdAt: "desc" },
+          cursor: cursor ? { id: cursor } : undefined,
+          skip: cursor ? 1 : 0,
+          take: limit + 1
+        }),
+      "get-thread-messages"
+    );
     const { data, meta } = buildPagination(messages, limit);
     return { success: true, data, meta };
   }
@@ -353,7 +392,10 @@ export class MessagesService {
   }
 
   private async assertThreadParticipant(userId: string, threadId: string) {
-    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    const thread = await this.withDatabaseRetry(
+      () => this.prisma.thread.findUnique({ where: { id: threadId } }),
+      "assert-thread-participant"
+    );
     if (!thread) {
       throw new NotFoundException("Thread not found");
     }

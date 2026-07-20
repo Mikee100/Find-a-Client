@@ -11,15 +11,23 @@ function getBrowserClient(): SupabaseClient | null {
     return browserClient;
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+    || process.env.SUPABASE_URL?.trim();
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+    || process.env.SUPABASE_ANON_KEY?.trim();
 
   if (!url || !anonKey) {
     browserClient = null;
     return null;
   }
 
-  browserClient = createClient(url, anonKey);
+  browserClient = createClient(url, anonKey, {
+    auth: {
+      detectSessionInUrl: false
+    }
+  });
   return browserClient;
 }
 
