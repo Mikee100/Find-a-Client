@@ -144,4 +144,75 @@ describe("MilestonesService", () => {
       expect(prisma.milestone.create).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("dispute", () => {
+    it("rejects raising a second dispute while one is already open", async () => {
+      const prisma = {
+        milestone: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: "milestone-id",
+            status: "DISPUTED",
+            hireRequest: { clientId: CLIENT_ID, developerId: DEVELOPER_ID }
+          })
+        }
+      };
+      const service = new MilestonesService(
+        prisma as never,
+        { dispatch: jest.fn() } as never,
+        { invalidateNamespace: jest.fn() } as never,
+        { get: () => "" } as never
+      );
+
+      await expect(
+        service.dispute(CLIENT_ID, "CLIENT", "milestone-id", { reason: "still broken" } as never)
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe("applyTransferCreated", () => {
+    it("marks an in-transit payout as PAID once Stripe confirms the transfer", async () => {
+      const prisma = {
+        payout: {
+          findUnique: jest.fn().mockResolvedValue({ id: "payout-id", milestoneId: "milestone-id", status: "IN_TRANSIT" }),
+          update: jest.fn().mockResolvedValue({})
+        },
+        milestoneEvent: { create: jest.fn().mockResolvedValue({}) }
+      };
+      const service = new MilestonesService(prisma as never, {} as never, {} as never, { get: () => "" } as never);
+
+      await service.applyTransferCreated({
+        id: "tr_123",
+        metadata: {},
+        amount: 1000,
+        currency: "usd",
+        created: 0
+      } as never);
+
+      expect(prisma.payout.update).toHaveBeenCalledWith({
+        where: { id: "payout-id" },
+        data: { status: "PAID" }
+      });
+    });
+
+    it("does not resurrect a payout that already failed", async () => {
+      const prisma = {
+        payout: {
+          findUnique: jest.fn().mockResolvedValue({ id: "payout-id", milestoneId: "milestone-id", status: "FAILED" }),
+          update: jest.fn()
+        },
+        milestoneEvent: { create: jest.fn().mockResolvedValue({}) }
+      };
+      const service = new MilestonesService(prisma as never, {} as never, {} as never, { get: () => "" } as never);
+
+      await service.applyTransferCreated({
+        id: "tr_123",
+        metadata: {},
+        amount: 1000,
+        currency: "usd",
+        created: 0
+      } as never);
+
+      expect(prisma.payout.update).not.toHaveBeenCalled();
+    });
+  });
 });
