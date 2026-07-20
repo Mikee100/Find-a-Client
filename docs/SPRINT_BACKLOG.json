@@ -1,0 +1,490 @@
+{
+  "name": "Find a Client 90-Day Sprint Backlog",
+  "version": "1.0.0",
+  "lastUpdated": "2026-07-13",
+  "cadence": "2-week sprints",
+  "statusValues": [
+    "todo",
+    "in_progress",
+    "blocked",
+    "done"
+  ],
+  "ownerRoles": [
+    "backend",
+    "frontend",
+    "product",
+    "ops",
+    "admin"
+  ],
+  "sprints": [
+    {
+      "id": "S0",
+      "name": "Sprint 0 - Alignment and Guardrails",
+      "window": "Week 1",
+      "goals": [
+        "Finalize monetization and payment policy",
+        "Set up feature flags and observability baseline",
+        "Approve v1 single-milestone scope"
+      ]
+    },
+    {
+      "id": "S1",
+      "name": "Sprint 1 - Payments Data and Onboarding",
+      "window": "Weeks 2-3",
+      "goals": [
+        "Ship milestone/payment/payout/dispute schema",
+        "Add Stripe Connect account onboarding and status",
+        "Set up webhook verification and replay protection"
+      ]
+    },
+    {
+      "id": "S2",
+      "name": "Sprint 2 - Fund to Release Flow",
+      "window": "Weeks 4-5",
+      "goals": [
+        "Ship create/fund/submit/release/dispute endpoints",
+        "Enforce milestone state machine",
+        "Store transaction audit events"
+      ]
+    },
+    {
+      "id": "S3",
+      "name": "Sprint 3 - Trust Gating and Ranking Outcomes",
+      "window": "Weeks 6-7",
+      "goals": [
+        "Gate reviews to released milestones",
+        "Add work-verified trust signal",
+        "Update ranking to include outcome metrics"
+      ]
+    },
+    {
+      "id": "S4",
+      "name": "Sprint 4 - Quality Controls and GTM Wedge",
+      "window": "Weeks 8-9",
+      "goals": [
+        "Extend anti-spam throttles",
+        "Launch flagged moderation queue",
+        "Execute one niche-focused GTM wedge"
+      ]
+    },
+    {
+      "id": "S5",
+      "name": "Sprint 5 - AI UX and KPI Hardening",
+      "window": "Weeks 10-11",
+      "goals": [
+        "Integrate AI endpoints into role journeys",
+        "Wire authoritative KPI dashboards",
+        "Polish trust UI and flow consistency"
+      ]
+    },
+    {
+      "id": "S6",
+      "name": "Sprint 6 - Release Readiness",
+      "window": "Weeks 12-13",
+      "goals": [
+        "Pass all P0 release gates",
+        "Validate rollback and incident playbooks",
+        "Finalize launch go/no-go"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "FAC-001",
+      "sprintId": "S0",
+      "title": "Approve take-rate monetization policy",
+      "workstream": "payments",
+      "ownerRole": "product",
+      "priority": "P0",
+      "storyPoints": 3,
+      "status": "todo",
+      "dependencies": [],
+      "acceptanceCriteria": [
+        "Take-rate percentage and fee basis are documented",
+        "Policy approved by product and operations",
+        "Policy linked in roadmap docs"
+      ]
+    },
+    {
+      "id": "FAC-002",
+      "sprintId": "S0",
+      "title": "Add feature flags for payments and trust gating",
+      "workstream": "platform",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [],
+      "acceptanceCriteria": [
+        "Flags exist for payments flow and review gating",
+        "Default safe-off in production config",
+        "Flag states visible in admin/debug endpoint"
+      ]
+    },
+    {
+      "id": "FAC-003",
+      "sprintId": "S0",
+      "title": "Instrument payment and trust domain events",
+      "workstream": "observability",
+      "ownerRole": "ops",
+      "priority": "P1",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [
+        "FAC-002"
+      ],
+      "acceptanceCriteria": [
+        "Event names defined for milestone/payment/payout/dispute/review unlock",
+        "Structured logs include correlation identifiers",
+        "Basic dashboards for event counts are available"
+      ]
+    },
+    {
+      "id": "FAC-004",
+      "sprintId": "S1",
+      "title": "Implement Prisma milestone/payment/payout/dispute schema",
+      "workstream": "payments",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-001"
+      ],
+      "acceptanceCriteria": [
+        "New enums and models added and migrated",
+        "Indexes and constraints align with schema plan",
+        "Migration dry-run passes in staging-like database"
+      ]
+    },
+    {
+      "id": "FAC-005",
+      "sprintId": "S1",
+      "title": "Add Stripe Connect onboarding and status endpoint",
+      "workstream": "payments",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-004"
+      ],
+      "acceptanceCriteria": [
+        "Developers can start onboarding flow",
+        "GET payout account status endpoint returns expected fields",
+        "Onboarding link regeneration is idempotent"
+      ]
+    },
+    {
+      "id": "FAC-006",
+      "sprintId": "S1",
+      "title": "Implement Stripe webhook signature verification and dedupe",
+      "workstream": "payments",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-004"
+      ],
+      "acceptanceCriteria": [
+        "Webhook signature is verified",
+        "Replay-safe idempotent event handling works",
+        "Failed webhook processing emits alertable error signal"
+      ]
+    },
+    {
+      "id": "FAC-007",
+      "sprintId": "S2",
+      "title": "Build create milestone endpoint on accepted hire requests",
+      "workstream": "payments",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [
+        "FAC-004"
+      ],
+      "acceptanceCriteria": [
+        "Client can create one milestone per accepted hire request",
+        "Validation enforces amount, currency, and ownership",
+        "Unauthorized creation attempts are rejected"
+      ]
+    },
+    {
+      "id": "FAC-008",
+      "sprintId": "S2",
+      "title": "Build fund milestone endpoint with idempotency",
+      "workstream": "payments",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-006",
+        "FAC-007"
+      ],
+      "acceptanceCriteria": [
+        "PaymentIntent is created and reconciled",
+        "Duplicate idempotency key does not duplicate charge",
+        "Milestone transitions to FUNDED only on successful payment"
+      ]
+    },
+    {
+      "id": "FAC-009",
+      "sprintId": "S2",
+      "title": "Build submit, release, and dispute milestone endpoints",
+      "workstream": "payments",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-008"
+      ],
+      "acceptanceCriteria": [
+        "Developer can submit funded milestone",
+        "Client can release submitted milestone",
+        "Either party can dispute and freeze release"
+      ]
+    },
+    {
+      "id": "FAC-010",
+      "sprintId": "S2",
+      "title": "Implement payout record creation on release",
+      "workstream": "payments",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [
+        "FAC-009",
+        "FAC-005"
+      ],
+      "acceptanceCriteria": [
+        "Release event creates payout record with net amount",
+        "Payout status lifecycle is tracked",
+        "Transfer provider ids are persisted"
+      ]
+    },
+    {
+      "id": "FAC-011",
+      "sprintId": "S2",
+      "title": "Add milestone flow UI for client and developer",
+      "workstream": "payments",
+      "ownerRole": "frontend",
+      "priority": "P1",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-007",
+        "FAC-008",
+        "FAC-009"
+      ],
+      "acceptanceCriteria": [
+        "Client can create/fund/release from hire-request screens",
+        "Developer can submit from delivery UI",
+        "Dispute action and state labels are visible"
+      ]
+    },
+    {
+      "id": "FAC-012",
+      "sprintId": "S3",
+      "title": "Gate review creation to released milestones",
+      "workstream": "trust",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-009",
+        "FAC-010"
+      ],
+      "acceptanceCriteria": [
+        "Review API validates linked released milestone",
+        "Review creation fails without released milestone",
+        "One review per milestone policy enforced"
+      ]
+    },
+    {
+      "id": "FAC-013",
+      "sprintId": "S3",
+      "title": "Expose identity, work, and code trust signals",
+      "workstream": "trust",
+      "ownerRole": "backend",
+      "priority": "P1",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [
+        "FAC-012"
+      ],
+      "acceptanceCriteria": [
+        "Trust signals are present in developer profile payload",
+        "Work verified toggles only after released milestone",
+        "Signal semantics documented"
+      ]
+    },
+    {
+      "id": "FAC-014",
+      "sprintId": "S3",
+      "title": "Update ranking with completion and rating outcomes",
+      "workstream": "ranking",
+      "ownerRole": "backend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-012"
+      ],
+      "acceptanceCriteria": [
+        "Ranking factors include completion rate and average rating",
+        "Response includes explainable outcome factor breakdown",
+        "Feature-flag fallback to prior ranking is available"
+      ]
+    },
+    {
+      "id": "FAC-015",
+      "sprintId": "S4",
+      "title": "Extend anti-spam throttles for new accounts",
+      "workstream": "quality_control",
+      "ownerRole": "backend",
+      "priority": "P1",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [],
+      "acceptanceCriteria": [
+        "Message and project creation limits vary by account age",
+        "Rate-limit responses are explicit and consistent",
+        "Policy thresholds are configurable"
+      ]
+    },
+    {
+      "id": "FAC-016",
+      "sprintId": "S4",
+      "title": "Implement flagged project queue and admin surface",
+      "workstream": "quality_control",
+      "ownerRole": "admin",
+      "priority": "P1",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-015"
+      ],
+      "acceptanceCriteria": [
+        "Projects with weak signals are queued for review",
+        "Admin can view and resolve flagged items",
+        "Queue actions are auditable"
+      ]
+    },
+    {
+      "id": "FAC-017",
+      "sprintId": "S4",
+      "title": "Finalize niche GTM wedge and update discovery content",
+      "workstream": "gtm",
+      "ownerRole": "product",
+      "priority": "P1",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [],
+      "acceptanceCriteria": [
+        "One wedge is selected and documented",
+        "Public discovery copy reflects wedge positioning",
+        "At least three niche case studies are published"
+      ]
+    },
+    {
+      "id": "FAC-018",
+      "sprintId": "S5",
+      "title": "Integrate AI recommendations into role workflows",
+      "workstream": "ai_ux",
+      "ownerRole": "frontend",
+      "priority": "P1",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-014"
+      ],
+      "acceptanceCriteria": [
+        "Developer and client flows consume live AI endpoints",
+        "AI recommendations include explanation text",
+        "Loading and fallback behavior is production-safe"
+      ]
+    },
+    {
+      "id": "FAC-019",
+      "sprintId": "S5",
+      "title": "Wire KPI dashboards to authoritative backend metrics",
+      "workstream": "analytics",
+      "ownerRole": "frontend",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-003",
+        "FAC-014"
+      ],
+      "acceptanceCriteria": [
+        "Dashboard cards use backend-computed metrics",
+        "Metric definitions are documented",
+        "No placeholder values on production routes"
+      ]
+    },
+    {
+      "id": "FAC-020",
+      "sprintId": "S5",
+      "title": "Polish trust and verification UI states",
+      "workstream": "trust",
+      "ownerRole": "frontend",
+      "priority": "P1",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [
+        "FAC-013"
+      ],
+      "acceptanceCriteria": [
+        "Identity/work/code trust signals are visually distinct",
+        "Tooltips explain verification meaning",
+        "Profile and discovery pages display consistent trust semantics"
+      ]
+    },
+    {
+      "id": "FAC-021",
+      "sprintId": "S6",
+      "title": "Run full release-readiness gate checks",
+      "workstream": "release",
+      "ownerRole": "ops",
+      "priority": "P0",
+      "storyPoints": 8,
+      "status": "todo",
+      "dependencies": [
+        "FAC-019",
+        "FAC-020",
+        "FAC-010",
+        "FAC-012"
+      ],
+      "acceptanceCriteria": [
+        "All P0 gates in release checklist marked PASS or approved WAIVED",
+        "Go/no-go meeting completed with approvers",
+        "Post-release monitoring plan is active"
+      ]
+    },
+    {
+      "id": "FAC-022",
+      "sprintId": "S6",
+      "title": "Validate rollback and incident playbooks",
+      "workstream": "release",
+      "ownerRole": "ops",
+      "priority": "P0",
+      "storyPoints": 5,
+      "status": "todo",
+      "dependencies": [
+        "FAC-021"
+      ],
+      "acceptanceCriteria": [
+        "Rollback drill executed for payments feature flag",
+        "Webhook failure incident drill completed",
+        "Runbook links are current and assigned"
+      ]
+    }
+  ]
+}

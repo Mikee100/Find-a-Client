@@ -185,6 +185,12 @@ export default function DeveloperHireRequestsPage() {
             </Link>
           ) : null}
 
+          {item.status === "ACCEPTED" ? (
+            <Link href={`/developer/hire-requests/${item.id}`} className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+              Manage milestone
+            </Link>
+          ) : null}
+
           {item.status === "PENDING" ? (
             <button
               type="button"

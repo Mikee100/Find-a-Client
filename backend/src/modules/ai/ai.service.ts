@@ -44,7 +44,10 @@ type GeminiCallFailureReason = "provider-disabled" | "missing-api-key" | "http-e
 interface GeminiCallResult<T> {
   data: T | null;
   failureReason: GeminiCallFailureReason | null;
+  rawText?: string;
 }
+
+type GeminiResponseSchema = Record<string, unknown>;
 
 @Injectable()
 export class AiService {
@@ -162,7 +165,70 @@ export class AiService {
     return text.trim();
   }
 
-  private async callGeminiJson<T>(systemPrompt: string, userPrompt: string): Promise<GeminiCallResult<T>> {
+  private tryParseJson<T>(value: string): T | null {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  private extractBalancedJsonSnippet(text: string): string | null {
+    const starts = ["{", "["];
+
+    for (const startToken of starts) {
+      const startIndex = text.indexOf(startToken);
+      if (startIndex < 0) {
+        continue;
+      }
+
+      const opener = startToken;
+      const closer = startToken === "{" ? "}" : "]";
+      let depth = 0;
+      let inString = false;
+      let isEscaped = false;
+
+      for (let index = startIndex; index < text.length; index += 1) {
+        const char = text[index];
+
+        if (inString) {
+          if (isEscaped) {
+            isEscaped = false;
+          } else if (char === "\\") {
+            isEscaped = true;
+          } else if (char === '"') {
+            inString = false;
+          }
+          continue;
+        }
+
+        if (char === '"') {
+          inString = true;
+          continue;
+        }
+
+        if (char === opener) {
+          depth += 1;
+          continue;
+        }
+
+        if (char === closer) {
+          depth -= 1;
+          if (depth === 0) {
+            return text.slice(startIndex, index + 1).trim();
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private async callGeminiJson<T>(
+    systemPrompt: string,
+    userPrompt: string,
+    responseSchema?: GeminiResponseSchema
+  ): Promise<GeminiCallResult<T>> {
     if (!this.shouldUseGemini()) {
       return {
         data: null,
@@ -192,7 +258,9 @@ export class AiService {
           ],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 900
+            maxOutputTokens: 900,
+            responseMimeType: "application/json",
+            ...(responseSchema ? { responseSchema } : {})
           }
         })
       });
@@ -200,7 +268,8 @@ export class AiService {
       if (!response.ok) {
         return {
           data: null,
-          failureReason: "http-error"
+          failureReason: "http-error",
+          rawText: await response.text().catch(() => "")
         };
       }
 
@@ -210,26 +279,89 @@ export class AiService {
       if (!rawText.trim()) {
         return {
           data: null,
-          failureReason: "empty-response"
+          failureReason: "empty-response",
+          rawText
         };
       }
 
-      const parsed = this.extractJsonPayload(rawText);
-      try {
+      const direct = this.tryParseJson<T>(rawText.trim());
+      if (direct !== null) {
         return {
-          data: JSON.parse(parsed) as T,
-          failureReason: null
-        };
-      } catch {
-        return {
-          data: null,
-          failureReason: "parse-error"
+          data: direct,
+          failureReason: null,
+          rawText
         };
       }
+
+      const extracted = this.extractJsonPayload(rawText);
+      const extractedParsed = this.tryParseJson<T>(extracted);
+      if (extractedParsed !== null) {
+        return {
+          data: extractedParsed,
+          failureReason: null,
+          rawText
+        };
+      }
+
+      const balanced = this.extractBalancedJsonSnippet(rawText);
+      const balancedParsed = balanced ? this.tryParseJson<T>(balanced) : null;
+      if (balancedParsed !== null) {
+        return {
+          data: balancedParsed,
+          failureReason: null,
+          rawText
+        };
+      }
+
+      // Repair pass: strip markdown wrappers and ask model to normalize into strict JSON.
+      const repairResponse = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `Convert the following text into valid JSON only. Do not add explanations.\n\n${rawText}`
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 900,
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (repairResponse.ok) {
+        const repairPayload = (await repairResponse.json()) as GeminiResponse;
+        const repairedText =
+          repairPayload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("\n") ?? "";
+        const repairedDirect = this.tryParseJson<T>(repairedText.trim());
+        if (repairedDirect !== null) {
+          return {
+            data: repairedDirect,
+            failureReason: null,
+            rawText: repairedText
+          };
+        }
+      }
+
+      return {
+        data: null,
+        failureReason: "parse-error",
+        rawText
+      };
     } catch {
       return {
         data: null,
-        failureReason: "network-error"
+        failureReason: "network-error",
+        rawText: ""
       };
     }
   }
@@ -258,7 +390,7 @@ export class AiService {
     const limit = dto.limit ?? 3;
 
     const ranked = (await this.usersService.searchDevelopers({
-      q: brief,
+      q: undefined,
       skills: mergedSkills,
       limit
     })) as DeveloperMatch[];
@@ -296,7 +428,25 @@ export class AiService {
           skills: item.developer.skills,
           scoreBreakdown: item.scoreBreakdown
         }))
-      )}\n\nReturn JSON in shape: {"matches":[{"rank":1,"reason":"...","nextMessageSuggestion":"..."}]}`
+      )}\n\nReturn JSON in shape: {"matches":[{"rank":1,"reason":"...","nextMessageSuggestion":"..."}]}`,
+      {
+        type: "OBJECT",
+        properties: {
+          matches: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                rank: { type: "INTEGER" },
+                reason: { type: "STRING" },
+                nextMessageSuggestion: { type: "STRING" }
+              },
+              required: ["rank", "reason", "nextMessageSuggestion"]
+            }
+          }
+        },
+        required: ["matches"]
+      }
     );
 
     const geminiRewrites = geminiRewriteResult.data;
@@ -393,7 +543,16 @@ export class AiService {
       estimatedDiscoveryLift?: string;
     }>(
       "You are a marketplace growth coach for developer profiles. Return valid JSON only.",
-      `Profile completeness: ${JSON.stringify(completeness)}\nDraft suggestions: ${JSON.stringify(suggestions)}\nReturn JSON {"strongestSignal":"...","biggestGap":"...","estimatedDiscoveryLift":"..."}`
+      `Profile completeness: ${JSON.stringify(completeness)}\nDraft suggestions: ${JSON.stringify(suggestions)}\nReturn JSON {"strongestSignal":"...","biggestGap":"...","estimatedDiscoveryLift":"..."}`,
+      {
+        type: "OBJECT",
+        properties: {
+          strongestSignal: { type: "STRING" },
+          biggestGap: { type: "STRING" },
+          estimatedDiscoveryLift: { type: "STRING" }
+        },
+        required: ["strongestSignal", "biggestGap", "estimatedDiscoveryLift"]
+      }
     );
 
     const geminiSummary = geminiSummaryResult.data;
@@ -452,7 +611,22 @@ export class AiService {
         title: me.title,
         primaryStack: me.primaryStack,
         skills: me.skills
-      })}\nClient brief: ${brief}\nProject type: ${inferredType}\nTimeline preference: ${timeline}\nBudget range: ${budget}\nReturn JSON {"opening":"...","approach":["..."],"timeline":"...","budget":"...","clarifyingQuestion":"...","closing":"..."}`
+      })}\nClient brief: ${brief}\nProject type: ${inferredType}\nTimeline preference: ${timeline}\nBudget range: ${budget}\nReturn JSON {"opening":"...","approach":["..."],"timeline":"...","budget":"...","clarifyingQuestion":"...","closing":"..."}`,
+      {
+        type: "OBJECT",
+        properties: {
+          opening: { type: "STRING" },
+          approach: {
+            type: "ARRAY",
+            items: { type: "STRING" }
+          },
+          timeline: { type: "STRING" },
+          budget: { type: "STRING" },
+          clarifyingQuestion: { type: "STRING" },
+          closing: { type: "STRING" }
+        },
+        required: ["opening", "approach", "timeline", "budget", "clarifyingQuestion", "closing"]
+      }
     );
 
     const geminiProposal = geminiProposalResult.data;

@@ -4,8 +4,9 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
-import * as compression from "compression";
+import compression from "compression";
 import { AppModule } from "src/app.module";
+import { AuthService } from "src/modules/auth/auth.service";
 
 if (!(globalThis as { WebSocket?: unknown }).WebSocket) {
   (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
@@ -94,8 +95,23 @@ async function bootstrap(): Promise<void> {
     .filter((value, index, all) => all.indexOf(value) === index);
 
   const app = await NestFactory.create(AppModule, {
-    logger: quietStartupLogs ? ["error", "warn"] : ["log", "error", "warn", "debug", "verbose"]
+    logger: quietStartupLogs ? ["error", "warn"] : ["log", "error", "warn", "debug", "verbose"],
+    rawBody: true
   });
+
+  try {
+    const authService = app.get(AuthService);
+    const oauthHealth = authService.getOAuthReadiness();
+
+    if (!oauthHealth.ready) {
+      console.warn("[startup] OAuth readiness check found configuration issues:");
+      for (const warning of oauthHealth.warnings) {
+        console.warn(`[startup] - ${warning}`);
+      }
+    }
+  } catch {
+    console.warn("[startup] Unable to run OAuth readiness check.");
+  }
 
   app.use(helmet());
   app.use(compression());

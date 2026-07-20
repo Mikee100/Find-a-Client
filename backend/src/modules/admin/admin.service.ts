@@ -225,6 +225,41 @@ export class AdminService {
     return this.userDetails(userId);
   }
 
+  async deleteUser(userId: string, requesterId: string) {
+    const user = await this.ensureUserExists(userId);
+
+    if (user.role === UserRole.ADMIN) {
+      throw new HttpException("Admin accounts cannot be deleted from this panel.", HttpStatus.BAD_REQUEST);
+    }
+
+    if (user.id === requesterId) {
+      throw new HttpException("You cannot delete your own admin account.", HttpStatus.BAD_REQUEST);
+    }
+
+    const { error } = await this.supabaseAdmin.auth.admin.deleteUser(userId);
+    if (error && !error.message.toLowerCase().includes("not found")) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.review.deleteMany({ where: { reviewerId: userId } }),
+      this.prisma.question.deleteMany({ where: { askerId: userId } }),
+      this.prisma.thread.deleteMany({
+        where: {
+          OR: [{ participantAId: userId }, { participantBId: userId }]
+        }
+      }),
+      this.prisma.project.deleteMany({ where: { authorId: userId } }),
+      this.prisma.message.deleteMany({ where: { senderId: userId } }),
+      this.prisma.user.delete({ where: { id: userId } })
+    ]);
+
+    return {
+      deleted: true,
+      userId
+    };
+  }
+
   /**
    * Lists pending moderation projects.
    */

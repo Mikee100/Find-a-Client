@@ -283,6 +283,12 @@ export class AuthController {
     return this.authService.getOAuthRedirect("github", { next, intent });
   }
 
+  @Public()
+  @Get("oauth/health")
+  oauthHealth() {
+    return this.authService.getOAuthReadiness();
+  }
+
   @Throttle({ default: { limit: 12, ttl: 60_000 } })
   @Post("github/verify")
   verifyGithubOwnership(@CurrentUser() user: CurrentUserPayload, @Req() request: Request) {

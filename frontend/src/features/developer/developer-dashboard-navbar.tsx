@@ -65,7 +65,7 @@ export default function DeveloperDashboardNavbar({
             ) : null}
           </Link>
 
-          <Link href="/developer/dashboard#notifications" className="relative border border-slate-200 p-2 text-slate-600 transition hover:border-slate-900 hover:text-slate-900">
+          <Link href="/developer/notifications" className="relative border border-slate-200 p-2 text-slate-600 transition hover:border-slate-900 hover:text-slate-900">
             <Bell className="h-4 w-4" />
             {unreadNotifications > 0 ? (
               <span className="absolute -right-1 -top-1 rounded-full bg-slate-900 px-1.5 text-[10px] font-semibold text-white">

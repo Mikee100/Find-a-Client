@@ -35,7 +35,7 @@ DROP INDEX "idx_thread_participant_a_updated_desc";
 DROP INDEX "idx_thread_participant_b_updated_desc";
 
 -- DropIndex
-DROP INDEX "idx_user_github_verified_at";
+DROP INDEX IF EXISTS "idx_user_github_verified_at";
 
 -- DropIndex
 DROP INDEX "idx_user_role_experience_availability";

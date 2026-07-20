@@ -1,4 +1,4 @@
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4311").replace(/\/+$/, "");
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:7000").replace(/\/+$/, "");
 const CSRF_COOKIE_NAME = process.env.NEXT_PUBLIC_AUTH_CSRF_COOKIE_NAME ?? "csrf_token";
 
 interface ApiErrorBody {
@@ -95,6 +95,126 @@ export interface SubmitHireRequestProposalPayload {
   proposalAmount?: number;
   proposalCurrency?: string;
   proposalTimelineDays?: number;
+}
+
+export type MilestoneStatus =
+  | "PENDING"
+  | "FUNDED"
+  | "IN_PROGRESS"
+  | "SUBMITTED"
+  | "RELEASED"
+  | "DISPUTED"
+  | "REFUNDED";
+
+export interface PaymentSummary {
+  id: string;
+  stripePaymentIntentId: string;
+  amount: string;
+  feeAmount: string;
+  currency: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface PayoutSummary {
+  id: string;
+  developerId: string;
+  amount: string;
+  currency: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface DisputeSummary {
+  id: string;
+  raisedBy: "CLIENT" | "DEVELOPER" | "SYSTEM";
+  status: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface MilestoneResponse {
+  id: string;
+  hireRequestId: string;
+  title: string;
+  amount: string;
+  currency: string;
+  status: MilestoneStatus;
+  dueDate: string | null;
+  fundedAt: string | null;
+  submittedAt: string | null;
+  releasedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  payments?: PaymentSummary[];
+  payouts?: PayoutSummary[];
+  disputes?: DisputeSummary[];
+}
+
+export interface MilestoneEventResponse {
+  id: string;
+  milestoneId: string;
+  eventType: string;
+  actorUserId: string | null;
+  payload: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface CreateMilestonePayload {
+  title: string;
+  amount: number;
+  currency?: string;
+  dueDate?: string;
+}
+
+export interface FundMilestonePayload {
+  paymentMethodId?: string;
+  returnUrl?: string;
+}
+
+export interface FundMilestoneResponse {
+  milestoneId: string;
+  status: MilestoneStatus;
+  payment: PaymentSummary;
+  fundedAt: string | null;
+  paymentIntentClientSecret: string | null;
+}
+
+export interface SubmitMilestonePayload {
+  deliveryNote?: string;
+  artifacts?: string[];
+}
+
+export interface ReleaseMilestonePayload {
+  note?: string;
+}
+
+export interface ReleaseMilestoneResponse {
+  milestoneId: string;
+  status: MilestoneStatus;
+  releasedAt: string | null;
+  payout: PayoutSummary;
+  reviewUnlocked: boolean;
+}
+
+export interface CreateDisputePayload {
+  reason: string;
+}
+
+export interface ResolveDisputePayload {
+  resolution: "RESOLVED_RELEASE" | "RESOLVED_REFUND";
+  note?: string;
+}
+
+export interface PayoutAccountStatus {
+  developerId: string;
+  provider: string;
+  accountId: string;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+  onboardingRequired: boolean;
+  onboardingUrl: string | null;
 }
 
 interface ApiEnvelope<T> {
@@ -707,6 +827,11 @@ export interface AdminUserDetail extends AdminSystemUser {
   };
 }
 
+export interface AdminDeleteUserResponse {
+  deleted: true;
+  userId: string;
+}
+
 export interface AdminPerformanceRecentRequest {
   method: string;
   path: string;
@@ -865,7 +990,7 @@ async function parseError(response: Response): Promise<string> {
 async function requestJson<TResponse, TBody = unknown>(
   method: HttpMethod,
   path: string,
-  options?: { body?: TBody; allowRetryOn401?: boolean }
+  options?: { body?: TBody; allowRetryOn401?: boolean; headers?: Record<string, string> }
 ): Promise<TResponse> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const hasBody = options?.body !== undefined;
@@ -880,17 +1005,20 @@ async function requestJson<TResponse, TBody = unknown>(
       credentials: "include",
       headers: {
         ...(hasBody ? { "Content-Type": "application/json" } : {}),
-        ...(isMutation && csrfToken ? { "x-csrf-token": csrfToken } : {})
+        ...(isMutation && csrfToken ? { "x-csrf-token": csrfToken } : {}),
+        ...(options?.headers ?? {})
       },
       body: hasBody ? JSON.stringify(options?.body) : undefined
     });
   };
 
+  const reachabilityMessage = `Unable to reach the server. Confirm backend is running on ${API_BASE_URL}.`;
+
   let response: Response;
   try {
     response = await send();
   } catch {
-    throw new Error("Unable to reach the server. Confirm backend is running on http://localhost:4311.");
+    throw new Error(reachabilityMessage);
   }
 
   if (response.status === 401 && allowRetryOn401 && path !== "/auth/refresh") {
@@ -900,7 +1028,7 @@ async function requestJson<TResponse, TBody = unknown>(
       try {
         retryResponse = await send();
       } catch {
-        throw new Error("Unable to reach the server. Confirm backend is running on http://localhost:4311.");
+        throw new Error(reachabilityMessage);
       }
       if (!retryResponse.ok) {
         throw new Error(await parseError(retryResponse));
@@ -1554,6 +1682,85 @@ export async function submitHireRequestProposal(
   );
 }
 
+export async function createMilestone(
+  hireRequestId: string,
+  payload: CreateMilestonePayload
+): Promise<MilestoneResponse> {
+  return requestJson<MilestoneResponse, CreateMilestonePayload>(
+    "POST",
+    `/hire-requests/${encodeURIComponent(hireRequestId)}/milestones`,
+    { body: payload }
+  );
+}
+
+export async function listMilestonesForHireRequest(hireRequestId: string): Promise<MilestoneResponse[]> {
+  return requestJson<MilestoneResponse[]>("GET", `/hire-requests/${encodeURIComponent(hireRequestId)}/milestones`);
+}
+
+export async function getMilestoneById(id: string): Promise<MilestoneResponse> {
+  return requestJson<MilestoneResponse>("GET", `/milestones/${encodeURIComponent(id)}`);
+}
+
+export async function listMilestoneEvents(id: string): Promise<MilestoneEventResponse[]> {
+  return requestJson<MilestoneEventResponse[]>("GET", `/milestones/${encodeURIComponent(id)}/events`);
+}
+
+export async function fundMilestone(
+  id: string,
+  payload: FundMilestonePayload,
+  idempotencyKey: string
+): Promise<FundMilestoneResponse> {
+  return requestJson<FundMilestoneResponse, FundMilestonePayload>("POST", `/milestones/${encodeURIComponent(id)}/fund`, {
+    body: payload,
+    headers: { "x-idempotency-key": idempotencyKey }
+  });
+}
+
+export async function submitMilestone(id: string, payload: SubmitMilestonePayload): Promise<MilestoneResponse> {
+  return requestJson<MilestoneResponse, SubmitMilestonePayload>("POST", `/milestones/${encodeURIComponent(id)}/submit`, {
+    body: payload
+  });
+}
+
+export async function releaseMilestone(
+  id: string,
+  payload: ReleaseMilestonePayload,
+  idempotencyKey: string
+): Promise<ReleaseMilestoneResponse> {
+  return requestJson<ReleaseMilestoneResponse, ReleaseMilestonePayload>(
+    "POST",
+    `/milestones/${encodeURIComponent(id)}/release`,
+    {
+      body: payload,
+      headers: { "x-idempotency-key": idempotencyKey }
+    }
+  );
+}
+
+export async function disputeMilestone(id: string, payload: CreateDisputePayload): Promise<DisputeSummary> {
+  return requestJson<DisputeSummary, CreateDisputePayload>("POST", `/milestones/${encodeURIComponent(id)}/dispute`, {
+    body: payload
+  });
+}
+
+export async function getPayoutAccountStatus(developerId: string): Promise<PayoutAccountStatus> {
+  return requestJson<PayoutAccountStatus>("GET", `/developers/${encodeURIComponent(developerId)}/payout-account/status`);
+}
+
+export async function resolveDispute(
+  disputeId: string,
+  payload: ResolveDisputePayload,
+  idempotencyKey: string
+): Promise<{ disputeId: string; status: string; milestoneId: string; milestoneStatus: MilestoneStatus }> {
+  return requestJson<
+    { disputeId: string; status: string; milestoneId: string; milestoneStatus: MilestoneStatus },
+    ResolveDisputePayload
+  >("POST", `/admin/disputes/${encodeURIComponent(disputeId)}/resolve`, {
+    body: payload,
+    headers: { "x-idempotency-key": idempotencyKey }
+  });
+}
+
 export async function getNotifications(limit = 20): Promise<NotificationItem[]> {
   return requestJson<NotificationItem[]>("GET", `/notifications?limit=${limit}`);
 }
@@ -1604,6 +1811,10 @@ export async function setAdminUserVerification(userId: string, isVerified: boole
   return requestJson<AdminUserDetail, { isVerified: boolean }>("PATCH", `/admin/users/${encodeURIComponent(userId)}/verification`, {
     body: { isVerified }
   });
+}
+
+export async function deleteAdminUser(userId: string): Promise<AdminDeleteUserResponse> {
+  return requestJson<AdminDeleteUserResponse>("DELETE", `/admin/users/${encodeURIComponent(userId)}`);
 }
 
 export async function getAdminPerformanceSummary(): Promise<AdminPerformanceSummary> {

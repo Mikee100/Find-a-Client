@@ -64,15 +64,19 @@ export default function OAuthConsentPage() {
   const [details, setDetails] = useState<AuthorizationDetails | null>(null);
 
   const authorizationId = useMemo(() => searchParams.get("authorization_id")?.trim() ?? "", [searchParams]);
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim() || "";
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim() || "";
 
   const supabase = useMemo(() => {
     if (!supabaseUrl || !supabaseAnonKey) {
       return null;
     }
 
-    return createClient(supabaseUrl, supabaseAnonKey);
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        detectSessionInUrl: false
+      }
+    });
   }, [supabaseUrl, supabaseAnonKey]);
 
   useEffect(() => {

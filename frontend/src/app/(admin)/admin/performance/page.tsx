@@ -75,7 +75,7 @@ export default function AdminPerformancePage() {
     };
   }, []);
 
-  const docsBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4311").replace(/\/+$/, "");
+  const docsBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:7000").replace(/\/+$/, "");
 
   const categories = useMemo(() => {
     const discovered = new Set<string>();

@@ -41,6 +41,21 @@ export interface OAuthRedirectOptions {
   intent?: string;
 }
 
+export interface OAuthReadinessReport {
+  ready: boolean;
+  checks: {
+    supabaseUrlConfigured: boolean;
+    supabaseAnonKeyConfigured: boolean;
+    supabaseServiceRoleConfigured: boolean;
+    frontendUrlConfigured: boolean;
+  };
+  expected: {
+    frontendCallbackUrl: string;
+    supabaseProviderRedirectUri: string;
+  };
+  warnings: string[];
+}
+
 type SupabaseIdentity = {
   provider?: string;
   identity_data?: {
@@ -571,6 +586,80 @@ export class AuthService {
       callbackUrl.toString()
     )}`;
     return { url };
+  }
+
+  getOAuthReadiness(): OAuthReadinessReport {
+    const supabaseUrlRaw = this.configService.get<string>("SUPABASE_URL", "").trim();
+    const supabaseAnonKeyRaw = this.configService.get<string>("SUPABASE_ANON_KEY", "").trim();
+    const supabaseServiceRoleRaw = this.configService.get<string>("SUPABASE_SERVICE_ROLE_KEY", "").trim();
+    const frontendUrlRaw = this.configService.get<string>("FRONTEND_URL", "").trim();
+
+    const placeholderCheck = (value: string): boolean => {
+      return (
+        value.length === 0
+        || value.includes("placeholder")
+        || value.includes("your-project.supabase.co")
+        || value === "change-me"
+        || value === "change-me-too"
+      );
+    };
+
+    const supabaseUrlConfigured = !placeholderCheck(supabaseUrlRaw);
+    const supabaseAnonKeyConfigured = !placeholderCheck(supabaseAnonKeyRaw);
+    const supabaseServiceRoleConfigured = !placeholderCheck(supabaseServiceRoleRaw);
+    const frontendUrlConfigured = !placeholderCheck(frontendUrlRaw);
+
+    const normalizedFrontendUrl = frontendUrlConfigured
+      ? frontendUrlRaw.replace(/\/+$/, "")
+      : "http://localhost:3060";
+    const normalizedSupabaseUrl = supabaseUrlConfigured
+      ? supabaseUrlRaw.replace(/\/+$/, "")
+      : "https://<project-ref>.supabase.co";
+
+    const frontendCallbackUrl = `${normalizedFrontendUrl}/auth/callback`;
+    const supabaseProviderRedirectUri = `${normalizedSupabaseUrl}/auth/v1/callback`;
+
+    const warnings: string[] = [];
+
+    if (!supabaseUrlConfigured) {
+      warnings.push("SUPABASE_URL is missing or placeholder.");
+    }
+    if (!supabaseAnonKeyConfigured) {
+      warnings.push("SUPABASE_ANON_KEY is missing or placeholder.");
+    }
+    if (!supabaseServiceRoleConfigured) {
+      warnings.push("SUPABASE_SERVICE_ROLE_KEY is missing or placeholder.");
+    }
+    if (!frontendUrlConfigured) {
+      warnings.push("FRONTEND_URL is missing or placeholder.");
+    }
+
+    warnings.push(
+      `In Supabase Auth URL settings, include redirect URL: ${frontendCallbackUrl}`
+    );
+    warnings.push(
+      `In Google/GitHub provider console, include callback URI: ${supabaseProviderRedirectUri}`
+    );
+
+    const ready = supabaseUrlConfigured
+      && supabaseAnonKeyConfigured
+      && supabaseServiceRoleConfigured
+      && frontendUrlConfigured;
+
+    return {
+      ready,
+      checks: {
+        supabaseUrlConfigured,
+        supabaseAnonKeyConfigured,
+        supabaseServiceRoleConfigured,
+        frontendUrlConfigured
+      },
+      expected: {
+        frontendCallbackUrl,
+        supabaseProviderRedirectUri
+      },
+      warnings
+    };
   }
 
   async verifyGithubOwnership(

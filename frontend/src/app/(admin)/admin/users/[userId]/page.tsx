@@ -2,10 +2,11 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import AdminShell from "@/features/admins/admin-shell";
 import {
+  deleteAdminUser,
   AdminUserDetail,
   getAdminUserDetail,
   setAdminUserAccess,
@@ -25,6 +26,7 @@ function formatDate(value: string | null): string {
 export default function AdminUserManagePage() {
   const params = useParams<{ userId: string }>();
   const userId = params.userId;
+  const router = useRouter();
 
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,6 +90,33 @@ export default function AdminUserManagePage() {
       () => setAdminUserPassword(userId, newPassword.trim()),
       "Password updated and active sessions revoked."
     );
+  }
+
+  function onDeleteUser() {
+    const targetEmail = user?.email ?? "this user";
+    const confirmed = window.confirm(
+      `Delete ${targetEmail}? This permanently removes the account and related data. This action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setWorking(true);
+    setError(null);
+    setMessage(null);
+
+    void deleteAdminUser(userId)
+      .then(() => {
+        setMessage("User account deleted.");
+        router.push("/admin/users");
+      })
+      .catch((actionError) => {
+        setError(actionError instanceof Error ? actionError.message : "Action failed.");
+      })
+      .finally(() => {
+        setWorking(false);
+      });
   }
 
   return (
@@ -215,6 +244,21 @@ export default function AdminUserManagePage() {
               <p className="mt-2 text-xs text-slate-500">
                 Password update revokes existing refresh sessions and forces the user to sign in again.
               </p>
+            </section>
+
+            <section className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+              <h3 className="text-base font-semibold text-red-900">Danger Zone</h3>
+              <p className="mt-2 text-sm text-red-700">
+                Delete account permanently removes this user and related account data.
+              </p>
+              <button
+                type="button"
+                disabled={working}
+                onClick={onDeleteUser}
+                className="mt-3 rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+              >
+                Delete account
+              </button>
             </section>
           </>
         ) : null}
