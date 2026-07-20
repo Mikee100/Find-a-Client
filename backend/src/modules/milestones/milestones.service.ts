@@ -173,13 +173,23 @@ export class MilestonesService {
       throw new BadRequestException("Hire request is not in a milestone-eligible status");
     }
 
-    const existing = await this.prisma.milestone.findUnique({ where: { hireRequestId } });
-    if (existing) {
-      throw new BadRequestException("A milestone already exists for this hire request");
-    }
-
     const currency = (dto.currency ?? hireRequest.proposalCurrency ?? hireRequest.budgetCurrency ?? "USD").toUpperCase();
     const dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+
+    const budgetCap = hireRequest.proposalAmount ?? hireRequest.budgetAmount;
+    if (budgetCap !== null) {
+      const existingTotal = await this.prisma.milestone.aggregate({
+        where: { hireRequestId, status: { not: "REFUNDED" } },
+        _sum: { amount: true }
+      });
+      const committedAmount = Number(existingTotal._sum.amount ?? 0) + dto.amount;
+      if (committedAmount > Number(budgetCap)) {
+        throw new BadRequestException(
+          `Milestone amount would exceed the agreed budget of ${Number(budgetCap)} ${currency}. ` +
+            `${Number(existingTotal._sum.amount ?? 0)} ${currency} already committed across other milestones.`
+        );
+      }
+    }
 
     const milestone = await this.prisma.milestone.create({
       data: {
@@ -751,7 +761,7 @@ export class MilestonesService {
         payouts: { orderBy: { createdAt: "desc" }, take: 1 },
         disputes: { orderBy: { createdAt: "desc" }, take: 1 }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "asc" }
     });
 
     await this.cacheService.set(cacheKey, milestones, 15);
