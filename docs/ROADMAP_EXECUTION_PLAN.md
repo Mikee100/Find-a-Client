@@ -77,6 +77,12 @@ Definition of done:
 Outcome:
 - Stronger positioning and faster marketplace liquidity
 
+Declared wedge (2026-07-21):
+- Audience: early-stage / non-technical startup founders hiring a developer to build their MVP.
+- Core trust narrative: milestone escrow directly answers this audience's dominant fear — a developer taking payment and disappearing, or delivering broken work with no recourse. Reviews are gated to released (paid) milestones, so portfolio trust signals reflect verified, paid delivery rather than unverified claims.
+- Reflected in marketing copy: homepage hero, escrow explainer, and pricing section (`frontend/src/app/page.tsx`).
+- Not yet done: discovery pages (`/developers`, `/projects`) still need wedge-aligned messaging, and there are no real case studies yet — the platform has no released milestones or real client reviews to draw from. Case studies should wait for genuine completed engagements rather than being fabricated.
+
 Epics:
 1. Choose one 90-day niche focus
 2. Niche landing content and discovery messaging
