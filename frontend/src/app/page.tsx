@@ -2,193 +2,70 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Brain,
   Check,
   ChevronDown,
+  Eye,
   Menu,
+  Send,
   ShieldCheck,
   Sparkles,
+  Unlock,
+  Wallet,
   Workflow,
 } from "lucide-react";
 import BrandLogo from "@/components/ui/brand-logo";
+import { DeveloperSearchItem, listProjects, ProjectListItem, searchDevelopers } from "@/lib/api";
 
-type Stat = { label: string; value: number; suffix?: string };
 type FAQ = { question: string; answer: string };
-type Developer = {
-  id: string;
-  name: string;
-  role: string;
-  country: string;
-  tech: string[];
-  rating: string;
-  completed: number;
-  category: string;
-};
-type Project = {
-  id: string;
-  title: string;
-  description: string;
-  tech: string[];
-  views: number;
-  likes: number;
-  feedback: string;
-};
 
-const stats: Stat[] = [
-  { label: "Verified Developers", value: 15000, suffix: "+" },
-  { label: "Completed Projects", value: 4200, suffix: "+" },
-  { label: "Active Companies", value: 1900, suffix: "+" },
-  { label: "Hiring Facilitated", value: 8, suffix: "M+" },
-];
-
-const categories = [
-  "Frontend",
-  "Backend",
-  "Mobile",
-  "Desktop",
-  "AI",
-  "Cloud",
-  "DevOps",
-  "UI/UX",
-  "Cybersecurity",
-  "Data Science",
-  "Blockchain",
-  "Game Development",
-];
-
-const developers: Developer[] = [
-  {
-    id: "d1",
-    name: "Ari Bello",
-    role: "Senior Frontend Engineer",
-    country: "Nigeria",
-    tech: ["React", "TypeScript", "Next.js"],
-    rating: "4.9",
-    completed: 31,
-    category: "Frontend",
-  },
-  {
-    id: "d2",
-    name: "Samir Khan",
-    role: "Backend Architect",
-    country: "UK",
-    tech: ["Node.js", "PostgreSQL", "Redis"],
-    rating: "4.8",
-    completed: 27,
-    category: "Backend",
-  },
-  {
-    id: "d3",
-    name: "Rita Liu",
-    role: "Mobile Product Engineer",
-    country: "Canada",
-    tech: ["React Native", "Kotlin", "Firebase"],
-    rating: "5.0",
-    completed: 19,
-    category: "Mobile",
-  },
-  {
-    id: "d4",
-    name: "Leo Martins",
-    role: "AI Solutions Developer",
-    country: "Portugal",
-    tech: ["Python", "LLM", "Vector DB"],
-    rating: "4.9",
-    completed: 22,
-    category: "AI",
-  },
-];
-
-const projects: Project[] = [
-  {
-    id: "p1",
-    title: "Payments Orchestration Dashboard",
-    description:
-      "Operational command center with real-time alerting and settlement analytics built for fintech scale.",
-    tech: ["Next.js", "Node.js", "Stripe API"],
-    views: 2480,
-    likes: 354,
-    feedback: "Shipped in 5 weeks with zero regressions. Exceptional workflow and execution.",
-  },
-  {
-    id: "p2",
-    title: "Healthcare Intake Platform",
-    description:
-      "Secure onboarding and case management flow for distributed care teams under HIPAA guidelines.",
-    tech: ["React", "Prisma", "Postgres"],
-    views: 1945,
-    likes: 269,
-    feedback: "Quality of code and client communication was outstanding from kickoff to launch.",
-  },
-  {
-    id: "p3",
-    title: "B2B Growth Analytics Suite",
-    description:
-      "Executive-ready metrics, customer cohort monitoring, and forecasting inside a clean, visual workspace.",
-    tech: ["TypeScript", "Recharts", "Redis"],
-    views: 2131,
-    likes: 307,
-    feedback: "Helped us close key enterprise clients faster by validating our data infrastructure.",
-  },
+const escrowSteps = [
+  { icon: Wallet, title: "Fund a milestone", text: "Client commits payment for one phase of the project through escrow." },
+  { icon: Send, title: "Developer delivers", text: "Work is submitted for that phase, with a delivery note and links." },
+  { icon: Eye, title: "Client reviews", text: "Nothing releases automatically — the client checks the work first." },
+  { icon: Unlock, title: "Funds release", text: "Payment only reaches the developer once the phase is verified." },
 ];
 
 const faqs: FAQ[] = [
   {
     question: "How are developers verified?",
     answer:
-      "Profiles are validated by parsing portfolio code quality, past project success, and consistency signals from platform activity. We review actual project deliveries, not just algorithm quizzes.",
+      "Profiles are validated by parsing portfolio code quality, past project delivery, and platform activity signals. We review actual project deliveries, not just algorithm quizzes.",
+  },
+  {
+    question: "What happens if a developer doesn't deliver?",
+    answer:
+      "Funds sit in escrow, not with the developer, until you approve the work. If something goes wrong, either side can raise a dispute, which freezes the milestone until an admin resolves it — release or refund.",
   },
   {
     question: "Can clients hire globally?",
     answer:
-      "Yes. Clients can discover, message, and hire developers across regions. The platform supports localized contracts, timezone filters, and customized currency proposals.",
+      "Yes. Clients can discover, message, and hire developers across regions, with proposals in the currency and timeline that work for the project.",
   },
   {
     question: "What makes AI matching different?",
     answer:
-      "Our matching model ranks candidates by project structural fit, stack depth, and actual delivery context, mapping your text brief description directly to developer portfolios instead of simple keyword checks.",
+      "Our matching model ranks candidates by project structural fit, stack depth, and actual delivery context, mapping your brief directly to developer portfolios instead of simple keyword checks.",
   },
   {
     question: "Is there a free plan for developers?",
     answer:
-      "Yes. Developers can build a full profile, list unlimited projects, and connect with clients under our standard free plan. Option premium boosts are available for visibility enhancement.",
+      "Yes. Developers can build a full profile and list unlimited projects for free. The platform only takes a 10% fee on milestones that are actually funded and released — there's no subscription.",
   },
 ];
-
-function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let frame = 0;
-    const duration = 900;
-    const start = performance.now();
-
-    const tick = (time: number) => {
-      const progress = Math.min((time - start) / duration, 1);
-      setCount(Math.floor(value * progress));
-      if (progress < 1) frame = requestAnimationFrame(tick);
-    };
-
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [value]);
-
-  return (
-    <span className="font-mono font-light text-2xl tracking-tight text-slate-900">
-      {count.toLocaleString()}
-      {suffix}
-    </span>
-  );
-}
 
 export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(0);
-  const [selectedCategory, setSelectedCategory] = useState("All");
+
+  const [developers, setDevelopers] = useState<DeveloperSearchItem[]>([]);
+  const [developersLoading, setDevelopersLoading] = useState(true);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -201,10 +78,39 @@ export default function Home() {
     document.documentElement.classList.remove("dark");
   }, []);
 
-  const visibleDevelopers = useMemo(() => {
-    if (selectedCategory === "All") return developers;
-    return developers.filter((dev) => dev.category === selectedCategory);
-  }, [selectedCategory]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const items = await searchDevelopers({ limit: 4 });
+        if (!cancelled) setDevelopers(items);
+      } catch {
+        // Public homepage — fail quietly, section just shows its empty state.
+      } finally {
+        if (!cancelled) setDevelopersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const items = await listProjects({ limit: 3, sortBy: "popular" });
+        if (!cancelled) setProjects(items);
+      } catch {
+        // Public homepage — fail quietly, section just shows its empty state.
+      } finally {
+        if (!cancelled) setProjectsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
@@ -297,17 +203,18 @@ export default function Home() {
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[10px] font-semibold tracking-wider uppercase text-slate-500 shadow-sm"
             >
               <Sparkles className="h-3 w-3 text-slate-800" />
-              Enterprise-Ready Talent Network
+              Built for founders hiring their first developer
             </motion.p>
-            
+
             <h1 className="mt-6 max-w-4xl text-5xl font-light tracking-tight text-slate-900 sm:text-6xl lg:text-7xl">
-              Where premium developers meet serious clients.
+              Hire a developer for your MVP. Pay only for verified work.
             </h1>
-            
+
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-500">
-              A curated platform for developers to showcase production-ready systems, and for clients to connect, message, and collaborate with verified technical talent.
+              Fund each phase of your build through escrow. Nothing is released until you review the work — so you never
+              have to wonder if a developer will disappear with your money, or your project stalls with no recourse.
             </p>
-            
+
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/register"
@@ -323,14 +230,25 @@ export default function Home() {
                 Explore Portfolios
               </Link>
             </div>
+          </div>
+        </section>
 
-            <div className="mt-16 grid gap-6 border-t border-slate-200 pt-8 sm:grid-cols-2 lg:grid-cols-4">
-              {stats.map((item) => (
-                <div key={item.label} className="pl-4 border-l border-slate-300">
-                  <p className="text-2xl font-light text-slate-950">
-                    <AnimatedCounter value={item.value} suffix={item.suffix} />
-                  </p>
-                  <p className="mt-1 text-[11px] font-semibold tracking-wider uppercase text-slate-400">{item.label}</p>
+        {/* Escrow Explainer Section */}
+        <section className="border-b border-slate-200 px-4 py-16 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">How it works</p>
+            <h2 className="mt-2 text-3xl font-light tracking-tight text-slate-900">Escrow protects both sides</h2>
+            <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+              {escrowSteps.map((step, index) => (
+                <div key={step.title} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 font-mono text-[10px] text-white">
+                      {index + 1}
+                    </span>
+                    <step.icon className="h-5 w-5 text-slate-900" />
+                  </div>
+                  <h3 className="text-sm font-semibold tracking-tight text-slate-900">{step.title}</h3>
+                  <p className="text-xs leading-relaxed text-slate-500">{step.text}</p>
                 </div>
               ))}
             </div>
@@ -338,7 +256,7 @@ export default function Home() {
         </section>
 
         {/* Benefits Section */}
-        <section id="about" className="border-b border-slate-200 px-4 py-16 sm:px-6 lg:px-8">
+        <section id="about" className="border-b border-slate-200 bg-[#f8fafc] px-4 py-16 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-7xl">
             <div className="grid gap-12 lg:grid-cols-[280px_1fr]">
               <div>
@@ -377,60 +295,45 @@ export default function Home() {
         {/* Developer Directory Section */}
         <section id="resources" className="border-b border-slate-200 bg-[#f8fafc] px-4 py-16 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-7xl">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Directory</p>
-                <h2 className="mt-2 text-3xl font-light tracking-tight text-slate-900">Featured Developers</h2>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {["All", ...categories].slice(0, 5).map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setSelectedCategory(category)}
-                    className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition ${
-                      selectedCategory === category
-                        ? "bg-slate-900 text-white"
-                        : "bg-white text-slate-600 border border-slate-200 hover:border-slate-950"
-                    }`}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Directory</p>
+            <h2 className="mt-2 text-3xl font-light tracking-tight text-slate-900">Featured Developers</h2>
 
             <div className="mt-8 border border-slate-200 bg-white">
-              <div className="divide-y divide-slate-100">
-                {visibleDevelopers.map((dev) => (
-                  <article key={dev.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between transition hover:bg-slate-50">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-slate-900">{dev.name}</h3>
-                        <span className="text-[11px] text-slate-400">({dev.country})</span>
-                        <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.2">★ {dev.rating}</span>
+              {developersLoading ? (
+                <p className="p-5 text-xs text-slate-500">Loading developers...</p>
+              ) : developers.length === 0 ? (
+                <p className="p-5 text-xs text-slate-500">No developers to show yet.</p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {developers.map((dev) => (
+                    <article key={dev.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between transition hover:bg-slate-50">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-slate-900">{dev.fullName}</h3>
+                          {dev.location ? <span className="text-[11px] text-slate-400">({dev.location})</span> : null}
+                        </div>
+                        {dev.title ? <p className="text-xs text-slate-500">{dev.title}</p> : null}
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {dev.skills.slice(0, 4).map((skill) => (
+                            <span key={skill} className="bg-slate-100 px-2 py-0.5 font-mono text-[9px] text-slate-500">
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-500">{dev.role}</p>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {dev.tech.map((tech) => (
-                          <span key={tech} className="bg-slate-100 px-2 py-0.5 font-mono text-[9px] text-slate-500">
-                            {tech}
-                          </span>
-                        ))}
+                      <div className="flex items-center gap-4">
+                        <span className="font-mono text-xs text-slate-500">{dev.projectCount} projects</span>
+                        <Link
+                          href={`/developers/${dev.username}`}
+                          className="border border-slate-200 bg-white px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-700 hover:border-slate-950 transition"
+                        >
+                          View Profile
+                        </Link>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="font-mono text-xs text-slate-500">{dev.completed} jobs done</span>
-                      <Link
-                        href={`/developers/${dev.name.toLowerCase().replace(/\s+/g, "-")}`}
-                        className="border border-slate-200 bg-white px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-700 hover:border-slate-950 transition"
-                      >
-                        View Profile
-                      </Link>
-                    </div>
-                  </article>
-                ))}
-              </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -440,32 +343,42 @@ export default function Home() {
           <div className="mx-auto w-full max-w-7xl">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Portfolios</p>
             <h2 className="mt-2 text-3xl font-light tracking-tight text-slate-900">Recent Project Deliveries</h2>
-            
-            <div className="mt-8 grid gap-6 md:grid-cols-3">
-              {projects.map((project) => (
-                <article key={project.id} className="flex flex-col justify-between border border-slate-200 p-5 bg-white transition hover:border-slate-900">
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-slate-950">{project.title}</h3>
-                      <span className="shrink-0 font-mono text-[10px] text-slate-400">
-                        {project.views} views
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs leading-relaxed text-slate-500">{project.description}</p>
-                    <div className="mt-4 flex flex-wrap gap-1">
-                      {project.tech.map((t) => (
-                        <span key={t} className="bg-slate-50 border border-slate-200/60 px-1.5 py-0.5 font-mono text-[9px] text-slate-500">
-                          {t}
+
+            {projectsLoading ? (
+              <p className="mt-8 text-xs text-slate-500">Loading projects...</p>
+            ) : projects.length === 0 ? (
+              <p className="mt-8 text-xs text-slate-500">No projects to show yet.</p>
+            ) : (
+              <div className="mt-8 grid gap-6 md:grid-cols-3">
+                {projects.map((project) => (
+                  <Link
+                    key={project.id}
+                    href={`/projects/${project.slug}`}
+                    className="flex flex-col justify-between border border-slate-200 p-5 bg-white transition hover:border-slate-900"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-slate-950">{project.title}</h3>
+                        <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                          {project.viewCount} views
                         </span>
-                      ))}
+                      </div>
+                      <p className="mt-3 text-xs leading-relaxed text-slate-500">{project.shortDescription}</p>
+                      <div className="mt-4 flex flex-wrap gap-1">
+                        {project.techStack.slice(0, 4).map((t) => (
+                          <span key={t} className="bg-slate-50 border border-slate-200/60 px-1.5 py-0.5 font-mono text-[9px] text-slate-500">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-6 border-t border-slate-100 pt-4">
-                    <p className="text-[11px] italic text-slate-400">&ldquo;{project.feedback}&rdquo;</p>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    <div className="mt-6 border-t border-slate-100 pt-4">
+                      <p className="text-[11px] text-slate-400">{project.likeCount} likes</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
@@ -495,15 +408,15 @@ export default function Home() {
               <div className="border border-slate-200 bg-white p-5">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Simulated Brief Input</p>
                 <div className="mt-3 rounded border border-slate-100 bg-slate-50 p-3 font-mono text-[11px] text-slate-500">
-                  &ldquo;Need a developer to build a financial payments dashboard using Next.js, integrating real-time Stripe webhooks and charting settlements.&rdquo;
+                  &ldquo;Need a developer to build my startup&rsquo;s MVP with Next.js and a Postgres backend, launching in 8 weeks.&rdquo;
                 </div>
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2">
-                    <span className="font-semibold">Ari Bello (Senior Frontend)</span>
+                    <span className="font-semibold">Dennis Kimani (Full Stack)</span>
                     <span className="font-mono text-emerald-700 font-semibold">96% Fit</span>
                   </div>
                   <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2">
-                    <span className="font-semibold">Samir Khan (Backend Architect)</span>
+                    <span className="font-semibold">Samir Hassan (Backend/API)</span>
                     <span className="font-mono text-emerald-700 font-semibold">89% Fit</span>
                   </div>
                 </div>
@@ -515,28 +428,24 @@ export default function Home() {
         {/* Pricing */}
         <section id="pricing" className="border-b border-slate-200 px-4 py-16 sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-7xl">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Plans</p>
-            <h2 className="mt-2 text-3xl font-light tracking-tight text-slate-900">Simple, Flat Pricing</h2>
-            
-            <div className="mt-8 grid gap-8 lg:grid-cols-2">
-              <div className="border border-slate-200 p-6 bg-white">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900">For Developers</h3>
-                <p className="mt-1 text-xs text-slate-400">Showcase your portfolio as a product.</p>
-                <ul className="mt-4 space-y-2 text-xs text-slate-500">
-                  <li>• Free: Build profile and host unlimited projects</li>
-                  <li>• Boost: Prioritized listing slots in searches</li>
-                  <li>• Team: Combined company portfolios</li>
-                </ul>
-              </div>
-              <div className="border border-slate-200 p-6 bg-white">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900">For Clients</h3>
-                <p className="mt-1 text-xs text-slate-400">Discover and contract qualified builders.</p>
-                <ul className="mt-4 space-y-2 text-xs text-slate-500">
-                  <li>• Starter: Basic developer search and DM access</li>
-                  <li>• Plus: AI matching shortlist capabilities</li>
-                  <li>• Enterprise: Compliance onboarding and contracts</li>
-                </ul>
-              </div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Pricing</p>
+            <h2 className="mt-2 text-3xl font-light tracking-tight text-slate-900">Free to join. Pay only when work is verified.</h2>
+
+            <div className="mt-8 max-w-2xl border border-slate-200 p-6 bg-white">
+              <ul className="space-y-3 text-xs text-slate-600">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-slate-900 shrink-0" />
+                  Free for developers and clients to create a profile, list projects, and message
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-slate-900 shrink-0" />
+                  10% platform fee, taken only from milestones that are funded and released
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-slate-900 shrink-0" />
+                  No subscriptions, no listing fees, nothing charged upfront
+                </li>
+              </ul>
             </div>
           </div>
         </section>
@@ -546,7 +455,7 @@ export default function Home() {
           <div className="mx-auto w-full max-w-3xl">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-center">FAQ</p>
             <h2 className="mt-2 text-3xl font-light tracking-tight text-slate-900 text-center">Frequently Answered Questions</h2>
-            
+
             <div className="mt-8 border border-slate-200 bg-white">
               {faqs.map((faq, idx) => (
                 <article key={faq.question} className="border-b border-slate-200 last:border-b-0">
